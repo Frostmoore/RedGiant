@@ -213,6 +213,9 @@ RedGiant/                              (root = e:\coding\XAMPP\htdocs\Red Giant)
 ├── scripts/
 │   ├── start-llama.ps1                F0.2 — avvia llama-server per profilo (dev Windows)
 │   ├── download-model.ps1             F0.2 — scarica il GGUF in models/ (URL+SHA256 nel file)
+│   ├── download-llama.ps1             F0.2 — scarica i binari llama.cpp pinnati in bin/ (gitignored)
+│                                      #      [aggiunto in implementazione: i binari sono artefatti
+│                                      #       riproducibili come il modello, meritano lo stesso script]
 │   └── check_reference.py             F0.7 — verifica meccanica firme ↔ codebase_reference
 ├── bench/
 │   ├── run_bench.py                   F0.5 — baseline prefill/gen/cache

@@ -1,6 +1,9 @@
 # Red Giant — configurazione di default (piano §A6).
 # I profili in config/profiles/*.toml sovrascrivono solo le chiavi che differiscono.
-# llama.cpp version pin: <DA FISSARE IN F0.2> — cambiarlo = rifare bench F0.5.
+# llama.cpp pin (F0.2) — cambiarli = rifare bench F0.5:
+#   riferimento (severino-sim/severino): immagine ghcr b10200, digest sha256:8b7f05d7...e98db
+#   dev Windows (dev-fast + probe): release b10217 (b10200 non ha asset Windows)
+# modello: unsloth/gemma-4-E2B-it-qat-GGUF / gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf (QAT Q4)
 
 [llm]
 base_url = "http://127.0.0.1:8080"   # endpoint llama-server del profilo

@@ -27,7 +27,27 @@ RedGiant/
 
 ## 3. Classi e metodi
 
-**Nessuna classe esiste.** Le firme contrattuali (da rispettare o da cambiare *prima* nel piano) sono in plan_red_giant.md, fase per fase: StateStore e modelli (F1.1), LlamaClient (F1.2), PromptAssembler (F1.3), Scope/ToolSpec/ToolRouter (F1.4), Worker/WorkerStep (F1.5), verify (F1.6), Orchestrator/BudgetTracker (F1.7), Evaluator (F1.10), JobQueue (F2.1), Planner/PhaseDesigner (F3), Debugger/Supervisor/LoopGuard/CheckpointManager/BudgetManager (F4), ContextBuilder/CacheProbe/SlotManager/StateCompressor (F5), routing/Classifier/Assessor (F6), tool web e verifica citazioni (F7).
+### `redgiant/config.py` — caricamento configurazione (F0.1)
+
+Dataclass frozen, una per sezione TOML (§A6 del piano). `Config.load` fa il merge default+profilo (superficiale, per sezione) e fallisce con `ValueError` sul nome esatto di ogni chiave/sezione sconosciuta; profilo inesistente → `FileNotFoundError`.
+
+```python
+class LlmProfileCfg      # base_url, ctx_size, timeout_s, temperature, max_tokens_default
+class PathsCfg           # db, models_dir, tasks_dir, slots_dir, ripgrep
+class BudgetCfg          # max_total_tokens, max_tool_calls, max_retries_per_subtask, max_wall_s
+class WebCfg             # host, port
+class SecurityCfg        # writable_globs, shell_whitelist (tuple immutabili)
+class Config
+    def load(cls, profile_name: str, config_dir: Path | None = None) -> "Config"
+```
+
+### `redgiant/cli.py` — CLI (stub F0.1)
+
+```python
+def main(argv: list[str] | None = None) -> int   # --version/--help; sottocomandi reali in F1.9
+```
+
+Le altre firme contrattuali (da rispettare o da cambiare *prima* nel piano) sono in plan_red_giant.md, fase per fase: StateStore e modelli (F1.1), LlamaClient (F1.2), PromptAssembler (F1.3), Scope/ToolSpec/ToolRouter (F1.4), Worker/WorkerStep (F1.5), verify (F1.6), Orchestrator/BudgetTracker (F1.7), Evaluator (F1.10), JobQueue (F2.1), Planner/PhaseDesigner (F3), Debugger/Supervisor/LoopGuard/CheckpointManager/BudgetManager (F4), ContextBuilder/CacheProbe/SlotManager/StateCompressor (F5), routing/Classifier/Assessor (F6), tool web e verifica citazioni (F7).
 
 ## 4. Database
 

@@ -1,0 +1,6 @@
+# Profilo severino-sim: Docker CPU-only su questo PC (docker/severino-sim/compose.yml).
+# 4 core, RAM limitata: il proxy onesto di Severino. Le metriche ufficiali si registrano qui
+# (o su Severino reale), MAI su dev-fast (D6).
+
+[llm]
+base_url = "http://127.0.0.1:8081"

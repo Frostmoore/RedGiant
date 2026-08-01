@@ -8,6 +8,9 @@ __pycache__/
 # pesi del modello (ricreabili con scripts/download-model.ps1)
 models/
 
+# binari llama.cpp pinnati (ricreabili con scripts/download-llama.ps1)
+bin/
+
 # stato runtime (DB, log task, slot KV)
 data/
 

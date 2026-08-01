@@ -1,0 +1,32 @@
+# Profilo severino-sim (F0.4): llama-server CPU-only con risorse comparabili a Severino (D5/D6).
+# Allocazione PROPOSTA: 4 core (cpuset 0-3) + 10 GB RAM — da confermare con l'utente prima
+# del freeze (gate F0.4): tutti i bench dipendono da questi numeri.
+# NOTA (piano F0.4): su Docker Desktop/WSL2 verificare che cpuset morda davvero; fallback
+# documentato: cpus: 4.0 (quota, non affinita') con annotazione nell'atlante.
+# PIN DI RIFERIMENTO del progetto: questa immagine, per digest (build b10200). Il registry
+# non pubblica tag per-release, quindi si pinna il digest. I binari Windows di dev sono
+# b10217 (la b10200 non ha asset Windows): scarto di 17 build documentato nell'atlante,
+# irrilevante per le metriche (che nascono SOLO qui o su Severino, D6).
+
+services:
+  llama-cpu:
+    image: ghcr.io/ggml-org/llama.cpp@sha256:8b7f05d7d14d040463ef9191b24da93724574abd6bfea9bf12899100f62e98db
+    command: >
+      -m /models/gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf
+      --ctx-size 16384
+      --parallel 1
+      --threads 4
+      --chat-template gemma
+      --slot-save-path /slots
+      --host 0.0.0.0
+      --port 8080
+    cpuset: "0-3"
+    mem_limit: 10g
+    volumes:
+      - ../../models:/models:ro
+      - ../../data/slots:/slots
+    ports:
+      - "127.0.0.1:8081:8080"   # host 8081: il dev-fast locale usa 8080
+    restart: "no"               # D7: il modello vive per la durata del task, non come demone
+# NOTA ctx: il server tiene 16384 per permettere le MISURE fino a 16K (bench F0.5);
+# il budget d'uso per chiamata resta llm.ctx_size in config (deciso in F0.6 coi numeri).

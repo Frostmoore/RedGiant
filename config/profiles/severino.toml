@@ -1,0 +1,6 @@
+# Profilo severino: il box reale, raggiunto via tailnet.
+# ENDPOINT PROVVISORIO: il nome/porta definitivi si fissano al deploy (F8.3, dominio Caddy).
+
+[llm]
+base_url = "http://ai.home.varitest.ovh:8080"
+timeout_s = 1200   # il 5300U e' ~2-4x piu' lento del severino-sim: timeout raddoppiato
