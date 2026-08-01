@@ -1,6 +1,6 @@
 # Red Giant — Codebase Reference (atlante)
 
-**Aggiornato al:** 2026-08-01 · **Versione repo:** `v1.0.0` · **Fase completata:** nessuna (pre-F0)
+**Aggiornato al:** 2026-08-01 · **Versione repo:** `v1.0.1` · **Fase completata:** nessuna (pre-F0)
 **Regola:** questo documento descrive **il codice che esiste**, non quello pianificato (per quello c'è [plan_red_giant.md](plan_red_giant.md)). Se una cosa è nel codice e non è qui, il documento è rotto; se è qui e non è più nel codice, è peggio. Verifica meccanica: `python scripts/check_reference.py` (da F0.7) — bloccante nel rituale di fine fase.
 
 ---
@@ -21,7 +21,7 @@
 RedGiant/
 └── memory/
     ├── small-model-powerhouse-specsheet.md   # specsheet v0.1 (visione, ruoli, componenti)
-    ├── plan_red_giant.md                     # piano di sviluppo v1.1 (contratto di implementazione)
+    ├── plan_red_giant.md                     # piano di sviluppo v1.2 (contratto di implementazione, autosufficiente)
     └── codebase_reference.md                 # questo file
 ```
 
