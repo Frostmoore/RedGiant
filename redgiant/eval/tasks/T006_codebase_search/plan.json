@@ -1,0 +1,21 @@
+{
+  "plan": {
+    "goal": "Locate parse_config's definition and callers, record them in answer.txt",
+    "success_criteria": ["answer.txt cites the defining file and the calling file"],
+    "phases": [
+      {"id": "P1", "title": "Search and answer", "depends_on": [],
+       "completion_criteria": ["answer.txt written and verified"]}
+    ]
+  },
+  "subtasks": [
+    {
+      "id": "P1.S1", "phase_id": "P1", "title": "Find definition and callers",
+      "objective": "Use search_code to find where parse_config is DEFINED (def parse_config) and where it is CALLED (imports/usages). Beware of similarly named functions. Write answer.txt with one file path per line, definition first, using forward slashes.",
+      "inputs": [],
+      "tools": ["search_code", "read_file", "write_patch", "run_tests"],
+      "expected_outputs": ["answer.txt"],
+      "completion_criteria": ["answer.txt exists with both paths"],
+      "verification": ["checkanswer"]
+    }
+  ]
+}

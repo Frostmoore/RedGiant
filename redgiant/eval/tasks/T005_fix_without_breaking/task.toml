@@ -1,0 +1,11 @@
+id = "T005"
+domain = "coding"
+prompt = "One test fails while ten others pass. Fix the failing behaviour WITHOUT breaking any of the passing tests. Do not change the tests."
+success_cmd = "pytest -q"
+timeout_s = 1500
+tags = ["bugfix", "python", "regression-pressure"]
+plan_file = "plan.json"
+writable_globs = ["string_utils.py"]
+
+[test_commands]
+pytest = ["pytest", "-q"]
