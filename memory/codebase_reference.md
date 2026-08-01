@@ -161,12 +161,15 @@ class ToolSpec      # name, description, risk, reversible, requires_approval, ti
 
 `edit_file` è lo strumento di editing PRIMARIO (i diff unificati sono ostili agli E2B — evidenza F1.11); normalizza i prefissi `N<TAB>` che i modelli copiano da `read_file`. `write_file` crea file nuovi. `write_patch` resta per edit multi-punto, con matching tollerante (prefissi numerici, whitespace, code `-` vuote spurie).
 
+**Syntax gate (post-F1, richiesta utente):** ogni writer verifica la sintassi del contenuto risultante PRIMA della scrittura atomica (`.py` ast.parse, `.php` php -l se disponibile, `.json`, `.toml`); sintassi rotta = scrittura rifiutata con `syntax_error` + dettaglio riga — un file rotto non esiste mai su disco.
+
 ```python
 class ReadFileArgs
 class ListFilesArgs
 class WritePatchArgs
 class EditFileArgs
 class WriteFileArgs
+def syntax_check(path: Path, content: str) -> str | None
 def read_file(scope: Scope, path: str, start_line: int = 1, end_line: int | None = None) -> ToolResult
 def list_files(scope: Scope, glob: str, max_results: int = 200) -> ToolResult
 def edit_file(scope: Scope, path: str, old_string: str, new_string: str, replace_all: bool = False) -> ToolResult

@@ -1,9 +1,14 @@
-"""Tool filesystem: read_file, list_files, write_patch (piano §A7)."""
+"""Tool filesystem: read_file, list_files, edit_file, write_file, write_patch (piano §A7)."""
 
 from __future__ import annotations
 
+import ast as _pyast
+import json as _json
 import os
+import shutil as _shutil
+import subprocess as _subprocess
 import tempfile
+import tomllib as _tomllib
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -11,6 +16,44 @@ from pydantic import BaseModel, ConfigDict
 from redgiant.tools.base import Scope, ToolResult
 
 _MAX_LINES = 400
+
+
+def syntax_check(path: Path, content: str) -> str | None:
+    """Syntax gate (§A7, richiesta utente pre-F2): messaggio d'errore o None se ok.
+
+    Verifica il contenuto RISULTANTE prima che tocchi il disco: un file
+    sintatticamente rotto non deve mai esistere. Estensioni non coperte -> None.
+    """
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".py":
+            _pyast.parse(content)
+        elif suffix == ".json":
+            _json.loads(content)
+        elif suffix == ".toml":
+            _tomllib.loads(content)
+        elif suffix == ".php":
+            php = _shutil.which("php")
+            if php is None:
+                return None  # niente interprete: gate non applicabile, dichiarato in doc
+            with tempfile.NamedTemporaryFile("w", suffix=".php", delete=False,
+                                             encoding="utf-8") as fh:
+                fh.write(content)
+                tmp = fh.name
+            try:
+                proc = _subprocess.run([php, "-l", tmp], capture_output=True,
+                                       text=True, timeout=15)
+                if proc.returncode != 0:
+                    return (proc.stdout + proc.stderr).strip()[:300].replace(tmp, str(path))
+            finally:
+                Path(tmp).unlink(missing_ok=True)
+    except SyntaxError as e:
+        return f"line {e.lineno}: {e.msg}"
+    except (_json.JSONDecodeError, _tomllib.TOMLDecodeError) as e:
+        return str(e)[:300]
+    except _subprocess.TimeoutExpired:
+        return None  # il gate non deve mai bloccare per proprie lentezze
+    return None
 
 
 class _Args(BaseModel):
@@ -109,6 +152,12 @@ def edit_file(scope: Scope, path: str, old_string: str, new_string: str,
                                                   "or set replace_all=true"},
                           error="not_unique")
     new_text = text.replace(old_string, new_string)
+    err = syntax_check(real, new_text)
+    if err is not None:
+        return ToolResult(ok=False, data={"detail": err,
+                                          "hint": "edit NOT applied: it would break the "
+                                                  "file's syntax. Fix new_string and retry."},
+                          error="syntax_error")
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgedit")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
@@ -139,6 +188,12 @@ def write_file(scope: Scope, path: str, content: str) -> ToolResult:
         content = "\n".join(_re.sub(r"^\d+\t", "", l) for l in lines)
         if not content.endswith("\n"):
             content += "\n"
+    err = syntax_check(real, content)
+    if err is not None:
+        return ToolResult(ok=False, data={"detail": err,
+                                          "hint": "file NOT written: content has a syntax "
+                                                  "error. Fix it and retry."},
+                          error="syntax_error")
     existed = real.is_file()
     real.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgwrite")
@@ -187,6 +242,13 @@ def write_patch(scope: Scope, path: str, unified_diff: str) -> ToolResult:
     if applied == 0:
         return ToolResult(ok=False, data={"applied": 0, "rejected": rejected},
                           error="all_hunks_rejected")
+
+    err = syntax_check(real, "\n".join(lines) + ("\n" if lines else ""))
+    if err is not None:
+        return ToolResult(ok=False, data={"detail": err,
+                                          "hint": "patch NOT applied: the result would "
+                                                  "break the file's syntax."},
+                          error="syntax_error")
 
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgpatch")
     try:

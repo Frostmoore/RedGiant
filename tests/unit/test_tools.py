@@ -94,11 +94,13 @@ def test_write_file_strips_lineno_prefixes_with_guard(scope, root):
     r = fs.write_file(scope, "src/t.py", "1\tx = 1\n2\ty = 2")
     assert r.ok
     assert (root / "src" / "t.py").read_text(encoding="utf-8") == "x = 1\ny = 2\n"
-    # TSV legittimo (minoranza di righe col pattern? no: qui vince la guardia... )
-    # caso a maggioranza NON numerica: resta intatto
-    r = fs.write_file(scope, "src/u.py", "x = 1\ny = 2\n3\tz = 3\n")
+    # caso a maggioranza NON numerica: resta intatto (estensione .txt: fuori
+    # dal syntax gate, che su .py lo rifiuterebbe giustamente)
+    from redgiant.tools.base import Scope as _S
+    s = _S(root, ["src/*"])
+    r = fs.write_file(s, "src/u.txt", "x = 1\ny = 2\n3\tz = 3\n")
     assert r.ok
-    assert "3\tz = 3" in (root / "src" / "u.py").read_text(encoding="utf-8")
+    assert "3\tz = 3" in (root / "src" / "u.txt").read_text(encoding="utf-8")
 
 
 def test_edit_file_strips_lineno_prefixes(scope, root):
@@ -116,6 +118,31 @@ def test_edit_file_rejects_ambiguous_and_missing(scope, root):
     assert not r.ok and r.error == "not_found_in_file"
     r = fs.edit_file(scope, "src/dup.py", "x = 1", "x = 2", replace_all=True)
     assert r.ok and r.data["replaced"] == 2
+
+
+# ── syntax gate (richiesta utente pre-F2) ───────────────────────────────────
+
+def test_syntax_gate_rejects_broken_python_and_preserves_file(scope, root):
+    before = (root / "src" / "a.py").read_text(encoding="utf-8")
+    r = fs.edit_file(scope, "src/a.py", "return 1", "return (1")  # parentesi aperta
+    assert not r.ok and r.error == "syntax_error" and "line" in r.data["detail"]
+    assert (root / "src" / "a.py").read_text(encoding="utf-8") == before  # file intatto
+
+    r = fs.write_file(scope, "src/b.py", "def f(:\n    pass\n")
+    assert not r.ok and r.error == "syntax_error"
+    assert not (root / "src" / "b.py").exists()  # mai nato rotto
+
+
+def test_syntax_gate_checks_json_and_ignores_unknown_ext(scope, root):
+    (root / "src" / "cfg.json").write_text("{}", encoding="utf-8")
+    scope2 = fs.Scope if False else scope  # stesso scope, glob gia' su src/*.py
+    # json fuori dai globs di scrittura? usa uno scope dedicato
+    from redgiant.tools.base import Scope as _S
+    s = _S(root, ["src/*"])
+    r = fs.write_file(s, "src/cfg.json", '{"a": }')
+    assert not r.ok and r.error == "syntax_error"
+    r = fs.write_file(s, "src/notes.txt", "{{{{ not code")
+    assert r.ok  # estensione non coperta: il gate non inventa competenze
 
 
 # ── run_tests ────────────────────────────────────────────────────────────────
