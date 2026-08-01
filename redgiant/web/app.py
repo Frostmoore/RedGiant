@@ -127,14 +127,22 @@ def create_app(cfg: Config) -> FastAPI:
                     failures=failures)
 
     @app.post("/tasks/{task_id}/relaunch")
-    def task_relaunch(task_id: str, guidance: str = Form("")):
-        """F2.4-bis: un fallimento non e' un vicolo cieco — clone guidato."""
+    def task_relaunch(task_id: str, guidance: str = Form(""),
+                      test_commands: str = Form("")):
+        """F2.4-bis: un fallimento non e' un vicolo cieco — clone guidato.
+        test_commands opzionale: la guida testuale non puo' correggere la CONFIG
+        (es. comandi di test mancanti) — questo campo si', con merge sui clonati."""
         try:
             old = store.load_task(task_id)
         except KeyError:
             return HTMLResponse("task sconosciuto", status_code=404)
         from redgiant.web.jobs import read_task_config
         tc = read_task_config(cfg.paths.tasks_dir, task_id)
+        for line in test_commands.splitlines():
+            cmd_id, _, cmd = line.strip().partition("=")
+            if cmd_id and cmd:
+                import shlex
+                tc["test_commands"][cmd_id.strip()] = shlex.split(cmd)
         prompt = old.request.split("\n[USER GUIDANCE]")[0]
         if guidance.strip():
             prompt += f"\n[USER GUIDANCE] {guidance.strip()}"

@@ -22,7 +22,9 @@
       onsubmit="const b=this.querySelector('button'); b.disabled=true; b.textContent='Avvio…'">
   <label>Riparti con istruzioni aggiuntive (stesso target, stessa config)</label>
   <textarea name="guidance" rows="2"
-    placeholder="es. il comando di test è pytest -q; non toccare i test"></textarea>
+    placeholder="es. non toccare i test; il metodo va aggiunto in fondo alla classe"></textarea>
+  <label>Comandi di test da aggiungere/correggere (opzionale, <code>id=comando</code> per riga)</label>
+  <textarea name="test_commands" rows="1" placeholder="pytest=pytest -q"></textarea>
   <button>Riparti</button>
 </form>
 {% endif %}
