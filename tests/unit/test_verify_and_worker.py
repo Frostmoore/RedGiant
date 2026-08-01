@@ -40,6 +40,24 @@ def _done(evidence=("did it",)):
                         verification_requested=[])
 
 
+def test_oracles_beat_claims_in_both_directions(env, tmp_path):
+    # F2.5: worker blocked MA output esistente + test verdi -> pass (con warning).
+    scope, router, tid = env
+    (scope.root / "t_ok.py").write_text("def test_ok():\n    assert True\n",
+                                        encoding="utf-8")
+    from redgiant.config import Config
+    from redgiant.tools.router import ToolRouter as _TR, default_catalog as _dc
+    cfg = Config.load("dev-fast", CONFIG_DIR)
+    router2 = _TR(_dc(cfg, scope, {"pytest": ["pytest", "-q", "t_ok.py"]}),
+                  scope, router.store)
+    rep = FinishReport(status="blocked", summary="step budget exhausted",
+                       evidence=[], verification_requested=[])
+    v = verify_subtask(_spec(expected_outputs=["a.py"], verification=["pytest"]),
+                       rep, scope, router2, tid)
+    assert v.verdict == "pass"
+    assert any(not c.ok for c in v.checks)  # i soggettivi restano segnati (warning)
+
+
 def test_blocked_never_passes(env):
     scope, router, tid = env
     rep = FinishReport(status="blocked", summary="stuck", evidence=["e"],

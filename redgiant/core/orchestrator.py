@@ -91,8 +91,11 @@ class Orchestrator:
                 return self.store.load_task(task_id)
 
             if verdict.verdict == "pass":
+                warned = any(not c.ok for c in verdict.checks)
                 self.store.set_subtask_status(
-                    task_id, spec.id, "completed", actor="orchestrator",
+                    task_id, spec.id,
+                    "completed_with_warnings" if warned else "completed",
+                    actor="orchestrator",
                     result={"verdict": verdict.model_dump()})
                 (self.cfg.paths.tasks_dir / task_id / f"resume_{spec.id}.ctx"
                  ).unlink(missing_ok=True)
