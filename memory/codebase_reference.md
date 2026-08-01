@@ -235,8 +235,11 @@ class Role
     def __init__(self, llm: LlamaClient, assembler: PromptAssembler, router: ToolRouter) -> None
 class ToolCallSpec  # tool, args
 class FinishReport  # status done|blocked, summary<=600, evidence, verification_requested
-class WorkerStep    # thought<=300, action tool|finish, tool_call?, finish?
-    def incoherence(self) -> str | None
+class WorkerToolStep    # thought<=300, action="tool", tool_call OBBLIGATORIO
+class WorkerFinishStep  # thought<=300, action="finish", finish OBBLIGATORIO
+class WorkerStep    # RootModel: union DISCRIMINATA dei due — il ramo incompleto
+                    # (finish:null) non e' generabile ne' validabile (fix F2.5:
+                    # il derail da apice non escapato non ha piu' un'uscita incoerente)
 class Worker
     def run(self, ctx: RoleContext, *, max_steps: int, step_max_tokens: int = 512, step_log=None, resume_file=None) -> FinishReport
 ```
