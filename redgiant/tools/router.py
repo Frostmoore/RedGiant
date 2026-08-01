@@ -126,9 +126,20 @@ class ToolRouter:
                                     error="approval_denied")
                 return self._done(task_id, subtask_id, name, args, result, t0)
             if answer != "yes":
+                # F2 (chiusura): consenso INFORMATO — la richiesta porta una preview
+                # leggibile di cio' che verrebbe scritto, non solo il JSON grezzo.
+                preview = None
+                if name == "edit_file":
+                    preview = ("--- da sostituire\n" + str(args.get("old_string", ""))[:400]
+                               + "\n+++ con\n" + str(args.get("new_string", ""))[:400])
+                elif name == "write_file":
+                    preview = "contenuto completo:\n" + str(args.get("content", ""))[:600]
+                elif name == "write_patch":
+                    preview = str(args.get("unified_diff", ""))[:600]
                 self.store.add_approval(task_id, kind="irreversible_op",
                                         payload=json.dumps({"tool": name, "args": args,
-                                                            "subtask_id": subtask_id}))
+                                                            "subtask_id": subtask_id,
+                                                            "preview": preview}))
                 self.store.set_task_status(task_id, "blocked", actor="tool_router",
                                            error=f"awaiting approval for {name}")
                 result = ToolResult(ok=False, data={}, error="awaiting_approval")

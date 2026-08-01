@@ -6,7 +6,8 @@
 <form class="card" method="post" action="/approvals/{{ a.id }}" style="margin-bottom:1rem">
   <b>Task <a href="/tasks/{{ a.task_id }}">{{ a.task_id[-8:] }}</a> —
      {% if a.kind == "irreversible_op" %}richiede approvazione{% else %}chiede un chiarimento{% endif %}</b>
-  <pre>{{ a.payload_pretty }}</pre>
+  {% if a.preview %}<label>Cosa verrebbe scritto</label><pre>{{ a.preview }}</pre>{% endif %}
+  <details><summary class="muted">dettagli tecnici</summary><pre>{{ a.payload_pretty }}</pre></details>
   {% if a.kind == "irreversible_op" %}
     <div>
       <button name="answer" value="yes">Approva</button>

@@ -4,7 +4,7 @@
 **Data:** 2026-08-01
 **Specsheet di riferimento:** [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) (v0.1)
 **Atlante della codebase:** [codebase_reference.md](codebase_reference.md) — aggiornato a ogni fine fase, mai dopo.
-**Stato:** 🟢 **F1 completata** (2026-08-01, `v2.0.0`, merged in `main`) — prossima azione: **Fase 2, sottofase 2.1** (GUI web minima; gate soddisfatto: walking skeleton dimostrato 4/6 sulla run ufficiale severino-sim)
+**Stato:** 🟢 **F2 completata** (2026-08-02, `v2.1.0`) — prossima azione: **Fase 3, sottofase 3.1** (Planner; gate soddisfatto: Evaluator operativo con baseline F1 e T007 promosso; GUI collaudata dall'utente e dalla batteria — v. ESITO F2)
 
 ---
 
@@ -1080,7 +1080,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F2.1 — App e JobQueue
 
-- [ ] 🤖 **Obiettivo:** processo unico FastAPI con la coda che garantisce "una inferenza alla volta" (D7).
+- [x] 🤖 **Obiettivo:** processo unico FastAPI con la coda che garantisce "una inferenza alla volta" (D7).
 - **Motivazione:** la serialità non è un limite da nascondere ma un contratto da esporre: l'utente vede la coda, capisce perché il suo task aspetta, e il box non muore mai per contesa.
 - **Implementazione:** `web/app.py`, `web/jobs.py`:
   ```python
@@ -1098,7 +1098,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F2.2 — Rotte
 
-- [ ] 🤖 **Obiettivo:** le pagine e i frammenti HTMX. Tutte HTML: nessuna API JSON pubblica (D12).
+- [x] 🤖 **Obiettivo:** le pagine e i frammenti HTMX. Tutte HTML: nessuna API JSON pubblica (D12).
 - **Implementazione:** `web/routes/tasks.py`, `approvals.py`, `metrics.py` — tabella contrattuale:
 
   | Metodo e path | Input | Output | Errori |
@@ -1118,7 +1118,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F2.3 — Protocollo umano (approvazioni e chiarimenti)
 
-- [ ] 🤖 **Obiettivo:** il canale formale con cui il sistema chiede all'umano (specsheet §6.7 "chiedere chiarimenti"; §19 approvazioni).
+- [x] 🤖 **Obiettivo:** il canale formale con cui il sistema chiede all'umano (specsheet §6.7 "chiedere chiarimenti"; §19 approvazioni).
 - **Motivazione:** un sistema batch (D7) non può fare domande a un terminale: deve *parcheggiarsi* bene. Il parcheggio è uno stato di prima classe (`blocked`), visibile, con ripartenza pulita — non un prompt bloccante sepolto in un log.
 - **Implementazione:** flusso completo: il componente che ha bisogno (ToolRouter per `requires_approval`; da F4 il Supervisor per `ask_user`) scrive in `approvals` (payload JSON: cosa chiede, perché, contesto minimo per decidere), mette il task `blocked` e ritorna; il worker thread del JobQueue vede `blocked` e passa oltre; `POST /approvals/{id}` scrive la risposta, rimette il task in coda; alla ripresa, la risposta viene consegnata: per un'approvazione → il ToolRouter ri-esegue il dispatch sospeso (idempotente: la richiesta originale è nel payload); per un chiarimento → il testo entra nel contesto S6 della sottofase corrente come blocco `[USER ANSWER]`. La risposta dell'utente si logga anche in `decisions` (actor `user`).
 - 🧑 **Decisione utente:** collegare ntfy del homelab per notificare i `blocked` (opzionale; se sì, è un POST HTTP alla creazione della riga — niente dipendenze nuove).
@@ -1127,22 +1127,24 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F2.4 — Template e albero
 
-- [ ] 🤖 **Obiettivo:** le viste Jinja2 + HTMX vendorizzato; l'albero di esecuzione stile specsheet §20.
+- [x] 🤖 **Obiettivo:** le viste Jinja2 + HTMX vendorizzato; l'albero di esecuzione stile specsheet §20.
 - **Implementazione:** `templates/base.html` (layout, niente CSS framework: un foglio nostro minimo), `index.html`, `task_new.html`, `task.html`, `tree.html` (frammento riusato dalla pagina e dal polling), `approvals.html`, `metrics.html`; `static/htmx.min.js` copiato nel repo con versione annotata nell'atlante (è l'unica eccezione JS, ed è vendorizzata per D14/D16: niente CDN, la CSP del futuro deploy ringrazia). Albero: fase → sottofasi con stato, tentativi, durata; i simboli seguono §20 (`completed` ✓, `failed` ✗, `running` ▶, `blocked` ⏸).
 - **Accettazione:** le pagine sono usabili da browser senza console errors; l'albero di un task reale è leggibile a colpo d'occhio.
 
 #### F2.4-bis — Post-mortem e ripartenza guidata (aggiunta su richiesta utente, 2026-08-01)
 
-- [ ] 🤖 **Obiettivo:** un fallimento non è un vicolo cieco: la pagina di un task `failed`/`partial` mostra **perché** (check falliti con dettaglio, errore del task, link al log) e offre **"riparti con istruzioni aggiuntive"** — un form che clona il task (stessa config, stesso piano, stesso target) con la guida dell'utente appesa alla richiesta.
+- [x] 🤖 **Obiettivo:** un fallimento non è un vicolo cieco: la pagina di un task `failed`/`partial` mostra **perché** (check falliti con dettaglio, errore del task, link al log) e offre **"riparti con istruzioni aggiuntive"** — un form che clona il task (stessa config, stesso piano, stesso target) con la guida dell'utente appesa alla richiesta.
 - **Motivazione (parole dell'utente):** "i fallimenti non devono essere totalmente blocking… il sistema deve restituirmi le motivazioni del fail e la possibilità di farlo ripartire magari con istruzioni diverse". Questa è la versione leggera (nuovo task guidato); la ripresa *in place* con strategia è F4.2 (`retry_strategy`/`ask_user` del Supervisor), che eredita questo requisito come criterio di accettazione.
 - **Implementazione:** rotta `POST /tasks/{id}/relaunch` (form `guidance`); prompt del clone = richiesta originale + `[USER GUIDANCE] …`; config per-task copiata; pannello fallimento costruito dai `result` delle sottofasi (verdict → check non-ok) **+ `t.error` sempre mostrato; il Riparti c'è per OGNI failed/partial** (anche morte per budget senza check).
 - **Estensioni dal collaudo utente (2026-08-01):** (a) **consenso permanente per (tool, path) nel task** — approvare "scrivi su X" vale per tutto il task, il modello itera sul file concesso; un no è permanente uguale; (b) **override/revoca delle grant** dalla pagina approvazioni (no→sì riaccoda un task bloccato); (c) **budget esaurito = checkpoint di consenso, non ghigliottina**: il task si blocca e chiede l'estensione (+50% one-shot, ogni esaurimento ri-chiede; Nega = fallimento per decisione esplicita). Default `max_total_tokens` 32k→64k come tampone dichiarato; taratura seria in F6.
 
 #### F2.5 — 🔎 Verifica di fase
 
-- [ ] 🧑 L'utente, dalla GUI: lancia `T004`, chiude la pagina, torna, vede l'albero completato; lancia un task con approvazione, risponde, lo vede ripartire; consulta `/metrics`. **Ogni scomodità segnalata si sistema in questa fase**, non dopo: è il criterio di uscita, non un sondaggio.
+- [x] 🧑 L'utente, dalla GUI: lancia `T004`, chiude la pagina, torna, vede l'albero completato; lancia un task con approvazione, risponde, lo vede ripartire; consulta `/metrics`. **Ogni scomodità segnalata si sistema in questa fase**, non dopo: è il criterio di uscita, non un sondaggio.
 
 **Rituale di fine fase** → `v2.1.0`.
+
+> **ESITO F2 (2026-08-02, `v2.1.0`).** Fase completata dopo la campagna di collaudo più dura del progetto: 3 giri di collaudo manuale dell'utente + batteria automatizzata di 5 task + 4 retest mirati. **Esito finale: 4/5 task-tipo verificati** (incluso il refactoring 2-sottofasi T007, promosso a task permanente dell'Evaluator), 1 fallimento onesto (trappola di ragionamento cross-file → F4). **15 difetti trovati e corretti** (dettaglio nell'atlante §9, batch F2): i capitali sono la race submit/ripresa, il consenso a gettone → **grant permanenti per (famiglia-scrittura, file) con override/revoca**, il **derail da apice** (doppio apice non escapato chiude la stringa JSON → union discriminata: il ramo incoerente non è più generabile, probe 8/8), la contabilità budget rotta dalla cache, la **simmetria degli oracoli** (i check oggettivi verdi battono un worker che si crede blocked → `completed_with_warnings`). **Evoluzioni contrattuali su richiesta utente**: budget = checkpoint di consenso (+50% su Approva, mai ghigliottina; default 64k tampone), spegnimento server a 30' di idle, i comandi di test li trova il sistema (scoperta deterministica + `register_test_command`), ripresa **in-place** post-approvazione (contesto salvato, KV calda), post-mortem + ripartenza guidata su ogni failed/partial, diff-preview nelle approvazioni. **Nota metodologica**: le descrizioni originali di F1.5/F1.6 (coerenza come dato in-loop, verifica solo-claim) sono superate dalle evoluzioni di questa fase — fa fede l'atlante. **Debiti registrati con destinazione**: T002-ragionamento (F4.2), D-laborioso/41-chiamate (F4+F5), registro delle tolleranze modello-specifiche da A/B-are (F6/F8), task sintetico "sporco" pre-F8, varianza multi-seed nell'Evaluator (F6), task_config.json→DB (con la GUI di F4), protocollo umano come dialogo vero (F4).
 
 ---
 

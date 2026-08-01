@@ -4,7 +4,7 @@
 
 **A verification-first agentic system that makes *tiny* local language models<br>reliably useful on non-prosumer hardware.**
 
-[![Status](https://img.shields.io/badge/status-F1_done_·_walking_skeleton_verified-brightgreen)](memory/plan_red_giant.md)
+[![Status](https://img.shields.io/badge/status-F2_done_·_web_GUI_battle--tested-brightgreen)](memory/plan_red_giant.md)
 [![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Model](https://img.shields.io/badge/model-Gemma_4_E2B_·_Q4_QAT_·_GGUF-8A2BE2)](https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF)
 [![Runtime](https://img.shields.io/badge/runtime-llama.cpp_(pinned)-555555)](docker/severino-sim/compose.yml)
@@ -24,7 +24,7 @@ Red Giant wraps a **~2B-effective-parameter model** — Gemma 4 E2B, Q4 QAT, GGU
 
 > Most agentic projects chase the biggest model they can reach. Red Giant goes the opposite way: the smallest usable model, on the kind of machine a non-prosumer actually owns — a 15W mini-PC with 4 CPU cores and no usable GPU. Anyone can build agents on a workstation-class GPU box; the interesting problem is closing the gap between local inference on consumer hardware and the inevitable scarcity of that scenario.
 
-**Status:** early development — **Phase 1 complete**: the walking skeleton (state store → constrained ReAct worker → deterministic verification → orchestrator) solves real bug-fix/feature/refactoring tasks end-to-end on the CPU-capped reference profile: **4/6 synthetic tasks externally verified, 100% useful tokens on every success, zero false success claims across all runs**. Next: Phase 2, the web GUI. This README is refreshed at the end of every development phase.
+**Status:** early development — **Phase 2 complete**: a single-process web GUI (async job queue, live execution tree, consent-based approvals with standing per-file grants, budget-extension prompts, guided relaunch of failed tasks) battle-tested through 3 rounds of live user testing plus an automated 5-task battery: **15 defects found and fixed**, 4/5 task types externally verified, zero false claims in either direction. Next: Phase 3, the planner. This README is refreshed at the end of every development phase.
 
 ## 🧠 The thesis
 
@@ -62,6 +62,8 @@ Field notes from probing grammar-constrained decoding on Gemma 4 E2B — useful 
 4. **KV-slot `save`/`restore` round-trips cleanly but does not restore cache-reuse state** (llama.cpp build b10200): after a restore, the very same prompt reprocesses 100% of its tokens, while normal `cache_prompt` reuse works perfectly (1/872 reprocessed on a repeated prompt, 59 on append). Slot persistence is unusable as a prefill-skip on this build.
 5. **Unified diffs are hostile to small models** (Phase 1 field data): logically-correct fixes got rejected in loops over a single blank-line context mismatch. Exact-string replacement (`edit_file`) turned 20-call failures into 5-call successes. Small models also *always* copy the `N<TAB>` line-number prefixes they see in file reads — into diffs, into edit strings, into whole-file writes — so every writing tool normalizes them.
 6. **Seed-fixed generation is deterministic per backend, not across backends**: the same seed produces different trajectories on CUDA vs CPU builds. Official metrics must come from the target-equivalent backend — a GPU dev pass is a hint, never a result.
+7. **The unescaped-quote derail** (Phase 2's root-cause find): when a small model emits a raw `"` inside a JSON string value, the grammar legally closes the string and the model derails; if the schema offers an "empty" escape branch (`finish: null`), it becomes a 60-call chaos loop. Fix: **discriminated unions** — make the incoherent branch grammatically unproducible — plus an anti-quote rule in the preamble.
+8. **Verification must be symmetric**: oracles beat model claims in *both* directions. A worker that believes it is blocked while the tests are green has still succeeded — objective checks (files exist, tests pass) override self-reports, flagged as warnings.
 
 With the first three fixed: **60/60 structurally valid, 60/60 semantically filled outputs** across decision / plan / subtask-design schemas, at near-zero grammar overhead on large payloads. Full report: [`bench/results/f0_constrained_decoding.md`](bench/results/f0_constrained_decoding.md).
 
@@ -109,7 +111,7 @@ Development happens on a fast workstation, but **official numbers only come from
 
 - [x] **F0 — Foundations** *(done, `v1.1.0`)*: pinned runtime, model verification, constrained-decoding probe (60/60), resource-capped simulator, committed baselines
 - [x] **F1 — Deterministic core + worker** *(done, `v2.0.0`)*: walking skeleton, evaluator with 6 synthetic tasks — 4/6 verified on the capped profile, 0 false claims
-- [ ] **F2 — Minimal web GUI**: async job queue, live execution tree, approval/clarification queue
+- [x] **F2 — Minimal web GUI** *(done, `v2.1.0`)*: async job queue, live tree, standing consent grants with override, budget-as-consent, guided relaunch — 15 defects fixed via live user testing + automated battery
 - [ ] **F3 — Planning**: planner + phase designer, dynamic versioned plans, replanning
 - [ ] **F4 — Continuous verification**: two-stage debugger, supervisor, anti-loop, git checkpoints/rollback
 - [ ] **F5 — Context & KV-cache engineering**: prefix reuse, slot save/restore, verified state compression

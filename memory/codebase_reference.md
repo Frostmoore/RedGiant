@@ -1,6 +1,6 @@
 # Red Giant — Codebase Reference (atlante)
 
-**Aggiornato al:** 2026-08-01 · **Versione repo:** `v2.0.0` · **Fase completata:** F1 (nucleo deterministico + Worker)
+**Aggiornato al:** 2026-08-02 · **Versione repo:** `v2.1.0` · **Fase completata:** F2 (GUI web + campagna di collaudo)
 **Regola:** questo documento descrive **il codice che esiste**, non quello pianificato (per quello c'è [plan_red_giant.md](plan_red_giant.md)). Verifica meccanica: `python scripts/check_reference.py` — bloccante nel rituale di fine fase.
 
 ---
@@ -9,6 +9,8 @@
 
 | Cerchi… | Vai in… |
 |---|---|
+| GUI web (coda, approvazioni/grant, metriche) | `redgiant/web/` — avvio: `rg serve` o `scripts/start-gui.ps1` |
+| Collaudo end-to-end riproducibile della GUI | `scripts/collaudo-gui.py --task T007 [--approve]` |
 | Visione e requisiti | [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) |
 | Decisioni vincolanti (D1–D21) e piano | [plan_red_giant.md](plan_red_giant.md) |
 | Numeri di baseline F0 e decisioni derivate | §8-bis + `config/default.toml` + `bench/results/` |
@@ -323,7 +325,7 @@ V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. N
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 31 test, nessuno tocca il modello:
+`tests/unit/` — 48 test, nessuno tocca il modello (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli):
 
 | File | Dimostra |
 |---|---|
@@ -361,6 +363,22 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **Senza seed, llama-server usa un seed casuale per richiesta**: run non confrontabili (T003/T005 passavano o fallivano a lotteria). Seed fisso 42 nel client.
 - **Il modello dichiara azioni mai eseguite** ("answer written") — la verifica lo becca (expected_outputs), e la card ora dice esplicitamente "i pensieri non cambiano il mondo"; `write_file` dà il primitivo di creazione che mancava.
 
+**Batch F2 (campagna di collaudo 2026-08-01/02 — 3 giri utente + batteria + 4 retest):**
+
+- **⭐ Il derail da apice** (causa radice dei "loop caotici" 60+ chiamate): un `"` non escapato dentro un valore stringa chiude legalmente la stringa JSON; il modello deraglia e l'unica uscita grammaticale era `finish:null`. Fix STRUTTURALE: `WorkerStep` = union discriminata (il ramo incompleto non è generabile — probe live 8/8) + regola anti-apici nel preambolo.
+- **Race submit/ripresa**: la ripresa post-approvazione arrivava mentre il worker rilasciava il task appena bloccato → scartata come duplicato → `queued` eterno. Fix: guard rimosso + sweep DB post-job.
+- **CRLF dei checkout git Windows**: read_file mostra LF, il file è CRLF → `old_string` mai trovato (loop 12 step). Fix: edit_file lavora e scrive in LF.
+- **Consenso a gettone → grant permanenti** per (famiglia-scrittura, path) nel task, con override/revoca dell'utente; il `no` è permanente uguale; `no→sì` riaccoda un task bloccato.
+- **Contabilità budget rotta dalla cache**: il server riporta più cache del conteggio prompt client → righe negative che azzeravano il consumo e DISATTIVAVANO il budget. Fix: clamp per riga `MAX(prompt−cached,0)+gen` (il budget misura il lavoro).
+- **Budget check su task finito**: chiedeva l'estensione dopo il PASS finale. Fix: prima si guarda se c'è lavoro, poi il budget.
+- **Guard anti-loop aggirabile**: contava i fallimenti consecutivi, il modello li spezzava alternando letture ok. Fix: conteggio CUMULATIVO per (tool, errore) nel tentativo (consiglio a 3 e 5, stop a 8).
+- **`not_found_in_file` non insegnava niente**: ora edit_file restituisce la regione più simile del file (`closest_match`) — il tool corregge l'old_string del giro dopo (mismatch tipico: righe vuote PEP8).
+- **Simmetria degli oracoli** (dal retest D3: lavoro fatto, test verdi, worker "blocked" → bocciato): check oggettivi tutti verdi con test eseguiti = pass; i soggettivi (worker_done, evidence) diventano warning → `completed_with_warnings`.
+- **Riavvio container a ogni ciclo di consenso** (~1 min di ricarica pesi a click): vivo con task attivi, spegnimento dopo `idle_shutdown_s`=30' (decisione utente, reaper thread).
+- **Ripresa da zero post-approvazione**: ora IN-PLACE — il contesto volatile è salvato al blocco (`resume_<subtask>.ctx`) e si riparte dallo step esatto con la KV calda.
+- **Troncamento che bruciava il tentativo**: gestito in-loop come dato; `worker.step_max_tokens` 512→768.
+- **Doppio submit dal form, task queued muti, unreachable da processo morto**: anti doppio-submit, banner coda/avvio-server/ripresa con pulse e ultima attività dal log, `start-gui.ps1`, riaccodamento automatico al riavvio.
+
 ## 10. Debito tecnico aperto
 
 | Cosa | Perché rimandato | Quando |
@@ -371,6 +389,12 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 | T002 fallisce (il modello non capovolge "lib off-limits ⇒ bug nel chiamante") | è un limite di *ragionamento*, non d'ambiente: serve il retry con strategia del Supervisor | F4.2 (`retry_strategy`) |
 | T006 fragile (pattern di ricerca sbagliati al retry) | idem: strategia di retry | F4 |
 | `BudgetTracker.charge_*` no-op (i log li scrivono client/router) | API tenuta per il BudgetManager F4.5 | F4.5 |
+| T007 verde ma laborioso (41 chiamate: giri di lettura ridondanti) | serve contesto selettivo e strategia | F4 + F5 |
+| Registro delle tolleranze modello-specifiche (N-TAB, CRLF, code vuote, closest_match, soglie): euristiche overfittate su E2B QAT b10200 | vanno A/B-ate come sistema al cambio di modello/build | F6/F8 |
+| Nessun task sintetico "sporco" (repo grande, rumore, test lenti) | il micro-mondo non prepara a F8 | pre-F8 |
+| Evaluator senza varianza multi-seed (1 run = 1 traiettoria) | costa CPU; serve per distinguere "funziona" da "è passato" | F6 |
+| `task_config.json` su file = seconda fonte di stato oltre al DB | uso single-writer, fallimento benigno e visibile | con l'evoluzione GUI di F4 |
+| Protocollo umano = segreteria (solo ultima risposta, niente cronologia) | il dialogo vero è il protocollo F4 | F4.2/F4 GUI |
 
 ## 11. Il perché delle scelte non ovvie
 
@@ -383,4 +407,4 @@ Ereditate da F0 (QAT, digest-pin, 2 core, ctx 16K nel sim, niente framework, JSO
 
 ## 12. Cosa NON esiste ancora
 
-GUI web (F2) · Planner/PhaseDesigner e piano dinamico (F3) · Debugger/Supervisor/LoopGuard/Checkpoint/BudgetManager (F4) · ContextBuilder/CacheProbe/SlotManager/Compressor (F5) · routing/Classifier/Assessor (F6) · tool web e verifica citazioni (F7) · deploy (F8). Il chatbot Laravel 13 vive in un altro scenario (F8). Esclusi per design: multi-modalità, multi-modello, parallelismo tra agenti, API JSON pubblica.
+Planner/PhaseDesigner e piano dinamico (F3) · Debugger/Supervisor/LoopGuard/Checkpoint/BudgetManager (F4) · ContextBuilder/CacheProbe/SlotManager/Compressor (F5) · routing/Classifier/Assessor (F6) · tool web e verifica citazioni (F7) · deploy (F8). Il chatbot Laravel 13 vive in un altro scenario (F8). Esclusi per design: multi-modalità, multi-modello, parallelismo tra agenti, API JSON pubblica.

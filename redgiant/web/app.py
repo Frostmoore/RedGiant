@@ -195,7 +195,9 @@ def create_app(cfg: Config) -> FastAPI:
         items = []
         for a in store.pending_approvals():
             a = dict(a)
-            a["payload_pretty"] = json.dumps(json.loads(a["payload"]), indent=1)[:800]
+            p = json.loads(a["payload"])
+            a["preview"] = p.pop("preview", None)  # F2: consenso informato
+            a["payload_pretty"] = json.dumps(p, indent=1)[:500]
             items.append(a)
         grants = []
         for g in store.list_grants():
