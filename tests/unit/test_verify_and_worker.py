@@ -74,6 +74,22 @@ def test_unknown_verification_is_a_failure_not_a_skip(env):
     assert any("unknown" in c.name for c in v.checks)
 
 
+def test_resume_reclaims_orphan_running_subtasks(env, tmp_path):
+    # F1.7: una sottofase 'running' di un processo morto torna 'pending' alla ripresa
+    from redgiant.config import Config
+    from redgiant.core.orchestrator import Orchestrator, TaskLog
+    scope, router, tid = env
+    store = router.store
+    store.upsert_subtask(tid, _spec(), actor="t")
+    store.set_subtask_status(tid, "P1.S1", "running", actor="orch")
+    cfg = Config.load("dev-fast", CONFIG_DIR)
+    orch = Orchestrator(cfg, store, llm=None, router=router,  # llm inutilizzato qui
+                        assembler=None)
+    orch._reclaim_orphans(tid, TaskLog(tmp_path, tid))
+    _, status, _ = store.get_subtask(tid, "P1.S1")
+    assert status == "pending"
+
+
 def test_workerstep_incoherence_is_data_not_validation_error():
     # La coerenza cross-campo NON e' un validator (la grammatica non puo'
     # esprimerla): il modello la accetta e il loop la gestisce come dato.

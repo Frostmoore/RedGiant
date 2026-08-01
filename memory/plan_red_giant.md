@@ -4,7 +4,7 @@
 **Data:** 2026-08-01
 **Specsheet di riferimento:** [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) (v0.1)
 **Atlante della codebase:** [codebase_reference.md](codebase_reference.md) — aggiornato a ogni fine fase, mai dopo.
-**Stato:** 🟢 **F0 completata** (2026-08-01, `v1.1.0`) — prossima azione: **Fase 1, sottofase 1.1** (gate d'ingresso soddisfatto: numeri F0.6 nell'atlante, allocazione severino-sim decisa dall'utente)
+**Stato:** 🟢 **F1 completata** (2026-08-01, `v2.0.0`, merged in `main`) — prossima azione: **Fase 2, sottofase 2.1** (GUI web minima; gate soddisfatto: walking skeleton dimostrato 4/6 sulla run ufficiale severino-sim)
 
 ---
 
@@ -1058,9 +1058,11 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.11 — 🔎 Verifica di fase
 
-- [ ] Tutte insieme: ≥4/6 task sintetici `verified` su `severino-sim` senza intervento umano; forbice `completed`≠`verified` = 0 (nessuna bugia); zero righe `llm_calls.outcome='invalid'` sull'intera run; `pytest tests/unit` verde; report Evaluator committato e citato nell'atlante; test di ripresa (F1.7) passato.
+- [x] Tutte insieme: ≥4/6 task sintetici `verified` su `severino-sim` senza intervento umano; forbice `completed`≠`verified` = 0 (nessuna bugia); zero righe `llm_calls.outcome='invalid'` sull'intera run; `pytest tests/unit` verde; report Evaluator committato e citato nell'atlante; test di ripresa (F1.7) passato.
 
 **Rituale di fine fase** → `v2.0.0`.
+
+> **ESITO F1 (2026-08-01, `v2.0.0`).** Gate superato sulla run UFFICIALE severino-sim (2 core): **4/6 verified** (T001, T003, T004, T005 — tutti 100% token utili, 0 retry, 5-8 chiamate, 45-65s l'uno), **forbice completed≠verified = 0 su tutte le 8 run** della fase (il sistema non ha mai mentito), zero `invalid` nella run ufficiale, 33 unit test verdi. **Fallimenti onesti e diagnosticati:** T002 (il modello non capovolge "lib off-limits ⇒ bug nel chiamante" — limite di ragionamento, atteso il `retry_strategy` del Supervisor F4) e T006 (dichiara azioni non eseguite / pattern di ricerca fragili al retry — idem). **Baseline per D11:** ogni ruolo di F3/F4 dovrà battere questi numeri. **Il collaudo e2e ha prodotto 10 trappole disinnescate** (dettaglio nell'atlante §9), quasi tutte della stessa famiglia — l'interfaccia modello↔ambiente: i formati che il modello non sa serializzare (diff unificati), ciò che copia sempre (prefissi N-TAB, echo del nome tool), ciò che dichiara senza fare (la verifica lo becca), il determinismo che non attraversa i backend (seed fisso ≠ stessa traiettoria su CUDA vs CPU). **Evoluzioni contrattuali** (tutte registrate in §A7/F1 con la ragione): `edit_file` primario, `write_file` per la creazione, normalizzazione N-TAB su tutti i writer, step-log del Worker.
 
 ---
 

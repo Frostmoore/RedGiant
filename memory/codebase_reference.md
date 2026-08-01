@@ -313,7 +313,7 @@ D1–D21 (piano §0) + rituale con Passo 2-bis (README) e regola main (merge a o
 ## 8-bis. Numeri di baseline
 
 F0 (invariati): prefill 6.8/30.7/69.6/173.6s @ 1/4/8/16K · gen 35.8 tok/s · riuso 65 vs 7971 · grammatica 0.4–9.8%.
-F1 (run ufficiale severino-sim): v. report in `bench/results/` — sintesi nel piano (ESITO F1).
+F1 (run ufficiale severino-sim, 2 core): **4/6 verified** (T001/T003/T004/T005: 100% useful, 0 retry, 5-8 chiamate, 45-65s); T002/T006 falliti onesti (debiti F4); forbice completed≠verified = 0; 184k token totali per la run. Report: `bench/results/eval_severino-sim_*.md`.
 
 ## 9. Trappole già disinnescate
 
