@@ -17,6 +17,7 @@ import json
 import queue
 import subprocess
 import threading
+import time
 import traceback
 from pathlib import Path
 
@@ -57,9 +58,12 @@ class JobQueue:
         self._current: str | None = None
         self._lock = threading.Lock()
         self._started_container = False
+        self._last_done = time.time()
         self._thread = threading.Thread(target=self._worker, daemon=True,
                                         name="redgiant-jobqueue")
         self._thread.start()
+        threading.Thread(target=self._idle_reaper, daemon=True,
+                         name="redgiant-idle-reaper").start()
         # ripresa post-riavvio (feedback F2.5): i task queued/running nel DB
         # esistono solo li' — la coda in-memory muore col processo. Si riaccodano
         # (l'Orchestrator reclama le sottofasi running orfane).
@@ -117,6 +121,7 @@ class JobQueue:
             finally:
                 with self._lock:
                     self._current = None
+                self._last_done = time.time()
                 self._q.task_done()
                 # rete di sicurezza anti-race: un task 'queued' nel DB ma non in
                 # coda (submit perso) viene ripescato qui
@@ -179,7 +184,6 @@ class JobQueue:
             subprocess.run(["docker", "compose", "-f", str(_COMPOSE), "up", "-d"],
                            capture_output=True, timeout=120)
             self._started_container = True
-            import time
             for _ in range(40):
                 time.sleep(3)
                 if llm.health():
@@ -187,14 +191,22 @@ class JobQueue:
         return llm.health()
 
     def _release_server(self) -> None:
-        # F2.5: NON spegnere il container se ci sono task queued O BLOCKED — un
-        # blocked riprende a breve (approvazione in arrivo) e ripagare ~1 min di
-        # boot modello a ogni ciclo di consenso era meta' della lentezza percepita.
-        if not self._started_container or not self._q.empty():
-            return
-        pending = any(t["status"] in ("queued", "blocked")
-                      for t in self.store.list_tasks(100))
-        if not pending:
+        # F2.5 (decisione utente): niente stop a fine task — se ne occupa il reaper
+        # dopo idle_shutdown_s di inutilizzo. Ricaricare i pesi a ogni ciclo di
+        # consenso costava ~1 min di attesa (e corrente) a botta.
+        return
+
+    def _idle_reaper(self) -> None:
+        while True:
+            time.sleep(60)
+            if not self._started_container or self._current is not None \
+                    or not self._q.empty():
+                continue
+            if time.time() - self._last_done < self.cfg.llm.idle_shutdown_s:
+                continue
+            if any(t["status"] in ("queued", "blocked")
+                   for t in self.store.list_tasks(100)):
+                continue  # un blocked riprende a breve: il modello resta caldo
             subprocess.run(["docker", "compose", "-f", str(_COMPOSE), "stop"],
                            capture_output=True, timeout=60)
             self._started_container = False

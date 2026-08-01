@@ -18,7 +18,8 @@ _DEFAULT_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 # Schema delle sezioni/chiavi ammesse: la validazione "chiave sconosciuta"
 # confronta contro questo. Aggiungere una chiave = aggiungerla anche qui.
 _KNOWN_KEYS: dict[str, set[str]] = {
-    "llm": {"base_url", "ctx_size", "timeout_s", "temperature", "max_tokens_default"},
+    "llm": {"base_url", "ctx_size", "timeout_s", "temperature", "max_tokens_default",
+            "idle_shutdown_s"},
     "paths": {"db", "models_dir", "tasks_dir", "slots_dir", "ripgrep"},
     "budget": {"max_total_tokens", "max_tool_calls", "max_retries_per_subtask", "max_wall_s"},
     "worker": {"max_steps", "step_max_tokens"},
@@ -35,6 +36,7 @@ class LlmProfileCfg:
     timeout_s: float
     temperature: float
     max_tokens_default: int
+    idle_shutdown_s: int
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,7 @@ class Config:
                 timeout_s=float(llm["timeout_s"]),
                 temperature=float(llm["temperature"]),
                 max_tokens_default=int(llm["max_tokens_default"]),
+                idle_shutdown_s=int(llm.get("idle_shutdown_s", 1800)),
             ),
             paths=PathsCfg(
                 db=Path(paths["db"]),

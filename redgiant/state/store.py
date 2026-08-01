@@ -445,9 +445,12 @@ class StateStore:
             # F2.5: il budget misura il LAVORO, non la dimensione dei prompt — i token
             # serviti dalla KV cache non costano: (prompt - cached) + gen. Contare il
             # prompt intero a ogni step gonfiava il consumo quadraticamente.
+            # clamp per riga (F2.5): il server puo' riportare piu' cache del nostro
+            # conteggio prompt (template/BOS) -> righe negative che cancellano i gen
+            # e DISATTIVANO il budget. MAX(prompt-cached,0)+gen.
             llm = c.execute(
-                "SELECT COALESCE(SUM(prompt_tokens - cached_tokens + gen_tokens), 0) AS t"
-                " FROM llm_calls WHERE task_id=?", (task_id,)).fetchone()
+                "SELECT COALESCE(SUM(MAX(prompt_tokens - cached_tokens, 0) + gen_tokens), 0)"
+                " AS t FROM llm_calls WHERE task_id=?", (task_id,)).fetchone()
             tools = c.execute("SELECT COUNT(*) AS n FROM tool_calls WHERE task_id=?",
                               (task_id,)).fetchone()
         return BudgetUsed(tokens=llm["t"], tool_calls=tools["n"], wall_s=0.0)

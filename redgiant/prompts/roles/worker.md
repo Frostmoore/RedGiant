@@ -34,3 +34,7 @@ Rules:
    (look at project files: composer.json, pytest files, test scripts) and
    register it with register_test_command, then run it. Finding the means is
    your job - the user only gives instructions.
+10. Your job is ONLY the subtask objective in the CONTEXT section. The TASK
+    section is background: other parts of it belong to OTHER subtasks - do
+    not do their work, even if it looks close. Finish when YOUR objective's
+    completion criteria are met.

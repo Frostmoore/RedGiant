@@ -66,13 +66,25 @@ class Worker(Role):
 
     def run(self, ctx: RoleContext, *, max_steps: int,
             step_max_tokens: int = 512,
-            step_log=None) -> FinishReport:
-        """step_log: callable(str) opzionale — osservabilita' §20, ogni step loggato."""
+            step_log=None, resume_file=None) -> FinishReport:
+        """step_log: callable(str) opzionale — osservabilita' §20, ogni step loggato.
+        resume_file: Path opzionale (F2.5, richiesta utente) — ripresa IN-PLACE dopo
+        un'approvazione: al blocco il contesto volatile viene salvato li'; alla
+        ripresa si riparte dallo step esatto (prefill quasi tutto in KV cache),
+        invece di rifare letture ed edit da zero."""
         task = ctx.task
+        volatile = ctx.volatile
+        if resume_file is not None and resume_file.is_file():
+            volatile = resume_file.read_text(encoding="utf-8")
+            volatile += ("\n[RESUMED] The pending request has been decided by the "
+                         "user. Re-issue that tool call now: if granted it will "
+                         "execute; if denied you will get approval_denied as data.")
+            if step_log is not None:
+                step_log("ripresa in-place dal contesto salvato")
         tools = self.router.allowed_for(self.name, task.domain)
         parts = self.assembler.build(
             self.name, task=task, subtask=ctx.subtask, tools=tools,
-            volatile=ctx.volatile,
+            volatile=volatile,
             output_schema=WorkerStep.model_json_schema(), schema_name="WorkerStep")
 
         from redgiant.llm.client import LlmTruncated
@@ -108,6 +120,8 @@ class Worker(Role):
                 continue
 
             if step.action == "finish":
+                if resume_file is not None:
+                    resume_file.unlink(missing_ok=True)  # tentativo concluso
                 return step.finish  # type: ignore[return-value]
 
             call = step.tool_call
@@ -116,6 +130,13 @@ class Worker(Role):
                 task.id, ctx.subtask.id if ctx.subtask else "", call.tool, call.args)
 
             if result.error == "awaiting_approval":
+                if resume_file is not None:
+                    resume_file.parent.mkdir(parents=True, exist_ok=True)
+                    resume_file.write_text(
+                        parts.volatile_context
+                        + f"\n[STEP {k}] {step.model_dump_json()}"
+                        + f"\n[STEP {k} RESULT] awaiting user approval for '{call.tool}'",
+                        encoding="utf-8")
                 return FinishReport(status="blocked",
                                     summary=f"awaiting user approval for tool '{call.tool}'",
                                     evidence=[], verification_requested=[])

@@ -74,9 +74,14 @@ def test_budget_used_aggregates_from_db(store, budget):
     store.log_tool_call(tid, ToolCallRow(
         subtask_id="P1.S1", tool="read_file", args={"path": "a.py"}, ok=True,
         evidence=["read a.py:1-10"], duration_ms=5.0))
+    # riga con cache > prompt (il server conta template/BOS): clamp a 0, i gen contano
+    store.log_llm_call(tid, LlmCallRow(
+        role="worker", subtask_id="P1.S1", schema_name=None,
+        t_start="2026-08-01T00:00:00+00:00", prompt_tokens=100, cached_tokens=140,
+        gen_tokens=30, prefill_ms=1.0, gen_ms=1.0, outcome="ok"))
     used = store.budget_used(tid)
-    # il budget misura il LAVORO: (prompt - cached) + gen = (100-90+50) * 2
-    assert used.tokens == 120 and used.tool_calls == 1
+    # (100-90+50)*2 + (clamp 0 + 30) = 150
+    assert used.tokens == 150 and used.tool_calls == 1
 
 
 def test_plan_versioning_monotonic(store, budget):

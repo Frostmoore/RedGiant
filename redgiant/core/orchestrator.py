@@ -94,6 +94,8 @@ class Orchestrator:
                 self.store.set_subtask_status(
                     task_id, spec.id, "completed", actor="orchestrator",
                     result={"verdict": verdict.model_dump()})
+                (self.cfg.paths.tasks_dir / task_id / f"resume_{spec.id}.ctx"
+                 ).unlink(missing_ok=True)
                 log.line("verify", f"{spec.id} PASS")
                 continue
 
@@ -147,10 +149,12 @@ class Orchestrator:
                              + json.dumps(failed[:5]))
 
         ctx = RoleContext(task=state, subtask=spec, volatile=volatile)
+        resume_file = self.cfg.paths.tasks_dir / task_id / f"resume_{spec.id}.ctx"
         try:
             report = worker.run(ctx, max_steps=self.cfg.worker_max_steps,
                                 step_max_tokens=self.cfg.worker_step_max_tokens,
-                                step_log=lambda m: log.line("step", m))
+                                step_log=lambda m: log.line("step", m),
+                                resume_file=resume_file)
         except LlmError as e:
             log.line("worker", f"{spec.id} LLM error: {e}")
             from redgiant.roles.worker import FinishReport

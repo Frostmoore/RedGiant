@@ -238,7 +238,7 @@ class FinishReport  # status done|blocked, summary<=600, evidence, verification_
 class WorkerStep    # thought<=300, action tool|finish, tool_call?, finish?
     def incoherence(self) -> str | None
 class Worker
-    def run(self, ctx: RoleContext, *, max_steps: int, step_max_tokens: int = 512, step_log=None) -> FinishReport
+    def run(self, ctx: RoleContext, *, max_steps: int, step_max_tokens: int = 512, step_log=None, resume_file=None) -> FinishReport
 ```
 
 ### `redgiant/core/verify.py` — verifica deterministica (F1.6, D10)
