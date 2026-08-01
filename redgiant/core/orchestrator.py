@@ -141,6 +141,7 @@ class Orchestrator:
         ctx = RoleContext(task=state, subtask=spec, volatile=volatile)
         try:
             report = worker.run(ctx, max_steps=self.cfg.worker_max_steps,
+                                step_max_tokens=self.cfg.worker_step_max_tokens,
                                 step_log=lambda m: log.line("step", m))
         except LlmError as e:
             log.line("worker", f"{spec.id} LLM error: {e}")

@@ -21,7 +21,7 @@ _KNOWN_KEYS: dict[str, set[str]] = {
     "llm": {"base_url", "ctx_size", "timeout_s", "temperature", "max_tokens_default"},
     "paths": {"db", "models_dir", "tasks_dir", "slots_dir", "ripgrep"},
     "budget": {"max_total_tokens", "max_tool_calls", "max_retries_per_subtask", "max_wall_s"},
-    "worker": {"max_steps"},
+    "worker": {"max_steps", "step_max_tokens"},
     "web": {"host", "port"},
     "security": {"writable_globs", "shell_whitelist"},
     "eval": {"tasks_dir"},
@@ -75,6 +75,7 @@ class Config:
     web: WebCfg
     security: SecurityCfg
     worker_max_steps: int
+    worker_step_max_tokens: int
     eval_tasks_dir: Path
 
     @classmethod
@@ -127,6 +128,7 @@ class Config:
                 shell_whitelist=tuple(security["shell_whitelist"]),
             ),
             worker_max_steps=int(worker["max_steps"]),
+            worker_step_max_tokens=int(worker.get("step_max_tokens", 768)),
             eval_tasks_dir=Path(eval_["tasks_dir"]),
         )
 

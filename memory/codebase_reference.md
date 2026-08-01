@@ -103,6 +103,9 @@ class StateStore
     def set_subtask_status(self, task_id: str, subtask_id: str, status: SubtaskStatus, *, actor: str, result: dict | None = None) -> None
     def add_approval(self, task_id: str, *, kind: str, payload: str) -> int
     def pending_approvals(self, task_id: str | None = None) -> list[dict]
+    def answer_approval(self, approval_id: int, answer: str) -> str
+    def consume_matching_approval(self, task_id: str, tool: str, args_json: str) -> str | None
+    def latest_clarification_answer(self, task_id: str) -> str | None
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str, target: str | None = None) -> None
     def log_llm_call(self, task_id: str, row: LlmCallRow) -> None
     def log_tool_call(self, task_id: str, row: ToolCallRow) -> None
@@ -277,6 +280,22 @@ class EvalResult    # task_id, completed, verified, skipped, total_tokens, usefu
 def discover_tasks(tasks_dir: Path) -> list[EvalTask]
 def run_eval(profile: str, only: list[str] | None, out_dir: Path) -> Path
 def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path) -> Path
+```
+
+### `redgiant/web/jobs.py` + `redgiant/web/app.py` — GUI (F2)
+
+JobQueue: UN worker thread (D7), ciclo di vita del server legato al job (container severino-sim su/giù), config per-task su disco (`data/tasks/<id>/task_config.json`: writable_globs, test_commands, plan, approve_writes), riaccodamento automatico dei task queued/running al riavvio. `cancel` cooperativo. `create_app`: rotte HTML/HTMX (tabella F2.2 del piano — inline in app.py: 10 rotte non giustificano un package), template Jinja2 in `web/templates/`, htmx 2.0.4 vendorizzato in `web/static/`. Avvio: `rg serve` o `scripts/start-gui.ps1` (doppio click).
+
+```python
+def write_task_config(tasks_dir: Path, task_id: str, *, writable_globs: list[str], test_commands: dict[str, list[str]], plan: dict | None = None) -> None
+def read_task_config(tasks_dir: Path, task_id: str) -> dict
+class JobQueue
+    def __init__(self, cfg: Config, store: StateStore) -> None
+    def submit(self, task_id: str) -> None
+    def cancel(self, task_id: str) -> bool
+    def current(self) -> str | None
+    def queue_snapshot(self) -> list[str]
+def create_app(cfg: Config) -> FastAPI
 ```
 
 ## 4. Database (SQLite, `data/redgiant.db` — DDL in `store.py::_DDL`)

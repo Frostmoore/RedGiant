@@ -75,12 +75,25 @@ class Worker(Role):
             volatile=ctx.volatile,
             output_schema=WorkerStep.model_json_schema(), schema_name="WorkerStep")
 
+        from redgiant.llm.client import LlmTruncated
+
         last_call_sig: str | None = None
         for k in range(1, max_steps + 1):
-            step: WorkerStep = self.llm.complete(
-                parts, role=self.name, schema=WorkerStep,
-                max_tokens=step_max_tokens, task_id=task.id,
-                subtask_id=ctx.subtask.id if ctx.subtask else None).parsed  # type: ignore
+            try:
+                step: WorkerStep = self.llm.complete(
+                    parts, role=self.name, schema=WorkerStep,
+                    max_tokens=step_max_tokens, task_id=task.id,
+                    subtask_id=ctx.subtask.id if ctx.subtask else None).parsed  # type: ignore
+            except LlmTruncated:
+                # F2.5: il troncamento di UNO step non brucia il tentativo intero —
+                # e' un dato in-loop (la KV resta calda), come i tool error.
+                parts = parts.with_appended_context(
+                    f"\n[STEP {k} TRUNCATED] your output exceeded the step budget "
+                    f"({step_max_tokens} tokens). Emit a SHORTER step: brief thought, "
+                    f"smaller edit (split large changes into multiple edit_file calls).")
+                if step_log is not None:
+                    step_log(f"step {k}: TRUNCATED at {step_max_tokens} tok")
+                continue
 
             if step_log is not None:
                 step_log(f"step {k}: {step.model_dump_json()[:280]}")

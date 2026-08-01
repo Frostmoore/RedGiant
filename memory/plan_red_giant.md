@@ -518,6 +518,9 @@ max_wall_s = 7200
 
 [worker]
 max_steps = 20                       # passi ReAct per sottofase (D20)
+step_max_tokens = 768                # tetto di generazione per step (F2.5: 512 troncava
+                                     # gli edit_file lunghi; il troncamento in-loop e' un
+                                     # dato, non un abort del tentativo)
 
 [web]
 host = "127.0.0.1"

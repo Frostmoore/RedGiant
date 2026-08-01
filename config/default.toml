@@ -38,6 +38,7 @@ max_wall_s = 7200
 
 [worker]
 max_steps = 20                       # passi ReAct per sottofase (D20)
+step_max_tokens = 768                # F2.5: 512 troncava gli edit lunghi (~21s/step a 35.8 tok/s)
 
 [web]
 host = "127.0.0.1"
