@@ -1,6 +1,7 @@
 # Profilo severino-sim (F0.4): llama-server CPU-only con risorse comparabili a Severino (D5/D6).
-# Allocazione PROPOSTA: 4 core (cpuset 0-3) + 10 GB RAM — da confermare con l'utente prima
-# del freeze (gate F0.4): tutti i bench dipendono da questi numeri.
+# Allocazione DECISA dall'utente (2026-08-01): 2 core (cpuset 0-1) + 10 GB RAM su questo PC —
+# i core Zen 4 del 9900X valgono ~2x i core Zen 2 del 5300U, quindi 2 core qui approssimano
+# i 4 core che Red Giant avra' su Severino. Sul box reale: 4 core (--threads 4).
 # NOTA (piano F0.4): su Docker Desktop/WSL2 verificare che cpuset morda davvero; fallback
 # documentato: cpus: 4.0 (quota, non affinita') con annotazione nell'atlante.
 # PIN DI RIFERIMENTO del progetto: questa immagine, per digest (build b10200). Il registry
@@ -15,12 +16,12 @@ services:
       -m /models/gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf
       --ctx-size 16384
       --parallel 1
-      --threads 4
+      --threads 2
       --chat-template gemma
       --slot-save-path /slots
       --host 0.0.0.0
       --port 8080
-    cpuset: "0-3"
+    cpuset: "0-1"
     mem_limit: 10g
     volumes:
       - ../../models:/models:ro

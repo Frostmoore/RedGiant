@@ -565,6 +565,8 @@ Si esegue al completamento dell'ultima sottofase 🔎 di una fase. È una proced
 
 **Passo 2 — Aggiornare `memory/codebase_reference.md`.** Per ogni elemento nuovo o cambiato nella fase: classi con ogni metodo e firma completa, tabelle DB con ogni colonna, endpoint con input/output/errori, chiavi di config, test con cosa dimostra ciascuno. Aggiornare le sezioni: "Cosa NON esiste ancora" (rimuovere ciò che ora esiste), "Trappole già disinnescate" (aggiungere ogni problema incontrato, con la **causa tecnica**), "Debito tecnico aperto" (con il perché è rimandato e quando va affrontato), "Il perché delle scelte non ovvie".
 
+**Passo 2-bis — Rileggere e riscrivere `README.md`** (regola specifica di questo progetto, richiesta dall'utente il 2026-08-01). Il README è in inglese, pensato per essere trovato e capito da persone e agenti AI che fanno ricerca: a ogni fine fase va riletto per intero e aggiornato — stato, roadmap (checkbox), decisioni tecniche rilevanti aggiunte nella fase, findings empirici nuovi, comandi. Un README fermo a due fasi fa è un documento che mente.
+
 **Passo 3 — Verifica meccanica dell'atlante.** Eseguire:
 
 ```powershell
@@ -696,7 +698,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 - [ ] 🤖 **Obiettivo:** un container Docker che replica il vincolo di risorse di Severino (D5) per misure oneste sul PC di sviluppo.
 - **Motivazione:** D6. Severino reale non è sempre disponibile e i bench lo saturerebbero disturbando lo stack di casa; il simulatore rende le misure ripetibili e quotidiane. Non simula la *microarchitettura* (Zen 4 ≠ Zen 2 a parità di core), quindi i numeri vanno trattati come proxy ottimista: la taratura finale contro Severino reale avviene a ogni fine fase quando possibile e sistematicamente in F8.
 - **Implementazione:** `docker/severino-sim/compose.yml` — servizio `llama-cpu`: immagine llama.cpp server CPU (stessa release pinnata di F0.2), `cpuset: "0-3"`, `mem_limit` concordata 🧑, `--threads 4 --parallel 1 --ctx-size` dal profilo, volume `./models:/models:ro`, volume slot, porta mappata su quella di `config/profiles/severino-sim.toml`. Healthcheck su `/props`.
-- 🧑 **Richiede l'utente:** conferma dei numeri di allocazione (4 core? quanta RAM al container?) **prima del freeze**: tutti i bench successivi dipendono da questi numeri e cambiarli dopo invalida i confronti storici.
+- 🧑 **Richiede l'utente:** conferma dei numeri di allocazione **prima del freeze**: tutti i bench successivi dipendono da questi numeri e cambiarli dopo invalida i confronti storici. → **DECISO (2026-08-01): 2 core + 10 GB sul PC di sviluppo** (un core Zen 4 @5.3GHz vale ~2× un core Zen 2 @15W: 2 core qui approssimano i 4 di Severino); su Severino reale: 4 core. Un bench parziale a 4 core è stato scartato per questo motivo.
 - **Casi limite:** cpuset su Windows/WSL2 — verificare che il limite morda davvero (stress test e lettura di `docker stats`); se WSL2 non onora `cpuset`, fallback `cpus: 4.0` (quota equivalente) con annotazione nell'atlante della differenza (quota ≠ affinità).
 - **Accettazione:** container su e healthy; `docker stats` mostra il tetto CPU rispettato sotto carico; profilo `severino-sim.toml` punta al container e una generazione di prova completa.
 
