@@ -10,6 +10,7 @@
 [![Runtime](https://img.shields.io/badge/runtime-llama.cpp_(pinned)-555555)](docker/severino-sim/compose.yml)
 [![Inference](https://img.shields.io/badge/inference-CPU--only_·_4_cores-D7263D)](#-target-hardware-severino)
 [![No cloud](https://img.shields.io/badge/external_LLM_APIs-never-2E8B57)](#-key-technical-decisions)
+[![License](https://img.shields.io/badge/license-MIT_·_attribution_required-blue)](LICENSE)
 
 *The model stays small. The **system** becomes large.*
 
@@ -144,6 +145,8 @@ python scripts\check_reference.py                           # atlas ↔ code ver
 
 <div align="center">
 <sub>
+
+Licensed under the [MIT License](LICENSE) — free to use, modify and redistribute, **provided the Red Giant attribution notice is preserved**.
 
 **Topics:** small language models · SLM agents · local LLM · Gemma 4 E2B · llama.cpp · GGUF · grammar-constrained decoding · JSON Schema · GBNF · KV cache reuse · prefill optimization · CPU-only inference · agentic pipeline · deterministic orchestration · verification-first · home server · self-hosted AI
 

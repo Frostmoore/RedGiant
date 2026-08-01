@@ -589,6 +589,8 @@ git push -u github vX.Y.Z
 
 Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i commit intermedi durante una fase avanzano di `+0.0.1` (piccoli, incluse modifiche solo-documentali) o `+0.1.0` (medi), sempre su branch nominato come la versione. `redgiant/__init__.py::__version__` va allineata nello stesso commit.
 
+**Regola `main` (richiesta dall'utente, 2026-08-01):** a ogni **bump MAJOR** (`x.y.z` → `(x+1).0.0`), dopo il push del branch versionato, **mergeare tutto in `main`** e pushare `main` su entrambe le remote. `main` rappresenta sempre l'ultima major stabile (creato alla `v1.1.0` come baseline).
+
 | Evento | Versione | Entità |
 |---|---|---|
 | Piano iniziale (fatto) | `v1.0.0` | — |
