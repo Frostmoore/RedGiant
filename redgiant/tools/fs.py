@@ -146,9 +146,20 @@ def edit_file(scope: Scope, path: str, old_string: str, new_string: str,
     new_string = strip.sub("", new_string).replace("\r\n", "\n")
     n = text.count(old_string)
     if n == 0:
-        return ToolResult(ok=False, data={"hint": "copy old_string EXACTLY from the file, "
-                                                  "without the N<TAB> line-number prefix"},
-                          error="not_found_in_file")
+        # Retest D2: "not found" secco non insegna niente — il tool trova la regione
+        # piu' simile e la restituisce, cosi' il giro dopo l'old_string e' giusto
+        # (mismatch tipico: numero di righe vuote tra funzioni).
+        data = {"hint": "old_string not found. Copy it EXACTLY from the snippet below "
+                        "(mind blank lines), or use write_file to rewrite the file."}
+        first = next((l for l in old_string.splitlines() if l.strip()), "")
+        if first:
+            lines = text.splitlines()
+            idx = next((i for i, l in enumerate(lines) if first.strip() in l), None)
+            if idx is not None:
+                lo = max(0, idx - 1)
+                hi = min(len(lines), idx + len(old_string.splitlines()) + 2)
+                data["closest_match"] = "\n".join(lines[lo:hi])
+        return ToolResult(ok=False, data=data, error="not_found_in_file")
     if n > 1 and not replace_all:
         return ToolResult(ok=False, data={"occurrences": n,
                                           "hint": "add surrounding lines to make it unique, "
