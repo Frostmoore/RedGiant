@@ -64,6 +64,18 @@ def test_upsert_is_idempotent(store, budget):
     assert len(store.list_subtasks(tid)) == 1
 
 
+def test_upsert_resurrects_skipped_subtasks(store, budget):
+    # F3 (bug designer-loop): il redesign post-replanning riusa gli id — una
+    # sottofase skipped ri-upsertata DEVE risorgere a pending (attempts azzerati)
+    tid = store.create_task("r", "/tmp/x", "p", budget)
+    store.upsert_subtask(tid, _spec(), actor="t")
+    store.set_subtask_status(tid, "P1.S1", "retry", actor="orch")
+    store.set_subtask_status(tid, "P1.S1", "skipped", actor="planner")
+    store.upsert_subtask(tid, _spec(), actor="phase_designer")
+    _, status, attempts = store.get_subtask(tid, "P1.S1")
+    assert status == "pending" and attempts == 0
+
+
 def test_budget_used_aggregates_from_db(store, budget):
     tid = store.create_task("r", "/tmp/x", "p", budget)
     for _ in range(2):

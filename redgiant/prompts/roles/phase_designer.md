@@ -14,3 +14,6 @@ Rules:
 5. "inputs" lists the files the Worker should read first; "expected_outputs"
    the files that must exist (created or modified) when it is done.
 6. Expand ONLY the current phase. Never redesign other phases.
+7. NEVER invent function, class or file names: copy identifiers EXACTLY from
+   the test excerpts or existing code shown in CONTEXT. When unsure, phrase
+   the objective by OUTCOME ("make test_x pass") instead of naming APIs.

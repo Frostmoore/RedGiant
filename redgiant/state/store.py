@@ -251,11 +251,18 @@ class StateStore:
 
     def upsert_subtask(self, task_id: str, spec: SubtaskSpec, *, actor: str) -> None:
         with self._conn() as c:
+            # F3 (bug del designer-loop): una sottofase 'skipped' ri-upsertata dal
+            # redesign RISORGE a pending (e' lavoro nuovo); gli altri stati restano
+            # preservati (idempotenza del F1). attempts riparte con la resurrezione.
             c.execute(
                 "INSERT INTO subtasks (task_id, subtask_id, phase_id, title, status, spec)"
                 " VALUES (?,?,?,?, 'pending', ?)"
                 " ON CONFLICT(task_id, subtask_id) DO UPDATE SET"
-                " phase_id=excluded.phase_id, title=excluded.title, spec=excluded.spec",
+                " phase_id=excluded.phase_id, title=excluded.title, spec=excluded.spec,"
+                " status=CASE WHEN subtasks.status='skipped' THEN 'pending'"
+                "             ELSE subtasks.status END,"
+                " attempts=CASE WHEN subtasks.status='skipped' THEN 0"
+                "               ELSE subtasks.attempts END",
                 (task_id, spec.id, spec.phase_id, spec.title, spec.model_dump_json()))
             self._decision(c, task_id, actor, f"upsert_subtask={spec.id}", spec.title, spec.id)
 

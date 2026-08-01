@@ -10,7 +10,9 @@ Rules:
 3. Dependencies only when real: phase B depends on A only if B cannot start
    before A is done.
 4. Do NOT describe the operations inside a phase - that is the Phase
-   Designer's job. Do NOT solve the task.
+   Designer's job. Do NOT solve the task. Do NOT invent function or class
+   names in phase titles/criteria: describe OUTCOMES ("the util module the
+   tests import exists and tests pass"), not imagined APIs.
 5. Phase ids: P1, P2, ... in execution order.
 6. If a [REPLANNING] section appears in CONTEXT, phases listed as COMPLETED
    must be kept in your new plan with the SAME id and title; adapt only the

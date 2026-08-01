@@ -77,6 +77,7 @@ class Orchestrator:
                 return self.store.load_task(task_id)
 
         replans = 0
+        design_rounds: dict[str, int] = {}  # tetto strutturale anti-loop del designer
         while True:
             state = self.store.load_task(task_id)
             if state.status in ("blocked", "cancelled"):
@@ -92,6 +93,14 @@ class Orchestrator:
 
             # F3.3: espansione LAZY — solo la fase corrente viene dettagliata (§25.5)
             if not self._phase_subtasks(state.id, phase.id):
+                design_rounds[phase.id] = design_rounds.get(phase.id, 0) + 1
+                if design_rounds[phase.id] > 3:
+                    self.store.set_task_status(
+                        task_id, "failed", actor="orchestrator",
+                        error=f"design loop on phase {phase.id}: "
+                              f"{design_rounds[phase.id]} rounds")
+                    log.line("orchestrator", f"design loop su {phase.id} -> failed")
+                    return self.store.load_task(task_id)
                 try:
                     self._design_phase(task_id, phase, log)
                 except (DesignRejected, LlmError) as e:
@@ -259,7 +268,8 @@ class Orchestrator:
                     f"Already completed subtasks: {done}\n"
                     f"Repository files:\n{self._repo_listing()}\n"
                     f"Available test command ids: {sorted(self._test_cmd_ids())} "
-                    f"(use them in verification)")
+                    f"(use them in verification)"
+                    f"{self._test_excerpts()}")
         designer = PhaseDesigner(self.llm, self.assembler, self.router)
         out = designer.run(RoleContext(task=state, subtask=None, volatile=volatile),
                            current_phase_id=phase.id,
@@ -344,6 +354,27 @@ class Orchestrator:
                 out.append("... (truncated)")
                 break
         return "\n".join(out) or "(empty)"
+
+    def _test_excerpts(self, max_files: int = 2, max_lines: int = 60) -> str:
+        """F3 (smoke T009): i test sono il CONTRATTO — il Designer deve vederli,
+        o inventa nomi di API che i test smentiranno (slugify vs slug: 108
+        chiamate bruciate). Selezione grezza; la selezione vera e' F5."""
+        root = self.router.scope.root
+        picked = []
+        for p in sorted(root.rglob("*")):
+            if p.is_file() and "test" in p.name.lower() and p.suffix in (".py", ".php"):
+                picked.append(p)
+                if len(picked) >= max_files:
+                    break
+        if not picked:
+            return ""
+        out = ["\nKey test file excerpts (this is the CONTRACT: copy identifiers "
+               "EXACTLY from here, never invent names):"]
+        for p in picked:
+            lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+            body = "\n".join(lines[:max_lines])
+            out.append(f"--- {p.relative_to(root).as_posix()} ---\n{body}")
+        return "\n".join(out)
 
     def _test_cmd_ids(self) -> set[str]:
         spec = self.router.catalog.get("run_tests")
