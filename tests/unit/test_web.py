@@ -79,6 +79,44 @@ def test_approval_flow_answer_and_requeue(client):
     assert ans == "yes"
 
 
+def test_relaunch_clones_task_with_guidance(client):
+    c, app, tmp = client
+    store = app.state.store
+    (tmp / "tgt").mkdir()
+    r = c.post("/tasks", data={"prompt": "fix it", "target_dir": str(tmp / "tgt"),
+                               "writable": "*.py", "test_commands": "pytest=pytest -q"},
+               follow_redirects=False)
+    tid = r.headers["location"].rsplit("/", 1)[-1]
+    r = c.post(f"/tasks/{tid}/relaunch", data={"guidance": "use pytest -q"},
+               follow_redirects=False)
+    assert r.status_code == 303
+    new_id = r.headers["location"].rsplit("/", 1)[-1]
+    assert new_id != tid
+    st = store.load_task(new_id)
+    assert "[USER GUIDANCE] use pytest -q" in st.request
+    assert st.request.count("[USER GUIDANCE]") == 1
+    # rilancio del rilancio: la guidance vecchia non si accumula
+    r = c.post(f"/tasks/{new_id}/relaunch", data={"guidance": "altra guida"},
+               follow_redirects=False)
+    st2 = store.load_task(r.headers["location"].rsplit("/", 1)[-1])
+    assert st2.request.count("[USER GUIDANCE]") == 1
+    assert "altra guida" in st2.request
+
+
+def test_preflight_rejects_unknown_verification(client):
+    c, app, tmp = client
+    (tmp / "tgt2").mkdir()
+    plan = json.dumps({"plan": {"goal": "g", "success_criteria": [], "phases": []},
+                       "subtasks": [{"id": "P1.S1", "phase_id": "P1", "title": "t",
+                                     "objective": "o", "inputs": [], "tools": [],
+                                     "expected_outputs": [], "completion_criteria": [],
+                                     "verification": ["pytest"]}]})
+    r = c.post("/tasks", data={"prompt": "x", "target_dir": str(tmp / "tgt2"),
+                               "plan_json": plan})  # niente test_commands
+    assert r.status_code == 400
+    assert "pytest" in r.text
+
+
 def test_metrics_page(client):
     c, _, _ = client
     assert c.get("/metrics").status_code == 200

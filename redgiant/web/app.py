@@ -102,15 +102,57 @@ def create_app(cfg: Config) -> FastAPI:
         jobs.submit(tid)
         return RedirectResponse(f"/tasks/{tid}", status_code=303)
 
+    def _failure_detail(task_id: str) -> list[dict]:
+        """Check falliti dall'ultimo verdict di ogni sottofase non completata."""
+        out = []
+        for r in store.list_subtasks(task_id):
+            if r["status"] in ("failed", "retry", "repair") and r["result"]:
+                verdict = json.loads(r["result"]).get("verdict", {})
+                for c in verdict.get("checks", []):
+                    if not c.get("ok"):
+                        out.append({"subtask": r["subtask_id"], "check": c["name"],
+                                    "detail": c.get("detail", "")[:300]})
+        return out
+
     @app.get("/tasks/{task_id}", response_class=HTMLResponse)
     def task_detail(request: Request, task_id: str):
         try:
             st = store.load_task(task_id)
         except KeyError:
             return HTMLResponse("task sconosciuto", status_code=404)
+        failures = _failure_detail(task_id) if st.status in ("failed", "partial") else []
         return page(request, "task.html", t=st, subtasks=store.list_subtasks(task_id),
                     used=store.budget_used(task_id),
-                    approvals=store.pending_approvals(task_id))
+                    approvals=store.pending_approvals(task_id),
+                    failures=failures)
+
+    @app.post("/tasks/{task_id}/relaunch")
+    def task_relaunch(task_id: str, guidance: str = Form("")):
+        """F2.4-bis: un fallimento non e' un vicolo cieco — clone guidato."""
+        try:
+            old = store.load_task(task_id)
+        except KeyError:
+            return HTMLResponse("task sconosciuto", status_code=404)
+        from redgiant.web.jobs import read_task_config
+        tc = read_task_config(cfg.paths.tasks_dir, task_id)
+        prompt = old.request.split("\n[USER GUIDANCE]")[0]
+        if guidance.strip():
+            prompt += f"\n[USER GUIDANCE] {guidance.strip()}"
+        budget = Budget(max_total_tokens=cfg.budget.max_total_tokens,
+                        max_tool_calls=cfg.budget.max_tool_calls,
+                        max_retries_per_subtask=cfg.budget.max_retries_per_subtask,
+                        max_wall_s=cfg.budget.max_wall_s)
+        new_id = store.create_task(prompt, old.target_dir, cfg.profile_name, budget)
+        write_task_config(cfg.paths.tasks_dir, new_id,
+                          writable_globs=tc["writable_globs"],
+                          test_commands=tc["test_commands"], plan=tc.get("plan"))
+        if tc.get("approve_writes"):
+            p = cfg.paths.tasks_dir / new_id / "task_config.json"
+            data = json.loads(p.read_text(encoding="utf-8"))
+            data["approve_writes"] = True
+            p.write_text(json.dumps(data), encoding="utf-8")
+        jobs.submit(new_id)
+        return RedirectResponse(f"/tasks/{new_id}", status_code=303)
 
     @app.get("/tasks/{task_id}/tree", response_class=HTMLResponse)
     def task_tree(request: Request, task_id: str):

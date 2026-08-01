@@ -1130,6 +1130,12 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 - **Implementazione:** `templates/base.html` (layout, niente CSS framework: un foglio nostro minimo), `index.html`, `task_new.html`, `task.html`, `tree.html` (frammento riusato dalla pagina e dal polling), `approvals.html`, `metrics.html`; `static/htmx.min.js` copiato nel repo con versione annotata nell'atlante (è l'unica eccezione JS, ed è vendorizzata per D14/D16: niente CDN, la CSP del futuro deploy ringrazia). Albero: fase → sottofasi con stato, tentativi, durata; i simboli seguono §20 (`completed` ✓, `failed` ✗, `running` ▶, `blocked` ⏸).
 - **Accettazione:** le pagine sono usabili da browser senza console errors; l'albero di un task reale è leggibile a colpo d'occhio.
 
+#### F2.4-bis — Post-mortem e ripartenza guidata (aggiunta su richiesta utente, 2026-08-01)
+
+- [ ] 🤖 **Obiettivo:** un fallimento non è un vicolo cieco: la pagina di un task `failed`/`partial` mostra **perché** (check falliti con dettaglio, errore del task, link al log) e offre **"riparti con istruzioni aggiuntive"** — un form che clona il task (stessa config, stesso piano, stesso target) con la guida dell'utente appesa alla richiesta.
+- **Motivazione (parole dell'utente):** "i fallimenti non devono essere totalmente blocking… il sistema deve restituirmi le motivazioni del fail e la possibilità di farlo ripartire magari con istruzioni diverse". Questa è la versione leggera (nuovo task guidato); la ripresa *in place* con strategia è F4.2 (`retry_strategy`/`ask_user` del Supervisor), che eredita questo requisito come criterio di accettazione.
+- **Implementazione:** rotta `POST /tasks/{id}/relaunch` (form `guidance`); prompt del clone = richiesta originale + `[USER GUIDANCE] …`; config per-task copiata; pannello fallimento costruito dai `result` delle sottofasi (verdict → check non-ok).
+
 #### F2.5 — 🔎 Verifica di fase
 
 - [ ] 🧑 L'utente, dalla GUI: lancia `T004`, chiude la pagina, torna, vede l'albero completato; lancia un task con approvazione, risponde, lo vede ripartire; consulta `/metrics`. **Ogni scomodità segnalata si sistema in questa fase**, non dopo: è il criterio di uscita, non un sondaggio.

@@ -9,6 +9,23 @@
 {% if approvals %}
 <p>⏸ <a href="/approvals">{{ approvals | length }} richieste in attesa della tua risposta</a></p>
 {% endif %}
+{% if failures %}
+<h3>Perché è fallito</h3>
+<table>
+  <tr><th>sottofase</th><th>check</th><th>dettaglio</th></tr>
+  {% for f in failures %}
+  <tr><td>{{ f.subtask }}</td><td><code>{{ f.check }}</code></td>
+      <td class="muted">{{ f.detail }}</td></tr>
+  {% endfor %}
+</table>
+<form class="card" method="post" action="/tasks/{{ t.id }}/relaunch"
+      onsubmit="const b=this.querySelector('button'); b.disabled=true; b.textContent='Avvio…'">
+  <label>Riparti con istruzioni aggiuntive (stesso target, stessa config)</label>
+  <textarea name="guidance" rows="2"
+    placeholder="es. il comando di test è pytest -q; non toccare i test"></textarea>
+  <button>Riparti</button>
+</form>
+{% endif %}
 <p>
   <a href="/tasks/{{ t.id }}/log">log completo</a>
   {% if t.status in ("queued", "running", "blocked") %}
