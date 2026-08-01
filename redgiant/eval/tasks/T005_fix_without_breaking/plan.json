@@ -1,0 +1,21 @@
+{
+  "plan": {
+    "goal": "Make the failing slugify test pass while keeping the other ten green",
+    "success_criteria": ["pytest exits 0 with 11 passed", "tests unchanged"],
+    "phases": [
+      {"id": "P1", "title": "Surgical fix", "depends_on": [],
+       "completion_criteria": ["pytest exits 0"]}
+    ]
+  },
+  "subtasks": [
+    {
+      "id": "P1.S1", "phase_id": "P1", "title": "Fix slugify spaces without regressions",
+      "objective": "Run the tests: exactly one fails. Understand WHY the passing ones pass before touching anything, then make the smallest fix in string_utils.py that turns the red test green without breaking the others. Re-run the full suite.",
+      "inputs": ["string_utils.py", "test_string_utils.py"],
+      "tools": ["read_file", "run_tests", "write_patch"],
+      "expected_outputs": ["string_utils.py"],
+      "completion_criteria": ["pytest exits 0"],
+      "verification": ["pytest"]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+id = "T006"
+domain = "coding"
+prompt = "Answer this question about the codebase: in which file is the function parse_config defined, and which files call it? Write your answer to answer.txt (one file path per line, definition first)."
+success_cmd = "python check_answer.py"
+timeout_s = 900
+tags = ["research-local", "codebase-navigation"]
+plan_file = "plan.json"
+writable_globs = ["answer.txt"]
+
+[test_commands]
+checkanswer = ["python", "check_answer.py"]

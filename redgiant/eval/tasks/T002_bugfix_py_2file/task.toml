@@ -1,0 +1,11 @@
+id = "T002"
+domain = "coding"
+prompt = "A test fails: customers are charged almost full price instead of getting the advertised 10% discount. Fix the bug without changing lib.py or the tests."
+success_cmd = "pytest -q"
+timeout_s = 1200
+tags = ["bugfix", "python", "cross-file"]
+plan_file = "plan.json"
+writable_globs = ["shop.py"]
+
+[test_commands]
+pytest = ["pytest", "-q"]

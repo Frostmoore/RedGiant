@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "redgiant"
-version = "1.1.0"
+version = "2.0.0"
 description = "Red Giant — agentic system for tiny local models (Gemma 4 E2B) on non-prosumer hardware"
 license = {file = "LICENSE"}
 requires-python = ">=3.12"

@@ -1,0 +1,21 @@
+{
+  "plan": {
+    "goal": "Make the failing test suite pass without changing the tests",
+    "success_criteria": ["pytest exits 0", "tests unchanged"],
+    "phases": [
+      {"id": "P1", "title": "Fix the bug", "depends_on": [],
+       "completion_criteria": ["pytest exits 0"]}
+    ]
+  },
+  "subtasks": [
+    {
+      "id": "P1.S1", "phase_id": "P1", "title": "Locate and fix the bug",
+      "objective": "Run the tests to see the failure, read the involved code, fix the bug in calc.py, and re-run the tests until green. Do not modify test files.",
+      "inputs": ["calc.py", "test_calc.py"],
+      "tools": ["read_file", "run_tests", "write_patch", "search_code"],
+      "expected_outputs": ["calc.py"],
+      "completion_criteria": ["pytest exits 0"],
+      "verification": ["pytest"]
+    }
+  ]
+}

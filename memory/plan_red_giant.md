@@ -4,7 +4,7 @@
 **Data:** 2026-08-01
 **Specsheet di riferimento:** [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) (v0.1)
 **Atlante della codebase:** [codebase_reference.md](codebase_reference.md) — aggiornato a ogni fine fase, mai dopo.
-**Stato:** 🟢 **F0 completata** (2026-08-01, `v1.1.0`) — prossima azione: **Fase 1, sottofase 1.1** (gate d'ingresso soddisfatto: numeri F0.6 nell'atlante, allocazione severino-sim decisa dall'utente)
+**Stato:** 🟢 **F1 completata** (2026-08-01, `v2.0.0`, merged in `main`) — prossima azione: **Fase 2, sottofase 2.1** (GUI web minima; gate soddisfatto: walking skeleton dimostrato 4/6 sulla run ufficiale severino-sim)
 
 ---
 
@@ -548,6 +548,8 @@ Ogni tool: modello Pydantic degli argomenti (omonimo, in `tools/*.py`), handler 
 | `list_files` | `list_files(glob: str, max_results: int = 200) -> ToolResult` | low | glob relativo alla root dello Scope; ritorna path ordinati; oltre il limite → tronca e lo dichiara. Mai directory fuori Scope, nemmeno in lettura. |
 | `search_code` | `search_code(pattern: str, glob: str \| None = None, max_results: int = 50) -> ToolResult` | low | esegue `rg --json -e <pattern>` (niente shell: lista argv, mai stringa); ritorna `{path, line, text}` per match; regex invalida → `ok=false, error="bad_pattern", detail=<stderr rg>`. |
 | `write_patch` | `write_patch(path: str, unified_diff: str) -> ToolResult` | medium | Scope.check_write; applica un diff unificato al file (implementazione nostra, no `patch` di sistema); hunks non applicabili → li elenca in `data.rejected` con contesto atteso vs reale, `ok=false` se TUTTI respinti; il file viene riscritto atomicamente (tmp+rename). Evidenza: righe aggiunte/rimosse. È reversibile via git (checkpoint F4.4). |
+| `write_file` | `write_file(path: str, content: str) -> ToolResult` | medium | **Aggiunto in F1.11 su evidenza empirica** (T006): edit_file non crea file nuovi e i diff puri-additivi sono fragili; la creazione robusta per un E2B è il contenuto completo. Scope-checked, scrittura atomica, evidenza con conteggio righe. |
+| `edit_file` | `edit_file(path: str, old_string: str, new_string: str, replace_all: bool = False) -> ToolResult` | medium | **Aggiunto in F1.11 su evidenza empirica**: i diff unificati sono ostili ai modelli piccoli (contesto sbagliato di una riga vuota = hunk respinto, osservato ripetutamente su fix logicamente corretti). Sostituzione esatta di stringa: `old_string` deve occorrere esattamente una volta (o `replace_all`); 0 occorrenze → `not_found_in_file`, >1 → `not_unique` con conteggio. Scrittura atomica. È lo strumento di editing PRIMARIO nella card del Worker; `write_patch` resta per edit multi-punto. |
 | `run_tests` | `run_tests(cmd_id: str) -> ToolResult` | medium | esegue il comando registrato sotto `cmd_id` nella whitelist del task (definita nell'onboarding del task / task.toml dell'Evaluator) — MAI una stringa libera dal modello. Cwd = root Scope; timeout dal ToolSpec; evidenza = `exit_code` + ultime 50 righe stdout+stderr (il tail, perché è lì che pytest riassume). |
 | `git_status` / `git_diff` | `git_status() -> ToolResult` / `git_diff(ref: str = "HEAD") -> ToolResult` | low | sul repo del target; output porcelain/unified troncato a 400 righe; servono al Verifier e al Supervisor come evidenza di "cosa è cambiato davvero". |
 | `web_search` (F7) | `web_search(query: str, max_results: int = 8) -> ToolResult` | low | motore deciso in F7.2 (SearXNG self-hosted vs API di sola-search — decisione 🧑); ritorna `{title, url, snippet}`; nessun contenuto di pagina (per quello c'è fetch_url). |
@@ -774,7 +776,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.1 — Stato: modelli e StateStore
 
-- [ ] 🤖 **Obiettivo:** lo stato strutturato della specsheet §8: modelli Pydantic + persistenza SQLite (§A5), atomica, attribuita, riprendibile.
+- [x] 🤖 **Obiettivo:** lo stato strutturato della specsheet §8: modelli Pydantic + persistenza SQLite (§A5), atomica, attribuita, riprendibile.
 - **Motivazione:** "lo stato strutturato è più importante della cronologia" (specsheet §25.3) è LA scelta che distingue Red Giant da un agente chat-based. Va costruito per primo perché tutti gli altri componenti vi leggono e scrivono; e va costruito bene perché la GUI (F2), la ripresa dei task (F5.4) e le metriche (tutte) sono solo viste su questo stato.
 - **Implementazione:** `redgiant/state/models.py` — modelli con `model_config = ConfigDict(extra="forbid")` (un campo inatteso è un bug, non una tolleranza):
   ```python
@@ -817,6 +819,13 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
       def log_llm_call(self, task_id: str, row: LlmCallRow) -> None
       def log_tool_call(self, task_id: str, row: ToolCallRow) -> None
       def budget_used(self, task_id: str) -> BudgetUsed
+      # aggiunti in implementazione (2026-08-01): servono a Orchestrator (spec+attempts)
+      # e a GUI/CLI (albero) — letture pure, nessun nuovo write-path
+      def get_subtask(self, task_id: str, subtask_id: str) -> tuple[SubtaskSpec, SubtaskStatus, int]
+      def list_subtasks(self, task_id: str) -> list[dict]
+      # anticipati da F2 (il dispatch §A7 li richiede gia' in F1.4):
+      def add_approval(self, task_id: str, *, kind: str, payload: str) -> int
+      def pending_approvals(self, task_id: str | None = None) -> list[dict]
   ```
   Dettagli di comportamento: `create_task` genera l'ULID, scrive `tasks` + le 4 righe `budgets` in una transazione; `set_subtask_status` incrementa `attempts` quando lo stato entra in `retry`/`repair`; `load_task` ricostruisce `TaskState` dall'ultima versione del piano + aggregati (è LA funzione di ripresa: un processo ucciso a metà task deve poter ripartire da qui); `budget_used` aggrega da `llm_calls`/`tool_calls` — i contatori non si tengono in RAM, si leggono dal DB: una sola fonte di verità.
 - **Casi limite:** doppio `upsert_subtask` sullo stesso id → aggiorna spec, non duplica; DB inesistente → `init_schema` alla prima apertura; task inesistente → `KeyError(task_id)` esplicito.
@@ -824,7 +833,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.2 — Model client
 
-- [ ] 🤖 **Obiettivo:** l'unico punto del sistema che parla con llama-server: constrained decoding, conteggi, timings, logging — tutto qui.
+- [x] 🤖 **Obiettivo:** l'unico punto del sistema che parla con llama-server: constrained decoding, conteggi, timings, logging — tutto qui.
 - **Motivazione:** D2/D3. Centralizzare la chiamata rende il constrained decoding non aggirabile (non esiste un'altra strada per parlare col modello) e le metriche complete per costruzione (ogni chiamata è loggata perché è il client a loggarla).
 - **Implementazione:** `redgiant/llm/client.py` + `redgiant/llm/schema.py`:
   ```python
@@ -857,7 +866,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.3 — ⚠️ Prompt: assembler e convenzione S1→S7
 
-- [ ] 🤖 **Obiettivo:** l'implementazione della convenzione §A4 + il preambolo e la prima card (`worker.md`).
+- [x] 🤖 **Obiettivo:** l'implementazione della convenzione §A4 + il preambolo e la prima card (`worker.md`).
 - **Motivazione:** D9 è la scommessa di performance del progetto e va cablata *prima* che esistano più ruoli: retrofittare la stabilità dei prefissi dopo è doloroso (ogni ruolo andrebbe rivisitato). La sottofase è marcata ⚠️ perché un errore qui non rompe i test — rompe silenziosamente il riuso della cache, e lo si scoprirebbe solo in F5 coi numeri.
 - **Implementazione:** `redgiant/prompts/assemble.py`:
   ```python
@@ -880,7 +889,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.4 — Tool layer
 
-- [ ] 🤖 **Obiettivo:** Scope, catalogo e router: le mani del sistema, con le manette giuste (§A7).
+- [x] 🤖 **Obiettivo:** Scope, catalogo e router: le mani del sistema, con le manette giuste (§A7).
 - **Motivazione:** specsheet §17 + D10: i tool sono la fonte delle *evidenze*, e le evidenze sono ciò che separa un risultato verificato da una dichiarazione. La sicurezza (Scope) entra ora e non dopo perché il primo Worker che scrive un file fuori scope non deve poter esistere nemmeno in sviluppo.
 - **Implementazione:** `tools/base.py`, `router.py`, `fs.py`, `search.py`, `proc.py` — comportamento esatto per tool in §A7; firme:
   ```python
@@ -913,7 +922,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.5 — Worker (ReAct a passo singolo vincolato)
 
-- [ ] 🤖 **Obiettivo:** il primo ruolo cognitivo: esegue UNA sottofase col loop di D20.
+- [x] 🤖 **Obiettivo:** il primo ruolo cognitivo: esegue UNA sottofase col loop di D20.
 - **Motivazione:** D20 (le due ragioni convergenti: qualità del passo singolo + riuso della cache in append). Il Worker è volutamente *stupido*: non pianifica, non giudica il proprio lavoro (D10: lo giudica la verifica), non tocca il piano (specsheet §6.5). Ogni intelligenza in più che si è tentati di dargli appartiene a un altro ruolo o a nessuno.
 - **Implementazione:** `roles/base.py` + `roles/worker.py`:
   ```python
@@ -955,7 +964,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.6 — Verifica deterministica
 
-- [ ] 🤖 **Obiettivo:** `core/verify.py`: l'oracolo meccanico che decide se una sottofase è accettabile (D10).
+- [x] 🤖 **Obiettivo:** `core/verify.py`: l'oracolo meccanico che decide se una sottofase è accettabile (D10).
 - **Motivazione:** è il "trust boundary" del sistema: tutto ciò che sta a monte (Worker incluso) *propone*; questo modulo *constata*. In F1 è volutamente semplice — la sofisticazione (Debugger a due stadi, classificazione errori) arriva in F4 sopra questa base.
 - **Implementazione:**
   ```python
@@ -969,7 +978,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.7 — Orchestrator v0 + BudgetTracker
 
-- [ ] 🤖 **Obiettivo:** il motore deterministico minimo: esegue le sottofasi di un piano *statico* in sequenza, applica la verifica, aggiorna lo stato, si ferma bene.
+- [x] 🤖 **Obiettivo:** il motore deterministico minimo: esegue le sottofasi di un piano *statico* in sequenza, applica la verifica, aggiorna lo stato, si ferma bene.
 - **Motivazione:** specsheet §7: "il modello propone, l'Orchestrator decide". In F1 le decisioni sono banali (pass → next, fail → retry entro budget → failed) di proposito: la sofisticazione decisionale è il Supervisor (F4) e dovrà giustificarsi contro questa semplicità (D11).
 - **Implementazione:**
   ```python
@@ -993,14 +1002,14 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.8 — Log leggibile per task
 
-- [ ] 🤖 **Obiettivo:** oltre alle tabelle, un log testuale umano per task: `data/tasks/<id>/task.log`.
+- [x] 🤖 **Obiettivo:** oltre alle tabelle, un log testuale umano per task: `data/tasks/<id>/task.log`.
 - **Motivazione:** specsheet §20. Il DB è per le macchine e le metriche; il log è per l'utente che chiede "che sta facendo?". La GUI (F2) lo mostrerà con un tail.
 - **Implementazione:** righe `HH:MM:SS | role/tool | sintesi ≤120c | esito | token/durata`, scritte dagli stessi punti che loggano su DB (Client e Router: nessun punto di log nuovo da ricordare); append-only, flush per riga.
 - **Accettazione:** dopo il run end-to-end, il log racconta la storia del task in modo comprensibile a un umano che non ha visto il codice.
 
 #### F1.9 — CLI di sviluppo
 
-- [ ] 🤖 **Obiettivo:** pilotare il sistema senza GUI: `rg run|status|eval|bench`.
+- [x] 🤖 **Obiettivo:** pilotare il sistema senza GUI: `rg run|status|eval|bench`.
 - **Motivazione:** serve *adesso* per sviluppare e per gli integration test; NON è l'interfaccia utente (quella è F2, per dichiarazione esplicita dell'utente sulla testabilità). Si tiene minima di proposito.
 - **Implementazione:** `redgiant/cli.py`, argparse puro:
   ```python
@@ -1014,7 +1023,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.10 — Evaluator v0 + primi 6 task sintetici
 
-- [ ] 🤖 **Obiettivo:** il giudice del progetto: harness che esegue task sintetici e produce il report delle metriche cardine.
+- [x] 🤖 **Obiettivo:** il giudice del progetto: harness che esegue task sintetici e produce il report delle metriche cardine.
 - **Motivazione:** D11 richiede un giudice *prima* degli imputati: l'Evaluator nasce ora, prima di Planner/Debugger/Supervisor, così ogni ruolo aggiunto avrà un confronto onesto. I task sono sintetici e a bug noto (D18): quando il sistema fallisce, sappiamo *perché*.
 - **Implementazione:** `eval/harness.py`, `eval/report.py`:
   ```python
@@ -1049,9 +1058,11 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F1.11 — 🔎 Verifica di fase
 
-- [ ] Tutte insieme: ≥4/6 task sintetici `verified` su `severino-sim` senza intervento umano; forbice `completed`≠`verified` = 0 (nessuna bugia); zero righe `llm_calls.outcome='invalid'` sull'intera run; `pytest tests/unit` verde; report Evaluator committato e citato nell'atlante; test di ripresa (F1.7) passato.
+- [x] Tutte insieme: ≥4/6 task sintetici `verified` su `severino-sim` senza intervento umano; forbice `completed`≠`verified` = 0 (nessuna bugia); zero righe `llm_calls.outcome='invalid'` sull'intera run; `pytest tests/unit` verde; report Evaluator committato e citato nell'atlante; test di ripresa (F1.7) passato.
 
 **Rituale di fine fase** → `v2.0.0`.
+
+> **ESITO F1 (2026-08-01, `v2.0.0`).** Gate superato sulla run UFFICIALE severino-sim (2 core): **4/6 verified** (T001, T003, T004, T005 — tutti 100% token utili, 0 retry, 5-8 chiamate, 45-65s l'uno), **forbice completed≠verified = 0 su tutte le 8 run** della fase (il sistema non ha mai mentito), zero `invalid` nella run ufficiale, 33 unit test verdi. **Fallimenti onesti e diagnosticati:** T002 (il modello non capovolge "lib off-limits ⇒ bug nel chiamante" — limite di ragionamento, atteso il `retry_strategy` del Supervisor F4) e T006 (dichiara azioni non eseguite / pattern di ricerca fragili al retry — idem). **Baseline per D11:** ogni ruolo di F3/F4 dovrà battere questi numeri. **Il collaudo e2e ha prodotto 10 trappole disinnescate** (dettaglio nell'atlante §9), quasi tutte della stessa famiglia — l'interfaccia modello↔ambiente: i formati che il modello non sa serializzare (diff unificati), ciò che copia sempre (prefissi N-TAB, echo del nome tool), ciò che dichiara senza fare (la verifica lo becca), il determinismo che non attraversa i backend (seed fisso ≠ stessa traiettoria su CUDA vs CPU). **Evoluzioni contrattuali** (tutte registrate in §A7/F1 con la ragione): `edit_file` primario, `write_file` per la creazione, normalizzazione N-TAB su tutti i writer, step-log del Worker.
 
 ---
 

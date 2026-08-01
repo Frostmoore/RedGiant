@@ -1,0 +1,21 @@
+{
+  "plan": {
+    "goal": "Make php test.php exit 0 by fixing the VAT rounding bug",
+    "success_criteria": ["php test.php exits 0", "test.php unchanged"],
+    "phases": [
+      {"id": "P1", "title": "Fix VAT rounding", "depends_on": [],
+       "completion_criteria": ["php test.php exits 0"]}
+    ]
+  },
+  "subtasks": [
+    {
+      "id": "P1.S1", "phase_id": "P1", "title": "Fix the rounding in Tax.php",
+      "objective": "Run the PHP test, read the failure, fix the rounding bug in src/Tax.php (cents must round, not truncate), re-run until it prints OK.",
+      "inputs": ["src/Tax.php", "test.php"],
+      "tools": ["read_file", "run_tests", "write_patch"],
+      "expected_outputs": ["src/Tax.php"],
+      "completion_criteria": ["php test.php exits 0"],
+      "verification": ["phptest"]
+    }
+  ]
+}

@@ -45,7 +45,7 @@ port = 8090
 
 [security]
 writable_globs = []                  # riempito per task, mai globale
-shell_whitelist = ["pytest", "php", "composer", "git"]
+shell_whitelist = ["pytest", "php", "composer", "git", "python"]
 
 [eval]
 tasks_dir = "redgiant/eval/tasks"

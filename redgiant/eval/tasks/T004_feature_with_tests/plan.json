@@ -1,0 +1,21 @@
+{
+  "plan": {
+    "goal": "Implement Stack.peek so the provided tests pass",
+    "success_criteria": ["pytest exits 0", "tests unchanged"],
+    "phases": [
+      {"id": "P1", "title": "Implement peek", "depends_on": [],
+       "completion_criteria": ["pytest exits 0"]}
+    ]
+  },
+  "subtasks": [
+    {
+      "id": "P1.S1", "phase_id": "P1", "title": "Add peek to Stack",
+      "objective": "Read the failing tests to learn the expected contract (returns top without removing; IndexError when empty), implement peek in stack.py, run tests until green.",
+      "inputs": ["stack.py", "test_stack.py"],
+      "tools": ["read_file", "run_tests", "write_patch"],
+      "expected_outputs": ["stack.py"],
+      "completion_criteria": ["pytest exits 0"],
+      "verification": ["pytest"]
+    }
+  ]
+}

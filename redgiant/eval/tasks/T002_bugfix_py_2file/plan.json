@@ -1,0 +1,21 @@
+{
+  "plan": {
+    "goal": "Restore the advertised 10% promo discount",
+    "success_criteria": ["pytest exits 0", "lib.py and tests unchanged"],
+    "phases": [
+      {"id": "P1", "title": "Diagnose and fix", "depends_on": [],
+       "completion_criteria": ["pytest exits 0"]}
+    ]
+  },
+  "subtasks": [
+    {
+      "id": "P1.S1", "phase_id": "P1", "title": "Find where the discount goes wrong",
+      "objective": "Run the tests, read the failure, follow the call chain across files to find which side of the lib.py contract is misused, fix the caller. lib.py and tests are off-limits.",
+      "inputs": ["shop.py", "lib.py", "test_shop.py"],
+      "tools": ["read_file", "run_tests", "write_patch", "search_code"],
+      "expected_outputs": ["shop.py"],
+      "completion_criteria": ["pytest exits 0"],
+      "verification": ["pytest"]
+    }
+  ]
+}

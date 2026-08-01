@@ -1,0 +1,11 @@
+id = "T004"
+domain = "coding"
+prompt = "Tests for a new 'peek' feature were written first and they fail. Implement the feature so the whole suite passes. Do not change the tests."
+success_cmd = "pytest -q"
+timeout_s = 1200
+tags = ["feature", "python", "tdd"]
+plan_file = "plan.json"
+writable_globs = ["stack.py"]
+
+[test_commands]
+pytest = ["pytest", "-q"]
