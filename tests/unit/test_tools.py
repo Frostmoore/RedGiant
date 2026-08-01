@@ -89,6 +89,18 @@ def test_write_file_creates_and_respects_scope(scope, root):
     assert not r.ok and r.error.startswith("scope:")
 
 
+def test_write_file_strips_lineno_prefixes_with_guard(scope, root):
+    # contenuto copiato da read_file (prefissi N-TAB) -> normalizzato
+    r = fs.write_file(scope, "src/t.py", "1\tx = 1\n2\ty = 2")
+    assert r.ok
+    assert (root / "src" / "t.py").read_text(encoding="utf-8") == "x = 1\ny = 2\n"
+    # TSV legittimo (minoranza di righe col pattern? no: qui vince la guardia... )
+    # caso a maggioranza NON numerica: resta intatto
+    r = fs.write_file(scope, "src/u.py", "x = 1\ny = 2\n3\tz = 3\n")
+    assert r.ok
+    assert "3\tz = 3" in (root / "src" / "u.py").read_text(encoding="utf-8")
+
+
 def test_edit_file_strips_lineno_prefixes(scope, root):
     # il modello copia 'N<TAB>' da read_file: l'ambiente normalizza
     r = fs.edit_file(scope, "src/a.py", "1\tdef f():\n2\t    return 1", "def f():\n    return 9")

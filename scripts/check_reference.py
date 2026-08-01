@@ -48,14 +48,18 @@ def _func_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
 
 
 def _class_signature(node: ast.ClassDef) -> str:
-    bases = ", ".join(ast.unparse(b) for b in node.bases)
-    return _normalize(f"class {node.name}({bases})" if bases else f"class {node.name}")
+    # le basi non fanno parte del contratto documentale (rumore: _Strict, BaseModel...)
+    return f"class {node.name}"
 
 
 def extract_signatures(pkg_dir: Path) -> dict[str, list[str]]:
-    """Firme reali: {nome_qualificato: [firma_normalizzata]} per tutto il pacchetto."""
+    """Firme reali: {nome_qualificato: [firma_normalizzata]} per tutto il pacchetto.
+    Esclusi i repo-fixture dei task sintetici (eval/tasks/*/repo): sono cavie, non codebase."""
     out: dict[str, list[str]] = {}
     for py in sorted(pkg_dir.rglob("*.py")):
+        rel = py.relative_to(pkg_dir).as_posix()
+        if rel.startswith("eval/tasks/"):
+            continue
         tree = ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -90,7 +94,7 @@ def extract_documented(md_path: Path) -> dict[str, list[str]]:
             if stripped.startswith("class "):
                 name = re.match(r"class\s+(\w+)", stripped).group(1)
                 current_class = name
-                out.setdefault(name, []).append(sig)
+                out.setdefault(name, []).append(f"class {name}")  # basi ignorate
             else:
                 name = re.search(r"def\s+(\w+)", stripped).group(1)
                 indented = line != stripped  # metodo se indentato sotto una classe

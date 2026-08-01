@@ -129,6 +129,16 @@ def write_file(scope: Scope, path: str, content: str) -> ToolResult:
         real = scope.check_write(path)
     except Exception as e:
         return ToolResult(ok=False, data={}, error=f"scope:{e}")
+    # F1.11 (run ufficiale): il modello copia il contenuto INTERO da read_file,
+    # prefissi 'N<TAB>' inclusi -> '1\t<?php' = file corrotto. Si normalizza SOLO
+    # se la maggioranza delle righe non vuote ha il pattern (guardia anti-TSV).
+    import re as _re
+    lines = content.splitlines()
+    nonempty = [l for l in lines if l.strip()]
+    if nonempty and sum(1 for l in nonempty if _re.match(r"^\d+\t", l)) > len(nonempty) / 2:
+        content = "\n".join(_re.sub(r"^\d+\t", "", l) for l in lines)
+        if not content.endswith("\n"):
+            content += "\n"
     existed = real.is_file()
     real.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgwrite")
