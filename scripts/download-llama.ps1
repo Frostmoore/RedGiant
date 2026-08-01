@@ -4,9 +4,13 @@
 $ErrorActionPreference = "Stop"
 
 $Tag = "b10217"   # pin: config/default.toml e codebase_reference devono citare lo stesso tag
+# TRAPPOLA (2026-08-02): la build CUDA richiede le DLL del runtime che stanno in uno
+# zip SEPARATO (cudart). Senza, il backend CUDA non si carica e llama.cpp ripiega
+# in silenzio sulla CPU — "dev-fast" era un CPU-a-24-thread travestito.
 $Assets = @(
-    @{ Name = "llama-$Tag-bin-win-cuda-12.4-x64.zip"; Dir = "cuda" },
-    @{ Name = "llama-$Tag-bin-win-cpu-x64.zip";       Dir = "cpu"  }
+    @{ Name = "llama-$Tag-bin-win-cuda-12.4-x64.zip";  Dir = "cuda" },
+    @{ Name = "cudart-llama-bin-win-cuda-12.4-x64.zip"; Dir = "cuda" },
+    @{ Name = "llama-$Tag-bin-win-cpu-x64.zip";        Dir = "cpu"  }
 )
 
 $Root = Split-Path -Parent $PSScriptRoot
@@ -15,7 +19,10 @@ $BinRoot = Join-Path $Root "bin\llama-$Tag"
 foreach ($a in $Assets) {
     $dest = Join-Path $BinRoot $a.Dir
     $exe  = Join-Path $dest "llama-server.exe"
-    if (Test-Path $exe) { Write-Host ">> $($a.Dir): gia' presente ($exe)"; continue }
+    $isCudart = $a.Name -like "cudart*"
+    $cudartMarker = Join-Path $dest "cudart64_12.dll"
+    if (-not $isCudart -and (Test-Path $exe)) { Write-Host ">> $($a.Dir): gia' presente ($exe)"; continue }
+    if ($isCudart -and (Test-Path $cudartMarker)) { Write-Host ">> cudart: gia' presente"; continue }
     New-Item -ItemType Directory -Force $dest | Out-Null
     $zip = Join-Path $env:TEMP $a.Name
     $url = "https://github.com/ggml-org/llama.cpp/releases/download/$Tag/$($a.Name)"
