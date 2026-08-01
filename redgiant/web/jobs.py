@@ -70,9 +70,13 @@ class JobQueue:
     # ── API ──────────────────────────────────────────────────────────────────
 
     def submit(self, task_id: str) -> None:
+        # F2.5 (race scoperta dal collaudo): NON scartare se == current — la
+        # ripresa post-approvazione arriva mentre il worker sta ancora rilasciando
+        # il task appena bloccato, e scartarla lo lascia 'queued' per sempre.
+        # Un run duplicato e' innocuo (l'Orchestrator rilegge lo stato dal DB).
         with self._lock:
-            if task_id == self._current or task_id in list(self._q.queue):
-                return  # idempotente
+            if task_id in list(self._q.queue):
+                return  # gia' in coda: questo si' e' un duplicato
         self._q.put(task_id)
 
     def cancel(self, task_id: str) -> bool:
@@ -114,6 +118,11 @@ class JobQueue:
                 with self._lock:
                     self._current = None
                 self._q.task_done()
+                # rete di sicurezza anti-race: un task 'queued' nel DB ma non in
+                # coda (submit perso) viene ripescato qui
+                for t in self.store.list_tasks(100):
+                    if t["status"] == "queued":
+                        self.submit(t["id"])
 
     def _run_one(self, task_id: str) -> None:
         state = self.store.load_task(task_id)
@@ -178,7 +187,14 @@ class JobQueue:
         return llm.health()
 
     def _release_server(self) -> None:
-        if self._started_container and self._q.empty():
+        # F2.5: NON spegnere il container se ci sono task queued O BLOCKED — un
+        # blocked riprende a breve (approvazione in arrivo) e ripagare ~1 min di
+        # boot modello a ogni ciclo di consenso era meta' della lentezza percepita.
+        if not self._started_container or not self._q.empty():
+            return
+        pending = any(t["status"] in ("queued", "blocked")
+                      for t in self.store.list_tasks(100))
+        if not pending:
             subprocess.run(["docker", "compose", "-f", str(_COMPOSE), "stop"],
                            capture_output=True, timeout=60)
             self._started_container = False
