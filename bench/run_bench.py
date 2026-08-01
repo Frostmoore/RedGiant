@@ -65,7 +65,8 @@ def _slot(client: httpx.Client, url: str, action: str, filename: str) -> dict:
     return r.json()
 
 
-def run(profile: str, url: str, ctx_sizes: list[int], repeats: int, out_dir: Path) -> Path:
+def run(profile: str, url: str, ctx_sizes: list[int], repeats: int, out_dir: Path,
+        steps: list[str] | None = None) -> Path:
     client = httpx.Client()
     props = client.get(f"{url}/props", timeout=30.0).json()
     build = props.get("build_info", "n/a")
@@ -82,51 +83,70 @@ def run(profile: str, url: str, ctx_sizes: list[int], repeats: int, out_dir: Pat
                      "gen_n": t.get("predicted_n"), "gen_ms": t.get("predicted_ms"),
                      "gen_tps": t.get("predicted_per_second")})
 
+    steps = steps or ["prefill", "generate", "reuse", "slot"]
+
     # 1) prefill puro per ctx  (cache_prompt=False: ogni run paga tutto)
     prefill_stats: dict[int, list[float]] = {}
-    for ctx in ctx_sizes:
-        prompt = _mk_prompt(client, url, ctx)
-        for rep in range(repeats):
-            t = _completion(client, url, prompt, n_predict=1, cache_prompt=False)
-            rec("prefill", ctx, rep, t)
-            prefill_stats.setdefault(ctx, []).append(t["prompt_per_second"])
+    if "prefill" in steps:
+        for ctx in ctx_sizes:
+            prompt = _mk_prompt(client, url, ctx)
+            for rep in range(repeats):
+                t = _completion(client, url, prompt, n_predict=1, cache_prompt=False)
+                rec("prefill", ctx, rep, t)
+                prefill_stats.setdefault(ctx, []).append(t["prompt_per_second"])
 
     # 2) generazione
     gen_tps: list[float] = []
-    for rep in range(repeats):
-        t = _completion(client, url, _GEN_PROMPT, n_predict=256, cache_prompt=False)
-        rec("generate", 0, rep, t)
-        gen_tps.append(t["predicted_per_second"])
+    if "generate" in steps:
+        for rep in range(repeats):
+            t = _completion(client, url, _GEN_PROMPT, n_predict=256, cache_prompt=False)
+            rec("generate", 0, rep, t)
+            gen_tps.append(t["predicted_per_second"])
 
     # 3) riuso del prefisso (ctx medio della lista)
     ctx_mid = ctx_sizes[len(ctx_sizes) // 2]
     base = _mk_prompt(client, url, ctx_mid)
     tail = _SENTENCE * 2
-    ta = _completion(client, url, base, n_predict=1, cache_prompt=True)
-    rec("reuse_A_cold", ctx_mid, 0, ta)
-    tb = _completion(client, url, base + tail, n_predict=1, cache_prompt=True)
-    rec("reuse_B_appended", ctx_mid, 0, tb)
-    mutated = base[: len(base) // 2] + "X" + base[len(base) // 2 + 1:]
-    tc = _completion(client, url, mutated, n_predict=1, cache_prompt=True)
-    rec("reuse_C_mutated_mid", ctx_mid, 0, tc)
+    ta = tb = tc = None
+    if "reuse" in steps:
+        ta = _completion(client, url, base, n_predict=1, cache_prompt=True)
+        rec("reuse_A_cold", ctx_mid, 0, ta)
+        tb = _completion(client, url, base + tail, n_predict=1, cache_prompt=True)
+        rec("reuse_B_appended", ctx_mid, 0, tb)
+        mutated = base[: len(base) // 2] + "X" + base[len(base) // 2 + 1:]
+        tc = _completion(client, url, mutated, n_predict=1, cache_prompt=True)
+        rec("reuse_C_mutated_mid", ctx_mid, 0, tc)
 
     # 4) slot save/restore (senza riavvio: v. docstring)
-    slot_note = "ok"
-    try:
+    # LEZIONE (prima run): il prompt di sfratto era il testo invertito ([::-1]), che
+    # tokenizza ~2x peggio e sforava il contesto. Sfratto = ALTRA frase ripetuta, misurata.
+    slot_note = "saltato"
+    if "slot" not in steps:
+        pass
+    else:
+      try:
         _completion(client, url, base, n_predict=1, cache_prompt=True)   # cache = base
-        _slot(client, url, "save", f"bench_{stamp}.bin")
-        _completion(client, url, _mk_prompt(client, url, ctx_mid) [::-1], n_predict=1,
-                    cache_prompt=True)                                    # evict con testo diverso
-        _slot(client, url, "restore", f"bench_{stamp}.bin")
+        t_save = _slot(client, url, "save", f"bench_{stamp}.bin")
+        evict_sentence = ("Distributed systems fail in partial, asymmetric ways that "
+                          "sequential programs never exhibit in practice. ")
+        n_evict = len(_tokenize(client, url, evict_sentence))
+        evict = evict_sentence * (ctx_mid // n_evict)
+        _completion(client, url, evict, n_predict=1, cache_prompt=True)  # evict con testo diverso
+        t_rest = _slot(client, url, "restore", f"bench_{stamp}.bin")
         td = _completion(client, url, base + tail, n_predict=1, cache_prompt=True)
         rec("slot_restore_then_append", ctx_mid, 0, td)
-    except httpx.HTTPStatusError as e:
+        slot_note = (f"ok — save {t_save.get('timings', {}).get('save_ms', '?')}ms, "
+                     f"restore {t_rest.get('timings', {}).get('restore_ms', '?')}ms, "
+                     f"token riprocessati dopo restore+append: {td['prompt_n']} "
+                     f"(vs ~{ctx_mid} da freddo)")
+      except httpx.HTTPStatusError as e:
         slot_note = f"FALLITO: {e.response.status_code} {e.response.text[:200]}"
 
-    with raw_path.open("w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-        w.writeheader()
-        w.writerows(rows)
+    if rows:
+        with raw_path.open("w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
 
     # report MD
     md = [
@@ -143,21 +163,25 @@ def run(profile: str, url: str, ctx_sizes: list[int], repeats: int, out_dir: Pat
         mean = statistics.mean(vals)
         sd = statistics.stdev(vals) if len(vals) > 1 else 0.0
         md.append(f"| {ctx} | {mean:.0f} | {sd:.0f} | {ctx / mean:.1f}s |")
+    if gen_tps:
+        md += ["",
+               f"## Generazione: **{statistics.mean(gen_tps):.1f} tok/s** "
+               f"(dev.std {statistics.stdev(gen_tps) if len(gen_tps) > 1 else 0:.1f})"]
+    if ta is not None:
+        md += [
+            "",
+            "## Riuso del prefisso (ctx ~" + str(ctx_mid) + ")",
+            "",
+            "| scenario | token riprocessati | atteso |",
+            "|---|---|---|",
+            f"| A freddo | {ta['prompt_n']} | ~{ctx_mid} (tutto) |",
+            f"| B = A+coda | {tb['prompt_n']} | ~|coda| (pochi) |",
+            f"| C = byte cambiato a meta' | {tc['prompt_n']} | ~meta' di A |",
+            "",
+            f"**Prova di D9:** un byte a meta' prompt costa {tc['prompt_n']} token riprocessati "
+            f"contro i {tb['prompt_n']} dell'append puro.",
+        ]
     md += [
-        "",
-        f"## Generazione: **{statistics.mean(gen_tps):.1f} tok/s** "
-        f"(dev.std {statistics.stdev(gen_tps) if len(gen_tps) > 1 else 0:.1f})",
-        "",
-        "## Riuso del prefisso (ctx ~" + str(ctx_mid) + ")",
-        "",
-        "| scenario | token riprocessati | atteso |",
-        "|---|---|---|",
-        f"| A freddo | {ta['prompt_n']} | ~{ctx_mid} (tutto) |",
-        f"| B = A+coda | {tb['prompt_n']} | ~|coda| (pochi) |",
-        f"| C = byte cambiato a meta' | {tc['prompt_n']} | ~meta' di A |",
-        "",
-        f"**Prova di D9:** un byte a meta' prompt costa {tc['prompt_n']} token riprocessati "
-        f"contro i {tb['prompt_n']} dell'append puro.",
         "",
         f"## Slot save/restore: {slot_note}",
         "",
@@ -166,7 +190,8 @@ def run(profile: str, url: str, ctx_sizes: list[int], repeats: int, out_dir: Pat
     ]
     if profile == "dev-fast":
         md.insert(1, "\n> ⚠️ PROFILO NON UFFICIALE (D6): numeri validi solo come confronto informale.\n")
-    md_path = out_dir / f"f0_baseline_{profile}.md"
+    partial = set(steps) != {"prefill", "generate", "reuse", "slot"}
+    md_path = out_dir / (f"f0_baseline_{profile}" + ("_" + "-".join(steps) if partial else "") + ".md")
     md_path.write_text("\n".join(md), encoding="utf-8")
     print(f"report: {md_path}")
     return md_path
@@ -179,9 +204,11 @@ def main() -> int:
     ap.add_argument("--ctx", type=int, nargs="+", default=[1024, 4096, 8192, 16384])
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--out", type=Path, default=Path("bench/results"))
+    ap.add_argument("--steps", nargs="+", default=None,
+                    choices=["prefill", "generate", "reuse", "slot"])
     ns = ap.parse_args()
     url = ns.url or Config.load(ns.profile).llm.base_url
-    run(ns.profile, url.rstrip("/"), ns.ctx, ns.repeats, ns.out)
+    run(ns.profile, url.rstrip("/"), ns.ctx, ns.repeats, ns.out, steps=ns.steps)
     return 0
 
 

@@ -5,9 +5,20 @@
 #   dev Windows (dev-fast + probe): release b10217 (b10200 non ha asset Windows)
 # modello: unsloth/gemma-4-E2B-it-qat-GGUF / gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf (QAT Q4)
 
+# ── Decisioni F0.6, derivate dal bench F0.5 su severino-sim (2 core ≈ Severino 4 core) ──
+# prefill freddo: 1K=6.8s · 4K=30.7s · 8K=69.6s · 16K=173.6s | generazione: 35.8 tok/s
+# riuso prefisso: append=65 tok riprocessati vs 7971 con 1 byte cambiato a meta' (D9 provata)
+# slot save/restore: API ok ma riuso post-restore NON funzionante su b10200 -> rivalutare in F5.4
+#   -> ctx_size 8192 CONFERMATO (8K freddo=70s tollerabile solo a inizio task; 16K=3min no);
+#      regime di lavoro atteso <=6K per chiamata, il freddo si paga una volta grazie a D9/D20
+#   -> budget generazione per ruolo (F1+): worker_step=512, planner=1536, phase_designer=2048,
+#      debugger=768, supervisor=512 (dalle misure della sonda F0.3, con margine ~2x)
+#   -> preambolo S1-S3: tetto 1500 token (~10-13s pagati solo a freddo, poi ammortizzati)
+#   -> timeout 600s CONFERMATO (caso peggiore osservato ~230s: prefill 16K + gen 2048)
+#   -> reuse_ratio target provvisorio Worker >=0.6 (formalizzato in F5.6)
 [llm]
 base_url = "http://127.0.0.1:8080"   # endpoint llama-server del profilo
-ctx_size = 8192                      # tetto duro per chiamata (D8; rivisto in F0.6 coi numeri)
+ctx_size = 8192                      # tetto duro per chiamata (D8; confermato da F0.5/F0.6)
 timeout_s = 600                      # alto: su CPU una chiamata lunga e' normale, non un errore
 temperature = 0.2                    # default; override per ruolo in futuro [roles.<name>]
 max_tokens_default = 1024            # tetto generazione se il ruolo non specifica

@@ -4,7 +4,7 @@
 
 **A verification-first agentic system that makes *tiny* local language models<br>reliably useful on non-prosumer hardware.**
 
-[![Status](https://img.shields.io/badge/status-phase_0_·_foundations-orange)](memory/plan_red_giant.md)
+[![Status](https://img.shields.io/badge/status-F0_done_·_F1_walking_skeleton-yellow)](memory/plan_red_giant.md)
 [![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Model](https://img.shields.io/badge/model-Gemma_4_E2B_·_Q4_QAT_·_GGUF-8A2BE2)](https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF)
 [![Runtime](https://img.shields.io/badge/runtime-llama.cpp_(pinned)-555555)](docker/severino-sim/compose.yml)
@@ -23,7 +23,7 @@ Red Giant wraps a **~2B-effective-parameter model** — Gemma 4 E2B, Q4 QAT, GGU
 
 > Most agentic projects chase the biggest model they can reach. Red Giant goes the opposite way: the smallest usable model, on the kind of machine a non-prosumer actually owns — a 15W mini-PC with 4 CPU cores and no usable GPU. Anyone can build agents on a workstation-class GPU box; the interesting problem is closing the gap between local inference on consumer hardware and the inevitable scarcity of that scenario.
 
-**Status:** early development — Phase 0 (foundations & baseline measurements) in progress. This README is refreshed at the end of every development phase.
+**Status:** early development — **Phase 0 complete** (pinned runtime, verified model, constrained-decoding probe, resource-capped simulator, committed baselines). Next: Phase 1, the walking skeleton. This README is refreshed at the end of every development phase.
 
 ## 🧠 The thesis
 
@@ -58,8 +58,18 @@ Field notes from probing grammar-constrained decoding on Gemma 4 E2B — useful 
 1. **The grammar constrains, but does not inform.** With guided decoding active but the schema absent from the prompt, the model produces structurally valid JSON filled with literal placeholders (`"..."`, `"$id"`). The schema must be shown *in the prompt*; the grammar only guarantees shape.
 2. **Instruction-tuned models need their chat template even for raw completions.** Without Gemma's turn markers, output degenerates.
 3. **The grammar guarantees shape only within the generation budget.** Output truncated at `n_predict` is broken JSON *despite* the grammar. Stop reason `limit` must be treated as an explicit error, and per-role token budgets sized with headroom. Compact JSON (no pretty-printing) saves 20–30% of output tokens.
+4. **KV-slot `save`/`restore` round-trips cleanly but does not restore cache-reuse state** (llama.cpp build b10200): after a restore, the very same prompt reprocesses 100% of its tokens, while normal `cache_prompt` reuse works perfectly (1/872 reprocessed on a repeated prompt, 59 on append). Slot persistence is unusable as a prefill-skip on this build.
 
-With those three fixed: **60/60 structurally valid, 60/60 semantically filled outputs** across decision / plan / subtask-design schemas, at near-zero grammar overhead on large payloads. Full report: [`bench/results/f0_constrained_decoding.md`](bench/results/f0_constrained_decoding.md).
+With the first three fixed: **60/60 structurally valid, 60/60 semantically filled outputs** across decision / plan / subtask-design schemas, at near-zero grammar overhead on large payloads. Full report: [`bench/results/f0_constrained_decoding.md`](bench/results/f0_constrained_decoding.md).
+
+**Measured baselines** on the capped reference profile (2 workstation cores ≈ 4 target cores, [full report](bench/results/f0_baseline_severino-sim.md)):
+
+| Metric | Value |
+|---|---|
+| Cold prefill @ 1K / 4K / 8K / 16K ctx | 6.8s / 30.7s / 69.6s / **173.6s** — why small contexts are a design constraint, not a preference |
+| Generation | 35.8 tok/s (memory-bound: 24 threads only reach 42) |
+| Prefix reuse (8K ctx) | append-only: **65** tokens reprocessed · one byte changed mid-prompt: **7,971** (~120× worse) |
+| Grammar overhead | 0.4–9.8% on generation speed |
 
 ## 🔁 Pipeline at a glance
 
@@ -94,7 +104,7 @@ Development happens on a fast workstation, but **official numbers only come from
 
 ## 🗺️ Roadmap
 
-- [x] **F0 — Foundations** *(in progress)*: pinned runtime, model verification, constrained-decoding probe, resource-capped simulator, baseline benchmarks
+- [x] **F0 — Foundations** *(done, `v1.1.0`)*: pinned runtime, model verification, constrained-decoding probe (60/60), resource-capped simulator, committed baselines
 - [ ] **F1 — Deterministic core + worker**: walking skeleton, evaluator with synthetic tasks
 - [ ] **F2 — Minimal web GUI**: async job queue, live execution tree, approval/clarification queue
 - [ ] **F3 — Planning**: planner + phase designer, dynamic versioned plans, replanning

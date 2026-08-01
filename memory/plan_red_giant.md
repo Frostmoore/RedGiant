@@ -4,7 +4,7 @@
 **Data:** 2026-08-01
 **Specsheet di riferimento:** [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) (v0.1)
 **Atlante della codebase:** [codebase_reference.md](codebase_reference.md) — aggiornato a ogni fine fase, mai dopo.
-**Stato:** ⬜ non iniziato — prossima azione: Fase 0, sottofase 0.1
+**Stato:** 🟢 **F0 completata** (2026-08-01, `v1.1.0`) — prossima azione: **Fase 1, sottofase 1.1** (gate d'ingresso soddisfatto: numeri F0.6 nell'atlante, allocazione severino-sim decisa dall'utente)
 
 ---
 
@@ -631,7 +631,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F0.1 — Struttura repo e progetto Python
 
-- [ ] 🤖 **Obiettivo:** un progetto Python installabile e riproducibile, con la struttura di §A1 (le sole parti F0).
+- [x] 🤖 **Obiettivo:** un progetto Python installabile e riproducibile, con la struttura di §A1 (le sole parti F0).
 - **Motivazione:** tutto ciò che segue importa `redgiant.*` e legge `config/`; farlo per primo evita ristrutturazioni. Il lockfile da subito perché la riproducibilità non si retrofitta (D14).
 - **Implementazione:**
   - `pyproject.toml`: `[project] name="redgiant"`, `requires-python=">=3.12"`, dipendenze §A2 con versione esatta (`==`), `[project.scripts] rg = "redgiant.cli:main"` (il modulo `cli` arriva in F1.9: fino ad allora l'entry point può puntare a uno stub che stampa versione e aiuto).
@@ -664,7 +664,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F0.2 — llama.cpp e modello
 
-- [ ] 🤖 **Obiettivo:** llama-server funzionante su questo PC in build CUDA e in build CPU pura, con Gemma 4 E2B Q4 scaricato e generante.
+- [x] 🤖 **Obiettivo:** llama-server funzionante su questo PC in build CUDA e in build CPU pura, con Gemma 4 E2B Q4 scaricato e generante.
 - **Motivazione:** D2 e D6. Servono *due* build locali perché `dev-fast` (iterazione) e la modalità CPU (misure oneste, anche fuori dal Docker di F0.4) sono entrambe quotidiane. La versione di llama.cpp va **pinnata** subito: il comportamento di cache e grammatiche cambia tra release, e un bench fatto su una versione diversa non è confrontabile.
 - **Implementazione:**
   - Scaricare/compilare due binari llama.cpp alla **stessa release** (tag annotato in `config/default.toml` come commento e nell'atlante): variante CUDA e variante CPU (AVX2).
@@ -680,7 +680,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F0.3 — ⚠️ Verifica del constrained decoding su Gemma 4 E2B
 
-- [ ] 🤖 **Obiettivo:** dimostrare (o smentire) che il guided decoding di llama-server con questo modello produce il 100% di output validi su schemi realistici, e misurarne il costo.
+- [x] 🤖 **Obiettivo:** dimostrare (o smentire) che il guided decoding di llama-server con questo modello produce il 100% di output validi su schemi realistici, e misurarne il costo.
 - **Motivazione:** D3 è una scommessa fondativa: l'intera architettura assume che "output malformato" sia una categoria di errori estinta. Se il supporto per un modello nuovissimo è rotto (tokenizer, template di chat, bug di grammatica — tutte cose viste all'uscita di modelli nuovi), va saputo ORA: il fallback cambia la fase, non una riga.
 - **Implementazione — protocollo esatto:**
   1. Tre schemi di prova, scritti come modelli Pydantic in un modulo usa-e-getta `bench/schemas_probe.py` (diventeranno la base dei veri schemi):
@@ -695,7 +695,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F0.4 — Profilo `severino-sim`
 
-- [ ] 🤖 **Obiettivo:** un container Docker che replica il vincolo di risorse di Severino (D5) per misure oneste sul PC di sviluppo.
+- [x] 🤖 **Obiettivo:** un container Docker che replica il vincolo di risorse di Severino (D5) per misure oneste sul PC di sviluppo.
 - **Motivazione:** D6. Severino reale non è sempre disponibile e i bench lo saturerebbero disturbando lo stack di casa; il simulatore rende le misure ripetibili e quotidiane. Non simula la *microarchitettura* (Zen 4 ≠ Zen 2 a parità di core), quindi i numeri vanno trattati come proxy ottimista: la taratura finale contro Severino reale avviene a ogni fine fase quando possibile e sistematicamente in F8.
 - **Implementazione:** `docker/severino-sim/compose.yml` — servizio `llama-cpu`: immagine llama.cpp server CPU (stessa release pinnata di F0.2), `cpuset: "0-3"`, `mem_limit` concordata 🧑, `--threads 4 --parallel 1 --ctx-size` dal profilo, volume `./models:/models:ro`, volume slot, porta mappata su quella di `config/profiles/severino-sim.toml`. Healthcheck su `/props`.
 - 🧑 **Richiede l'utente:** conferma dei numeri di allocazione **prima del freeze**: tutti i bench successivi dipendono da questi numeri e cambiarli dopo invalida i confronti storici. → **DECISO (2026-08-01): 2 core + 10 GB sul PC di sviluppo** (un core Zen 4 @5.3GHz vale ~2× un core Zen 2 @15W: 2 core qui approssimano i 4 di Severino); su Severino reale: 4 core. Un bench parziale a 4 core è stato scartato per questo motivo.
@@ -704,7 +704,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F0.5 — Benchmark di baseline
 
-- [ ] 🤖 **Obiettivo:** i numeri fondamentali del progetto: quanto costa il prefill, quanto la generazione, quanto salva la cache, su `dev-fast` e `severino-sim`.
+- [x] 🤖 **Obiettivo:** i numeri fondamentali del progetto: quanto costa il prefill, quanto la generazione, quanto salva la cache, su `dev-fast` e `severino-sim`.
 - **Motivazione:** D8 parla di "~4-8K token" per fede ragionata; questa sottofase lo trasforma in un numero difendibile. Inoltre F5 avrà bisogno di un "prima" onesto: questo è il prima.
 - **Implementazione:** `bench/run_bench.py`, riproducibile con un comando.
   ```python
@@ -722,7 +722,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F0.6 — 📌 Decisioni derivate dai numeri
 
-- [ ] 🤖 **Obiettivo:** trasformare i numeri di F0.5 in vincoli di configurazione scritti e motivati.
+- [x] 🤖 **Obiettivo:** trasformare i numeri di F0.5 in vincoli di configurazione scritti e motivati.
 - **Motivazione:** è il punto in cui il piano smette di dire "circa" e inizia a dire quanto. Scriverle nell'atlante *con le misure accanto* le rende contestabili in futuro: se un numero cambia (nuovo llama.cpp, RAM aggiunta), si sa quale decisione rivedere.
 - **Implementazione — decisioni da fissare, ciascuna con la misura che la giustifica:**
   1. `llm.ctx_size` definitivo (D8): il ctx oltre il quale il prefill freddo su `severino-sim` supera una soglia di tollerabilità (proposta: 60s; 🧑 conferma).
@@ -736,7 +736,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F0.7 — `scripts/check_reference.py`
 
-- [ ] 🤖 **Obiettivo:** lo strumento che rende l'atlante meccanicamente verificabile (usato dal Passo 3 del rituale, da fine F0 in poi).
+- [x] 🤖 **Obiettivo:** lo strumento che rende l'atlante meccanicamente verificabile (usato dal Passo 3 del rituale, da fine F0 in poi).
 - **Motivazione:** le istruzioni globali dell'utente lo richiedono ("verifica meccanicamente che le firme documentate corrispondano al codice reale"); automatizzarlo lo rende non-negoziabile anche sotto fretta.
 - **Implementazione:**
   ```python
@@ -756,9 +756,11 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F0.8 — 🔎 Verifica di fase
 
-- [ ] Condizioni, tutte insieme: i tre profili si avviano dai rispettivi script/compose; `bench/run_bench.py` produce il report con un comando; il constrained decoding è dimostrato sui 3 schemi con i numeri (o il fallback è stato deciso e documentato); `check_reference.py` funziona nei due sensi; i numeri F0.6 sono nell'atlante e approvati dall'utente.
+- [x] Condizioni, tutte insieme: i tre profili si avviano dai rispettivi script/compose; `bench/run_bench.py` produce il report con un comando; il constrained decoding è dimostrato sui 3 schemi con i numeri (o il fallback è stato deciso e documentato); `check_reference.py` funziona nei due sensi; i numeri F0.6 sono nell'atlante e approvati dall'utente.
 
 **Rituale di fine fase** → `v1.1.0`. Il codebase_reference, da questa fase, fotografa: struttura repo, config con i valori derivati, script, bench e le sue tabelle, esiti F0.3, trappole incontrate (ce ne saranno).
+
+> **ESITO F0 (2026-08-01, `v1.1.0`).** Tutte le sottofasi verificate. Numeri chiave (severino-sim = 2 core 9900X ≈ 4 core Severino, decisione utente): prefill freddo 1K/4K/8K/16K = 6.8/30.7/69.6/173.6s · generazione 35.8 tok/s (memory-bound: quasi invariata vs 24 thread) · riuso prefisso: 65 token riprocessati in append vs 7971 con 1 byte cambiato a metà (D9 provata empiricamente, fattore ~120×) · constrained decoding 60/60 forma + 60/60 contenuto, overhead grammatica 0.4–9.8% (D3 confermata). **Deviazioni dal piano:** (a) pin del runtime = digest dell'immagine Docker b10200 + binari Windows b10217 (ghcr non pubblica tag per-release; b10200 non ha asset Windows); (b) F0.5.4: slot save/restore con API integra ma riuso post-restore NON funzionante su b10200 → soglia di convenienza slot-save NON fissabile, rinviata a F5.4 su build successiva (registrata come debito). **Lezioni fondative per F1** (dettagli nell'atlante): la grammatica vincola ma non informa (lo schema va nel prompt → S7); template di turno Gemma obbligatorio anche su /completion; stop reason `limit` = errore esplicito nel LlamaClient; JSON compatto obbligatorio (pretty-print = 20-30% di token sprecati).
 
 ---
 
