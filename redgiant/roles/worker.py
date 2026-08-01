@@ -11,9 +11,9 @@ Il finish del Worker NON chiude la sottofase: la chiude la verifica (D10).
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from redgiant.roles.base import Role, RoleContext
 from redgiant.tools.base import ToolResult
@@ -37,27 +37,29 @@ class FinishReport(_Strict):
     verification_requested: list[str]
 
 
-class WorkerStep(_Strict):
-    """NOTA di design (F1.11): niente model_validator di coerenza cross-campo.
-
-    La grammatica (D3) garantisce la FORMA del JSON Schema, ma non puo' esprimere
-    "se action=tool allora tool_call presente": un validator Pydantic piu' severo
-    dello schema trasformerebbe un'incoerenza semantica del modello in un falso
-    LlmInvalidOutput (che per contratto e' un bug di piattaforma). La coerenza si
-    verifica nel loop del Worker e l'incoerenza e' un DATO (nota in append), come
-    i tool error.
-    """
+class WorkerToolStep(_Strict):
     thought: str = Field(max_length=300)  # pensiero corto, non saggio (specsheet §3)
-    action: Literal["tool", "finish"]
-    tool_call: ToolCallSpec | None = None
-    finish: FinishReport | None = None
+    action: Literal["tool"]
+    tool_call: ToolCallSpec
 
-    def incoherence(self) -> str | None:
-        if self.action == "tool" and self.tool_call is None:
-            return "action=tool but tool_call is null"
-        if self.action == "finish" and self.finish is None:
-            return "action=finish but finish is null"
-        return None
+
+class WorkerFinishStep(_Strict):
+    thought: str = Field(max_length=300)
+    action: Literal["finish"]
+    finish: FinishReport
+
+
+class WorkerStep(RootModel[Annotated[WorkerToolStep | WorkerFinishStep,
+                                     Field(discriminator="action")]]):
+    """NOTA di design (F2.5, terzo giro): la coerenza action↔payload e' STRUTTURALE.
+
+    Storia: prima era un model_validator (falsi LlmInvalidOutput), poi un dato
+    gestito in-loop. Il collaudo ha mostrato il caso peggiore: un doppio apice non
+    escapato nel thought chiude la stringa JSON, il modello deraglia e l'unica
+    uscita sintattica era l'incoerente finish:null -> loop caotici da 60+ chiamate.
+    Con la union discriminata il ramo incompleto NON e' generabile: dopo un derail
+    la grammatica costringe comunque a un passo intero e coerente.
+    """
 
 
 class Worker(Role):
@@ -94,10 +96,11 @@ class Worker(Role):
         fail_streak = 0
         for k in range(1, max_steps + 1):
             try:
-                step: WorkerStep = self.llm.complete(
+                wrapper: WorkerStep = self.llm.complete(
                     parts, role=self.name, schema=WorkerStep,
                     max_tokens=step_max_tokens, task_id=task.id,
                     subtask_id=ctx.subtask.id if ctx.subtask else None).parsed  # type: ignore
+                step = wrapper.root
             except LlmTruncated:
                 # F2.5: il troncamento di UNO step non brucia il tentativo intero —
                 # e' un dato in-loop (la KV resta calda), come i tool error.
@@ -111,21 +114,13 @@ class Worker(Role):
 
             if step_log is not None:
                 step_log(f"step {k}: {step.model_dump_json()[:280]}")
-            bad = step.incoherence()
-            if bad is not None:
-                parts = parts.with_appended_context(
-                    f"\n[STEP {k}] {step.model_dump_json()}"
-                    f"\n[STEP {k} INVALID] {bad} - emit a coherent step: action must "
-                    f"match its payload.")
-                continue
 
-            if step.action == "finish":
+            if isinstance(step, WorkerFinishStep):
                 if resume_file is not None:
                     resume_file.unlink(missing_ok=True)  # tentativo concluso
-                return step.finish  # type: ignore[return-value]
+                return step.finish
 
-            call = step.tool_call
-            assert call is not None  # garantito da incoherence()
+            call = step.tool_call  # WorkerToolStep: garantito dalla struttura
             result = self.router.dispatch(
                 task.id, ctx.subtask.id if ctx.subtask else "", call.tool, call.args)
 

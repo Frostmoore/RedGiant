@@ -127,13 +127,25 @@ def test_budget_exhaustion_asks_instead_of_killing(env, tmp_path, monkeypatch):
     assert st.budget.max_total_tokens > 1  # esteso davvero
 
 
-def test_workerstep_incoherence_is_data_not_validation_error():
-    # La coerenza cross-campo NON e' un validator (la grammatica non puo'
-    # esprimerla): il modello la accetta e il loop la gestisce come dato.
-    s = WorkerStep(thought="t", action="tool", tool_call=None, finish=None)
-    assert s.incoherence() == "action=tool but tool_call is null"
-    s = WorkerStep(thought="t", action="finish", tool_call=None, finish=None)
-    assert "finish is null" in s.incoherence()
-    ok = WorkerStep(thought="t", action="tool",
-                    tool_call=ToolCallSpec(tool="read_file", args={"path": "a"}))
-    assert ok.incoherence() is None
+def test_workerstep_coherence_is_structural():
+    # F2.5: union discriminata — il ramo incompleto (finish:null) non e' nemmeno
+    # rappresentabile: la grammatica non puo' produrlo, Pydantic non lo valida.
+    import pytest as _pt
+    from pydantic import ValidationError
+    ok = WorkerStep.model_validate({"thought": "t", "action": "tool",
+                                    "tool_call": {"tool": "read_file",
+                                                  "args": {"path": "a"}}})
+    assert ok.root.action == "tool" and ok.root.tool_call.tool == "read_file"
+    with _pt.raises(ValidationError):
+        WorkerStep.model_validate({"thought": "t", "action": "finish",
+                                   "tool_call": None, "finish": None})
+    with _pt.raises(ValidationError):
+        WorkerStep.model_validate({"thought": "t", "action": "tool"})
+    # lo schema JSON espone la discriminazione (oneOf/anyOf con mapping)
+    schema = WorkerStep.model_json_schema()
+    assert "oneOf" in json_dumps(schema) or "anyOf" in json_dumps(schema)
+
+
+def json_dumps(o):
+    import json as _j
+    return _j.dumps(o)
