@@ -19,7 +19,7 @@
   <p>
     <span class="badge b-{{ t.status }}">{{ t.status }}</span>
     {% if t.plan %}<span class="muted"> · piano v{{ t.plan.version }}: {{ t.plan.goal[:80] }}</span>{% endif %}
-    {% if t.status == "failed" %}<br><span class="error">{{ t.status }}</span>{% endif %}
+    {% if t.status == "failed" and t.error %}<br><span class="error">{{ t.error[:160] }}</span>{% endif %}
   </p>
   <ul class="tree">
   {% for s in subtasks %}

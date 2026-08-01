@@ -9,8 +9,10 @@
 {% if approvals %}
 <p>⏸ <a href="/approvals">{{ approvals | length }} richieste in attesa della tua risposta</a></p>
 {% endif %}
-{% if failures %}
+{% if t.status in ("failed", "partial") %}
 <h3>Perché è fallito</h3>
+{% if t.error %}<p class="error">{{ t.error }}</p>{% endif %}
+{% if failures %}
 <table>
   <tr><th>sottofase</th><th>check</th><th>dettaglio</th></tr>
   {% for f in failures %}
@@ -18,10 +20,11 @@
       <td class="muted">{{ f.detail }}</td></tr>
   {% endfor %}
 </table>
+{% endif %}
 <form class="card" method="post" action="/tasks/{{ t.id }}/relaunch"
       onsubmit="const b=this.querySelector('button'); b.disabled=true; b.textContent='Avvio…'">
-  <label>Riparti con istruzioni aggiuntive (stesso target, stessa config —
-    ai mezzi tecnici pensa il sistema)</label>
+  <label>Riparti con istruzioni aggiuntive (nuovo task: budget fresco, stesso target,
+    stessa config — ai mezzi tecnici pensa il sistema)</label>
   <textarea name="guidance" rows="2"
     placeholder="es. non toccare i test; il metodo va aggiunto in fondo alla classe"></textarea>
   <button>Riparti</button>
