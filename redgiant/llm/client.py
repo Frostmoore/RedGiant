@@ -81,6 +81,9 @@ class LlamaClient:
             "n_predict": max_tokens,
             "temperature": self.cfg.temperature if temperature is None else temperature,
             "cache_prompt": cache_prompt,
+            # Trappola F1.11: senza seed llama-server usa un seed CASUALE per
+            # richiesta -> pipeline non riproducibile, eval non confrontabili.
+            "seed": 42,
         }
         if schema is not None:
             payload["json_schema"] = to_llama_schema(schema)

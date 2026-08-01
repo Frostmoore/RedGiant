@@ -141,7 +141,7 @@ class Orchestrator:
         except LlmError as e:
             log.line("worker", f"{spec.id} LLM error: {e}")
             from redgiant.roles.worker import FinishReport
-            report = FinishReport(status="blocked", summary=f"llm error: {e}",
+            report = FinishReport(status="blocked", summary=f"llm error: {e}"[:590],
                                   evidence=[], verification_requested=[])
 
         if report.status == "blocked" and "approval" in report.summary:

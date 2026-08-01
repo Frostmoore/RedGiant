@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from redgiant.roles.base import Role, RoleContext
 from redgiant.tools.base import ToolResult
@@ -38,18 +38,26 @@ class FinishReport(_Strict):
 
 
 class WorkerStep(_Strict):
+    """NOTA di design (F1.11): niente model_validator di coerenza cross-campo.
+
+    La grammatica (D3) garantisce la FORMA del JSON Schema, ma non puo' esprimere
+    "se action=tool allora tool_call presente": un validator Pydantic piu' severo
+    dello schema trasformerebbe un'incoerenza semantica del modello in un falso
+    LlmInvalidOutput (che per contratto e' un bug di piattaforma). La coerenza si
+    verifica nel loop del Worker e l'incoerenza e' un DATO (nota in append), come
+    i tool error.
+    """
     thought: str = Field(max_length=300)  # pensiero corto, non saggio (specsheet §3)
     action: Literal["tool", "finish"]
     tool_call: ToolCallSpec | None = None
     finish: FinishReport | None = None
 
-    @model_validator(mode="after")
-    def _coherent(self) -> "WorkerStep":
-        if self.action == "tool" and (self.tool_call is None or self.finish is not None):
-            raise ValueError("action=tool requires tool_call and no finish")
-        if self.action == "finish" and (self.finish is None or self.tool_call is not None):
-            raise ValueError("action=finish requires finish and no tool_call")
-        return self
+    def incoherence(self) -> str | None:
+        if self.action == "tool" and self.tool_call is None:
+            return "action=tool but tool_call is null"
+        if self.action == "finish" and self.finish is None:
+            return "action=finish but finish is null"
+        return None
 
 
 class Worker(Role):
@@ -72,11 +80,19 @@ class Worker(Role):
                 max_tokens=step_max_tokens, task_id=task.id,
                 subtask_id=ctx.subtask.id if ctx.subtask else None).parsed  # type: ignore
 
+            bad = step.incoherence()
+            if bad is not None:
+                parts = parts.with_appended_context(
+                    f"\n[STEP {k}] {step.model_dump_json()}"
+                    f"\n[STEP {k} INVALID] {bad} - emit a coherent step: action must "
+                    f"match its payload.")
+                continue
+
             if step.action == "finish":
                 return step.finish  # type: ignore[return-value]
 
             call = step.tool_call
-            assert call is not None  # garantito dal validator
+            assert call is not None  # garantito da incoherence()
             result = self.router.dispatch(
                 task.id, ctx.subtask.id if ctx.subtask else "", call.tool, call.args)
 

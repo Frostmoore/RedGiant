@@ -28,8 +28,13 @@ def default_catalog(cfg: Config, scope: Scope,
     def _search(pattern: str, glob: str | None = None, max_results: int = 50) -> ToolResult:
         nonlocal rg_bin
         if rg_bin is None:
-            rg_bin = search.resolve_ripgrep(cfg.paths.ripgrep)
-        return search.search_code(scope, rg_bin, pattern, glob, max_results)
+            try:
+                rg_bin = search.resolve_ripgrep(cfg.paths.ripgrep)
+            except FileNotFoundError:
+                rg_bin = ""  # fallback permanente per questo catalogo
+        if rg_bin:
+            return search.search_code(scope, rg_bin, pattern, glob, max_results)
+        return search.search_python(scope, pattern, glob, max_results)
 
     specs = [
         ToolSpec("read_file", "Read a slice of a text file (max 400 lines per call).",

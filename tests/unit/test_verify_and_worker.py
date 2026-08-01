@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from redgiant.config import Config
 from redgiant.core.verify import verify_subtask
@@ -75,12 +74,13 @@ def test_unknown_verification_is_a_failure_not_a_skip(env):
     assert any("unknown" in c.name for c in v.checks)
 
 
-def test_workerstep_coherence_validator():
-    with pytest.raises(ValidationError):
-        WorkerStep(thought="t", action="tool", tool_call=None, finish=None)
-    with pytest.raises(ValidationError):
-        WorkerStep(thought="t", action="finish", tool_call=ToolCallSpec(tool="x", args={}),
-                   finish=None)
+def test_workerstep_incoherence_is_data_not_validation_error():
+    # La coerenza cross-campo NON e' un validator (la grammatica non puo'
+    # esprimerla): il modello la accetta e il loop la gestisce come dato.
+    s = WorkerStep(thought="t", action="tool", tool_call=None, finish=None)
+    assert s.incoherence() == "action=tool but tool_call is null"
+    s = WorkerStep(thought="t", action="finish", tool_call=None, finish=None)
+    assert "finish is null" in s.incoherence()
     ok = WorkerStep(thought="t", action="tool",
                     tool_call=ToolCallSpec(tool="read_file", args={"path": "a"}))
-    assert ok.action == "tool"
+    assert ok.incoherence() is None

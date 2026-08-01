@@ -134,15 +134,31 @@ def _parse_hunks(diff: str) -> list[dict]:
             cur["ops"].append((raw[0], raw[1:]))
         elif cur is not None and raw == "":
             cur["ops"].append((" ", ""))
+    # Trappola F1.11: i modelli piccoli chiudono spesso i hunk con una riga "-"
+    # vuota spuria (cancellazione di una riga vuota inesistente) che fa fallire
+    # il match dell'intero hunk. Le code vuote non-additive sono cosmetiche: via.
+    for h in hunks:
+        while h["ops"] and h["ops"][-1][0] in (" ", "-") and _norm(h["ops"][-1][1]) == "":
+            h["ops"].pop()
     return hunks
 
 
+_LINENO_PREFIX = __import__("re").compile(r"^\s*\d+[\t:] ?")
+
+
+def _norm(line: str) -> str:
+    """Matching tollerante (trappola F1.11): read_file mostra 'N<TAB>contenuto' e i
+    modelli piccoli copiano il prefisso numerico nel contesto del diff; il confronto
+    lo ignora, insieme al whitespace di coda."""
+    return _LINENO_PREFIX.sub("", line).rstrip()
+
+
 def _apply_hunk(lines: list[str], hunk: dict) -> list[str] | None:
-    pattern = [l for tag, l in hunk["ops"] if tag in " -"]
-    replacement_ops = hunk["ops"]
+    pattern = [_norm(l) for tag, l in hunk["ops"] if tag in " -"]
+    replacement_ops = [(tag, _LINENO_PREFIX.sub("", text)) for tag, text in hunk["ops"]]
 
     def try_at(pos: int) -> list[str] | None:
-        if lines[pos:pos + len(pattern)] != pattern:
+        if [_norm(l) for l in lines[pos:pos + len(pattern)]] != pattern:
             return None
         out = lines[:pos]
         i = pos

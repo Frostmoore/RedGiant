@@ -8,7 +8,10 @@ pytest riassume).
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import sys
+
 from pydantic import BaseModel, ConfigDict
 
 from redgiant.tools.base import Scope, ToolResult
@@ -48,6 +51,15 @@ def run_tests(scope: Scope, test_commands: dict[str, list[str]],
     exe = argv[0]
     if exe not in shell_whitelist:
         return ToolResult(ok=False, data={}, error=f"executable_not_whitelisted:{exe}")
+    # Trappola disinnescata (F1.11): senza venv attivo la PATH del subprocess non
+    # contiene pytest/python del venv. python/pytest si risolvono SEMPRE
+    # sull'interprete che esegue Red Giant: l'ambiente dei tool == quello dell'harness.
+    if exe == "pytest":
+        argv = [sys.executable, "-m", "pytest", *argv[1:]]
+    elif exe == "python":
+        argv = [sys.executable, *argv[1:]]
+    elif shutil.which(exe) is None:
+        return ToolResult(ok=False, data={}, error=f"executable_not_found:{exe}")
     try:
         code, tail = _run(argv, scope.root, timeout_s)
     except subprocess.TimeoutExpired:

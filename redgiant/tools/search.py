@@ -42,6 +42,38 @@ def resolve_ripgrep(configured: str) -> str:
     return found
 
 
+def search_python(scope: Scope, pattern: str, glob: str | None = None,
+                  max_results: int = 50) -> ToolResult:
+    """Fallback puro Python quando ripgrep non e' installato (trappola F1.11:
+    sul PC di sviluppo ripgrep puo' mancare). Piu' lento ma identico nel contratto."""
+    import re as _re
+    from fnmatch import fnmatch as _fn
+    try:
+        rx = _re.compile(pattern)
+    except _re.error as e:
+        return ToolResult(ok=False, data={"detail": str(e)}, error="bad_pattern")
+    matches = []
+    for p in sorted(scope.root.rglob("*")):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(scope.root).as_posix()
+        if glob and not (_fn(rel, glob) or _fn(p.name, glob)):
+            continue
+        raw = p.read_bytes()
+        if b"\x00" in raw[:4096]:
+            continue
+        for i, line in enumerate(raw.decode("utf-8", errors="replace").splitlines(), 1):
+            if rx.search(line):
+                matches.append({"path": rel, "line": i, "text": line[:300]})
+                if len(matches) >= max_results:
+                    break
+        if len(matches) >= max_results:
+            break
+    return ToolResult(ok=True,
+                      data={"matches": matches, "truncated": len(matches) >= max_results},
+                      evidence=[f"python-search '{pattern}' -> {len(matches)} matches"])
+
+
 def search_code(scope: Scope, rg_bin: str, pattern: str, glob: str | None = None,
                 max_results: int = 50) -> ToolResult:
     argv = [rg_bin, "--json", "-e", pattern]

@@ -21,3 +21,6 @@ Rules:
 5. If a tool call fails, read the error: fix the arguments or change approach.
    Never repeat an identical failing call.
 6. Do not touch files outside the subtask scope. Do not redesign the plan.
+7. Writing a unified_diff for write_patch: context lines must copy the file
+   content EXACTLY as it is on disk - never include the "N<TAB>" line-number
+   prefix that read_file displays. Keep hunks small (2-3 context lines).

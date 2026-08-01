@@ -17,6 +17,7 @@ from __future__ import annotations
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import tomllib
@@ -143,9 +144,14 @@ def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
 
     verified = False
     if state.status == "completed":
+        argv = shlex.split(task.success_cmd)
+        # stessa risoluzione dei tool (F1.11): pytest/python = l'interprete dell'harness
+        if argv[0] == "pytest":
+            argv = [sys.executable, "-m", "pytest", *argv[1:]]
+        elif argv[0] == "python":
+            argv = [sys.executable, *argv[1:]]
         try:
-            proc = subprocess.run(shlex.split(task.success_cmd), cwd=workdir,
-                                  capture_output=True, timeout=300)
+            proc = subprocess.run(argv, cwd=workdir, capture_output=True, timeout=300)
             verified = proc.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
             verified = False
