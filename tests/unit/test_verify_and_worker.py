@@ -90,6 +90,43 @@ def test_resume_reclaims_orphan_running_subtasks(env, tmp_path):
     assert status == "pending"
 
 
+def test_budget_exhaustion_asks_instead_of_killing(env, tmp_path, monkeypatch):
+    # F2.5 (richiesta utente): budget esaurito -> blocked + richiesta di estensione;
+    # Approva -> budget +add e si prosegue; Nega -> fallimento per decisione esplicita.
+    import json as _json
+    from redgiant.config import Config
+    from redgiant.core.orchestrator import Orchestrator
+    from redgiant.core.verify import CheckResult, Verdict
+    from redgiant.state.models import LlmCallRow
+    scope, router, tid = env
+    store = router.store
+    store.upsert_subtask(tid, _spec(), actor="t")
+    # budget tokens = 1, gia' sforato da una chiamata loggata
+    store.log_llm_call(tid, LlmCallRow(
+        role="worker", subtask_id="P1.S1", schema_name=None,
+        t_start="2026-08-01T00:00:00+00:00", prompt_tokens=100, cached_tokens=0,
+        gen_tokens=10, prefill_ms=1.0, gen_ms=1.0, outcome="ok"))
+    cfg = Config.load("dev-fast", CONFIG_DIR)
+    object.__setattr__(cfg.paths, "tasks_dir", tmp_path)  # dataclass frozen
+    orch = Orchestrator(cfg, store, llm=None, router=router, assembler=None)
+
+    st = orch.run_task(tid)
+    assert st.status == "blocked"
+    pend = store.pending_approvals(tid)
+    assert pend and _json.loads(pend[0]["payload"])["tool"] == "extend_budget"
+
+    # Approva: il budget cresce e il task prosegue (sottofase eseguita: mock pass)
+    store.answer_approval(pend[0]["id"], "yes")
+    store.set_task_status(tid, "queued", actor="user")
+    monkeypatch.setattr(orch, "_execute_subtask",
+                        lambda state, spec, worker, log: Verdict(
+                            verdict="pass",
+                            checks=[CheckResult(name="mock", ok=True, detail="")]))
+    st = orch.run_task(tid)
+    assert st.status == "completed"
+    assert st.budget.max_total_tokens > 1  # esteso davvero
+
+
 def test_workerstep_incoherence_is_data_not_validation_error():
     # La coerenza cross-campo NON e' un validator (la grammatica non puo'
     # esprimerla): il modello la accetta e il loop la gestisce come dato.

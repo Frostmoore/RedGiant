@@ -108,6 +108,8 @@ class StateStore
     def override_approval(self, approval_id: int, answer: str | None) -> str
     def consume_matching_approval(self, task_id: str, tool: str, args_json: str) -> str | None
     def latest_clarification_answer(self, task_id: str) -> str | None
+    def extend_budget(self, task_id: str, key: str, add: int) -> None
+    def take_budget_extension(self, task_id: str) -> tuple[str, str, int] | None
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str, target: str | None = None) -> None
     def log_llm_call(self, task_id: str, row: LlmCallRow) -> None
     def log_tool_call(self, task_id: str, row: ToolCallRow) -> None

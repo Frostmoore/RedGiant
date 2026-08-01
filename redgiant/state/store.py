@@ -410,6 +410,28 @@ class StateStore:
                 (task_id, row.subtask_id, row.tool, json.dumps(row.args), int(row.ok),
                  json.dumps(row.evidence), row.duration_ms))
 
+    def extend_budget(self, task_id: str, key: str, add: int) -> None:
+        """F2.5 (richiesta utente): il budget si estende su consenso, non e' una ghigliottina."""
+        with self._conn() as c:
+            c.execute("UPDATE budgets SET limit_val = limit_val + ? WHERE task_id=? AND key=?",
+                      (add, task_id, key))
+            self._decision(c, task_id, "user", f"budget_extended:{key}", f"+{add}", None)
+
+    def take_budget_extension(self, task_id: str) -> tuple[str, str, int] | None:
+        """Consuma (one-shot: NON e' una grant permanente, ogni esaurimento ri-chiede)
+        la risposta a una richiesta di estensione budget: (answer, key, add) o None."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT id, payload, answer FROM approvals WHERE task_id=? AND"
+                " kind='irreversible_op' AND status='answered'", (task_id,)).fetchall()
+            for r in rows:
+                p = json.loads(r["payload"])
+                if p.get("tool") == "extend_budget":
+                    c.execute("UPDATE approvals SET status='expired' WHERE id=?", (r["id"],))
+                    args = p.get("args") or {}
+                    return r["answer"], args.get("key", "tokens"), int(args.get("add", 0))
+        return None
+
     def budget_used(self, task_id: str) -> BudgetUsed:
         """Aggregato dal DB: una sola fonte di verita', mai contatori in RAM.
         wall_s la calcola il BudgetTracker (dal created_at del task)."""

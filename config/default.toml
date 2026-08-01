@@ -31,7 +31,10 @@ slots_dir = "data/slots/"            # (F5) KV salvate
 ripgrep = "rg"                       # binario di sistema
 
 [budget]                             # default per task; l'Assessor (F6) li modula
-max_total_tokens = 32000
+# 64000: tampone dichiarato (F2.5, richiesta utente: 32k troppo basso coi cicli di
+# approvazione). Taratura seria in F6 (budget adattivi) coi numeri dell'Evaluator.
+# A esaurimento NON si fallisce: si chiede all'utente l'estensione (+50%).
+max_total_tokens = 64000
 max_tool_calls = 100
 max_retries_per_subtask = 2          # specsheet §13
 max_wall_s = 7200

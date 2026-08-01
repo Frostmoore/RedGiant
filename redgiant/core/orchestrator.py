@@ -70,7 +70,12 @@ class Orchestrator:
 
             key = tracker.exceeded()
             if key is not None:
-                return self._stop_on_budget(task_id, key, log)
+                outcome = self._handle_budget_exhaustion(task_id, key, tracker, log)
+                if outcome is not None:
+                    return outcome
+                # estensione concessa: budget ricaricato, si prosegue
+                tracker = BudgetTracker(self.store,
+                                        self.store.load_task(task_id).budget, task_id)
 
             spec = self._next_subtask(state)
             if spec is None:
@@ -180,6 +185,32 @@ class Orchestrator:
                                               actor="orchestrator")
                 log.line("orchestrator",
                          f"reclaimed orphan running subtask {row['subtask_id']} -> pending")
+
+    def _handle_budget_exhaustion(self, task_id: str, key: str,
+                                  tracker: BudgetTracker, log: TaskLog) -> TaskState | None:
+        """F2.5 (richiesta utente): budget esaurito = checkpoint di consenso, non
+        ghigliottina. Ritorna None se l'estensione e' stata concessa (si prosegue);
+        altrimenti lo stato terminale/bloccato."""
+        taken = self.store.take_budget_extension(task_id)
+        if taken is not None:
+            answer, ext_key, add = taken
+            if answer == "yes" and add > 0:
+                self.store.extend_budget(task_id, ext_key, add)
+                log.line("budget", f"estensione concessa: {ext_key} +{add}")
+                return None
+            log.line("budget", "estensione rifiutata dall'utente")
+            return self._stop_on_budget(task_id, key, log)
+        add = max(tracker.budget.max_total_tokens // 2, 8000) if key == "tokens" else \
+            max(getattr(tracker.budget, f"max_{key}", 0) // 2, 10)
+        import json as _json
+        self.store.add_approval(task_id, kind="irreversible_op",
+                                payload=_json.dumps({"tool": "extend_budget",
+                                                     "args": {"key": key, "add": add}}))
+        self.store.set_task_status(task_id, "blocked", actor="budget",
+                                   error=f"budget '{key}' esaurito: in attesa della tua "
+                                         f"decisione (estendere di {add}?)")
+        log.line("budget", f"budget '{key}' esaurito -> chiedo estensione (+{add})")
+        return self.store.load_task(task_id)
 
     def _stop_on_budget(self, task_id: str, key: str, log: TaskLog) -> TaskState:
         rows = self.store.list_subtasks(task_id)
