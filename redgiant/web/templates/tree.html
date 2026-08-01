@@ -3,7 +3,10 @@
      {% if t.status in ("queued", "running", "blocked") %}
      hx-get="/tasks/{{ t.id }}/tree" hx-trigger="every 2s" hx-swap="outerHTML"
      {% endif %}>
-  {% if t.status == "queued" %}
+  {% if t.status == "queued" and t.id == current %}
+  <p class="muted">🔄 preso in carico — avvio del server modello in corso (~1 minuto la
+     prima volta: il container carica i pesi). Le sottofasi compariranno a caldo.</p>
+  {% elif t.status == "queued" %}
   <p class="muted">⏳ in coda{% if t.id in queue %} (posizione {{ queue.index(t.id) + 1 }}){% endif %}
      — parte appena l'inferenza corrente termina: una alla volta per design (D7).
      Le sottofasi compariranno all'avvio.</p>

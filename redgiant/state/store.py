@@ -322,14 +322,26 @@ class StateStore:
 
     def consume_matching_approval(self, task_id: str, tool: str, args_json: str) -> str | None:
         """F2.3: alla ri-esecuzione di un tool sospeso, consuma l'approvazione risposta
-        che matcha (tool+args); ritorna la risposta ('yes'/'no') o None."""
+        che matcha; ritorna la risposta ('yes'/'no') o None.
+
+        Match su (tool, path): l'ambito del consenso e' "questo tool su questo file",
+        non i byte esatti dell'edit — il modello, rieseguendo, rigenera l'edit in forma
+        diversa e l'identita' byte-per-byte costringerebbe a doppie approvazioni
+        (osservato in F2.5). Fallback su args interi se il tool non ha 'path'."""
+        args = json.loads(args_json)
         with self._conn() as c:
             rows = c.execute(
                 "SELECT id, payload, answer FROM approvals WHERE task_id=? AND"
                 " kind='irreversible_op' AND status='answered'", (task_id,)).fetchall()
             for r in rows:
                 p = json.loads(r["payload"])
-                if p.get("tool") == tool and json.dumps(p.get("args"), sort_keys=True) == args_json:
+                if p.get("tool") != tool:
+                    continue
+                p_args = p.get("args") or {}
+                same_path = ("path" in p_args and "path" in args
+                             and p_args["path"] == args["path"])
+                same_all = json.dumps(p_args, sort_keys=True) == json.dumps(args, sort_keys=True)
+                if same_path or same_all:
                     c.execute("UPDATE approvals SET status='expired' WHERE id=?", (r["id"],))
                     return r["answer"]
         return None

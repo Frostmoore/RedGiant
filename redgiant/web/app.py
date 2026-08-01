@@ -75,6 +75,16 @@ def create_app(cfg: Config) -> FastAPI:
                 return page(request, "task_new.html", status_code=400,
                             error=f"plan JSON invalido: {e}",
                             form=dict(prompt=prompt, target_dir=target_dir))
+            # pre-flight F2.5: verifiche del piano senza comando registrato = task
+            # destinato a fallire con "unknown check". Meglio un 400 subito.
+            declared = {v for st in plan.get("subtasks", []) for v in st.get("verification", [])}
+            missing = sorted(declared - set(tcmds))
+            if missing:
+                return page(request, "task_new.html", status_code=400,
+                            error=f"il piano dichiara verifiche senza comando registrato: "
+                                  f"{missing} — aggiungile in 'Comandi di test' "
+                                  f"(es. {missing[0]}={missing[0]} -q)",
+                            form=dict(prompt=prompt, target_dir=target_dir))
         budget = Budget(
             max_total_tokens=max_tokens or cfg.budget.max_total_tokens,
             max_tool_calls=cfg.budget.max_tool_calls,
