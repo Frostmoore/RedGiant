@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔴 Red Giant
+<img src="logo.png" alt="Red Giant — Verify. Optimize. Execute." width="380">
 
 **A verification-first agentic system that makes *tiny* local language models<br>reliably useful on non-prosumer hardware.**
 
