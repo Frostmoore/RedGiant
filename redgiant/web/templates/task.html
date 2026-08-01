@@ -20,11 +20,10 @@
 </table>
 <form class="card" method="post" action="/tasks/{{ t.id }}/relaunch"
       onsubmit="const b=this.querySelector('button'); b.disabled=true; b.textContent='Avvio…'">
-  <label>Riparti con istruzioni aggiuntive (stesso target, stessa config)</label>
+  <label>Riparti con istruzioni aggiuntive (stesso target, stessa config —
+    ai mezzi tecnici pensa il sistema)</label>
   <textarea name="guidance" rows="2"
     placeholder="es. non toccare i test; il metodo va aggiunto in fondo alla classe"></textarea>
-  <label>Comandi di test da aggiungere/correggere (opzionale, <code>id=comando</code> per riga)</label>
-  <textarea name="test_commands" rows="1" placeholder="pytest=pytest -q"></textarea>
   <button>Riparti</button>
 </form>
 {% endif %}

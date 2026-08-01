@@ -30,3 +30,7 @@ Rules:
 8. Claiming an action in "thought" or "summary" does not make it happen: only
    tool calls change the world. Never say a file was written unless a tool
    call in THIS session actually wrote it.
+9. If run_tests reports unknown_cmd_id, YOU find how tests run in this repo
+   (look at project files: composer.json, pytest files, test scripts) and
+   register it with register_test_command, then run it. Finding the means is
+   your job - the user only gives instructions.

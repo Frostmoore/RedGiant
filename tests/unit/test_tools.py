@@ -154,6 +154,19 @@ def test_run_tests_rejects_unknown_and_unwhitelisted(scope):
     assert not r.ok and r.error.startswith("executable_not_whitelisted")
 
 
+def test_discover_test_commands(tmp_path):
+    (tmp_path / "test_x.py").write_text("def test_a(): pass\n", encoding="utf-8")
+    (tmp_path / "test.php").write_text("<?php exit(0);\n", encoding="utf-8")
+    (tmp_path / "composer.json").write_text('{"scripts": {"test": "phpunit"}}',
+                                            encoding="utf-8")
+    found = proc.discover_test_commands(tmp_path, ("pytest", "php", "composer"))
+    assert found["pytest"] == ["pytest", "-q"]
+    assert found["phptest"] == ["php", "test.php"]
+    assert found["composer-test"] == ["composer", "test"]
+    # whitelist ristretta -> scoperta ristretta
+    assert "pytest" not in proc.discover_test_commands(tmp_path, ("php",))
+
+
 # ── dispatch ─────────────────────────────────────────────────────────────────
 
 @pytest.fixture()
@@ -181,3 +194,24 @@ def test_dispatch_executes_and_logs(router):
     res = r_.dispatch(tid, "P1.S1", "read_file", {"path": "src/a.py"})
     assert res.ok and "read src/a.py" in res.evidence[0]
     assert store.budget_used(tid).tool_calls == 1
+
+
+def test_register_test_command_whitelist_and_persist(scope, tmp_path):
+    from redgiant.config import Config
+    from redgiant.state.models import Budget
+    from redgiant.state.store import StateStore
+    cfg = Config.load("dev-fast", CONFIG_DIR)
+    store = StateStore(tmp_path / "r.db")
+    tid = store.create_task("t", str(scope.root), "dev-fast",
+                            Budget(max_total_tokens=1, max_tool_calls=9,
+                                   max_retries_per_subtask=1, max_wall_s=9))
+    cmds: dict = {}
+    persisted: list = []
+    r_ = ToolRouter(default_catalog(cfg, scope, cmds, persist_test_commands=persisted.append),
+                    scope, store)
+    res = r_.dispatch(tid, "P1.S1", "register_test_command",
+                      {"cmd_id": "pytest", "argv": ["pytest", "-q"]})
+    assert res.ok and cmds["pytest"] == ["pytest", "-q"] and persisted
+    res = r_.dispatch(tid, "P1.S1", "register_test_command",
+                      {"cmd_id": "evil", "argv": ["rm", "-rf", "/"]})
+    assert not res.ok and "not_whitelisted" in res.error

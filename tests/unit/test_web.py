@@ -103,7 +103,9 @@ def test_relaunch_clones_task_with_guidance(client):
     assert "altra guida" in st2.request
 
 
-def test_preflight_rejects_unknown_verification(client):
+def test_creation_without_test_commands_is_allowed(client):
+    # F2 (richiesta utente): i comandi di test li trova il sistema, non l'utente —
+    # niente pre-flight bloccante.
     c, app, tmp = client
     (tmp / "tgt2").mkdir()
     plan = json.dumps({"plan": {"goal": "g", "success_criteria": [], "phases": []},
@@ -112,9 +114,8 @@ def test_preflight_rejects_unknown_verification(client):
                                      "expected_outputs": [], "completion_criteria": [],
                                      "verification": ["pytest"]}]})
     r = c.post("/tasks", data={"prompt": "x", "target_dir": str(tmp / "tgt2"),
-                               "plan_json": plan})  # niente test_commands
-    assert r.status_code == 400
-    assert "pytest" in r.text
+                               "plan_json": plan}, follow_redirects=False)
+    assert r.status_code == 303
 
 
 def test_metrics_page(client):

@@ -195,10 +195,14 @@ def search_code(scope: Scope, rg_bin: str, pattern: str, glob: str | None = None
 
 `run_tests` esegue SOLO `cmd_id` registrati; `pytest`/`python` risolti sull'interprete di Red Giant (l'ambiente dei tool == quello dell'harness).
 
+I comandi di test li trova il SISTEMA (richiesta utente, F2): `discover_test_commands` deterministica all'avvio di ogni job (test_*.py⇒pytest, test.php⇒php, composer scripts.test⇒composer; config utente vince) + tool `register_test_command` per il Worker (guardia: eseguibile in `shell_whitelist`, persistito in task_config.json).
+
 ```python
 class RunTestsArgs
 class GitStatusArgs
 class GitDiffArgs
+class RegisterTestCommandArgs
+def discover_test_commands(root, shell_whitelist: tuple[str, ...]) -> dict[str, list[str]]
 def run_tests(scope: Scope, test_commands: dict[str, list[str]], shell_whitelist: tuple[str, ...], cmd_id: str, timeout_s: float = 300.0) -> ToolResult
 def git_status(scope: Scope) -> ToolResult
 def git_diff(scope: Scope, ref: str = "HEAD") -> ToolResult
@@ -209,7 +213,7 @@ def git_diff(scope: Scope, ref: str = "HEAD") -> ToolResult
 `dispatch`: unknown/bad_args/awaiting_approval/eccezioni = tutti DATI per il modello, mai crash; tutto loggato su tool_calls. Tollera l'echo `"tool"` negli args. `requires_approval` → riga approvals + task blocked.
 
 ```python
-def default_catalog(cfg: Config, scope: Scope, test_commands: dict[str, list[str]]) -> dict[str, ToolSpec]
+def default_catalog(cfg: Config, scope: Scope, test_commands: dict[str, list[str]], persist_test_commands=None) -> dict[str, ToolSpec]
 class ToolRouter
     def __init__(self, catalog: dict[str, ToolSpec], scope: Scope, store: StateStore) -> None
     def allowed_for(self, role: str, domain: str) -> list[ToolSpec]

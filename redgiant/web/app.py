@@ -75,16 +75,9 @@ def create_app(cfg: Config) -> FastAPI:
                 return page(request, "task_new.html", status_code=400,
                             error=f"plan JSON invalido: {e}",
                             form=dict(prompt=prompt, target_dir=target_dir))
-            # pre-flight F2.5: verifiche del piano senza comando registrato = task
-            # destinato a fallire con "unknown check". Meglio un 400 subito.
-            declared = {v for st in plan.get("subtasks", []) for v in st.get("verification", [])}
-            missing = sorted(declared - set(tcmds))
-            if missing:
-                return page(request, "task_new.html", status_code=400,
-                            error=f"il piano dichiara verifiche senza comando registrato: "
-                                  f"{missing} — aggiungile in 'Comandi di test' "
-                                  f"(es. {missing[0]}={missing[0]} -q)",
-                            form=dict(prompt=prompt, target_dir=target_dir))
+            # F2: niente pre-flight bloccante sulle verifiche — i comandi di test li
+            # trova il sistema (scoperta all'avvio del job + register_test_command
+            # del Worker). La config utente, se c'e', resta un override.
         budget = Budget(
             max_total_tokens=max_tokens or cfg.budget.max_total_tokens,
             max_tool_calls=cfg.budget.max_tool_calls,
@@ -127,22 +120,16 @@ def create_app(cfg: Config) -> FastAPI:
                     failures=failures)
 
     @app.post("/tasks/{task_id}/relaunch")
-    def task_relaunch(task_id: str, guidance: str = Form(""),
-                      test_commands: str = Form("")):
+    def task_relaunch(task_id: str, guidance: str = Form("")):
         """F2.4-bis: un fallimento non e' un vicolo cieco — clone guidato.
-        test_commands opzionale: la guida testuale non puo' correggere la CONFIG
-        (es. comandi di test mancanti) — questo campo si', con merge sui clonati."""
+        SOLO istruzioni: i mezzi (comandi di test) li trova il sistema
+        (scoperta all'avvio del job + register_test_command del Worker)."""
         try:
             old = store.load_task(task_id)
         except KeyError:
             return HTMLResponse("task sconosciuto", status_code=404)
         from redgiant.web.jobs import read_task_config
         tc = read_task_config(cfg.paths.tasks_dir, task_id)
-        for line in test_commands.splitlines():
-            cmd_id, _, cmd = line.strip().partition("=")
-            if cmd_id and cmd:
-                import shlex
-                tc["test_commands"][cmd_id.strip()] = shlex.split(cmd)
         prompt = old.request.split("\n[USER GUIDANCE]")[0]
         if guidance.strip():
             prompt += f"\n[USER GUIDANCE] {guidance.strip()}"

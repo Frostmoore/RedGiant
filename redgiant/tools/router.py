@@ -22,8 +22,25 @@ from redgiant.tools.base import Scope, ToolResult, ToolSpec
 
 
 def default_catalog(cfg: Config, scope: Scope,
-                    test_commands: dict[str, list[str]]) -> dict[str, ToolSpec]:
+                    test_commands: dict[str, list[str]],
+                    persist_test_commands=None) -> dict[str, ToolSpec]:
     rg_bin = None  # risolto lazy: non tutti i task usano search_code
+
+    def _register(cmd_id: str, argv: list[str]) -> ToolResult:
+        """F2 (richiesta utente): il modello scopre e registra i comandi di test.
+        Guardia: l'eseguibile DEVE stare nella shell_whitelist umana."""
+        cmd_id = cmd_id.strip()
+        if not cmd_id or not argv:
+            return ToolResult(ok=False, data={}, error="bad_args")
+        if argv[0] not in cfg.security.shell_whitelist:
+            return ToolResult(ok=False,
+                              data={"whitelist": list(cfg.security.shell_whitelist)},
+                              error=f"executable_not_whitelisted:{argv[0]}")
+        test_commands[cmd_id] = list(argv)  # stesso dict visto da run_tests e verify
+        if persist_test_commands is not None:
+            persist_test_commands(dict(test_commands))
+        return ToolResult(ok=True, data={"registered": {cmd_id: argv}},
+                          evidence=[f"registered test command '{cmd_id}' = {argv}"])
 
     def _search(pattern: str, glob: str | None = None, max_results: int = 50) -> ToolResult:
         nonlocal rg_bin
@@ -51,9 +68,13 @@ def default_catalog(cfg: Config, scope: Scope,
                  "medium", True, False, 10.0, fs.WriteFileArgs, partial(fs.write_file, scope)),
         ToolSpec("write_patch", "Apply a unified diff to one file (for multi-spot edits).",
                  "medium", True, False, 10.0, fs.WritePatchArgs, partial(fs.write_patch, scope)),
-        ToolSpec("run_tests", "Run a whitelisted test command by its cmd_id.",
+        ToolSpec("run_tests", "Run a registered test command by its cmd_id.",
                  "medium", True, False, 300.0, proc.RunTestsArgs,
                  partial(proc.run_tests, scope, test_commands, cfg.security.shell_whitelist)),
+        ToolSpec("register_test_command", "Register how tests are run in this repo "
+                 "(cmd_id + argv, e.g. ['pytest','-q']) after discovering it from the "
+                 "project files. The executable must be whitelisted.",
+                 "medium", True, False, 5.0, proc.RegisterTestCommandArgs, _register),
         ToolSpec("git_status", "Show changed paths in the task repo (porcelain).",
                  "low", True, False, 30.0, proc.GitStatusArgs, partial(proc.git_status, scope)),
         ToolSpec("git_diff", "Show the unified diff against a ref (default HEAD).",

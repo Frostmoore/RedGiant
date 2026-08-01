@@ -129,7 +129,21 @@ class JobQueue:
 
         tc = read_task_config(self.cfg.paths.tasks_dir, task_id)
         scope = Scope(Path(state.target_dir), tc["writable_globs"])
-        catalog = default_catalog(self.cfg, scope, tc["test_commands"])
+        # F2 (richiesta utente): i comandi di test li trova il SISTEMA — scoperta
+        # deterministica dal repo, la config esplicita dell'utente vince sul merge.
+        from redgiant.tools.proc import discover_test_commands
+        test_commands = {**discover_test_commands(scope.root,
+                                                  self.cfg.security.shell_whitelist),
+                         **tc["test_commands"]}
+
+        def _persist(cmds: dict) -> None:
+            p = self.cfg.paths.tasks_dir / task_id / "task_config.json"
+            data = read_task_config(self.cfg.paths.tasks_dir, task_id)
+            data["test_commands"] = cmds
+            p.write_text(json.dumps(data), encoding="utf-8")
+
+        catalog = default_catalog(self.cfg, scope, test_commands,
+                                  persist_test_commands=_persist)
         if tc.get("approve_writes"):
             from dataclasses import replace
             for name in ("edit_file", "write_file", "write_patch"):
