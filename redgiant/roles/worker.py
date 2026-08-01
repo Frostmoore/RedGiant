@@ -145,7 +145,10 @@ class Worker(Role):
             # F2.5 (loop da 12 step) + retest D2: la ripetizione va contata in modo
             # CUMULATIVO per (tool, errore) nel tentativo — quella consecutiva era
             # aggirabile alternando letture ok tra un fallimento e l'altro.
-            if not result.ok:
+            if not result.ok and not (call.tool == "run_tests"
+                                      and result.error == "tests_failed"):
+                # i test ROSSI durante l'iterazione sono l'oracolo che parla, non
+                # un tool rotto: non contano per l'aborto (il tetto e' max_steps)
                 fk = (call.tool, result.error)
                 fail_counts[fk] = fail_counts.get(fk, 0) + 1
                 n = fail_counts[fk]

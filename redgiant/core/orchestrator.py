@@ -251,7 +251,8 @@ class Orchestrator:
         state = self.store.load_task(task_id)
         volatile = ("Produce the global plan for the task.\n"
                     f"Repository files:\n{self._repo_listing()}\n"
-                    f"Available test command ids: {sorted(self._test_cmd_ids())}")
+                    f"Available test command ids: {sorted(self._test_cmd_ids())}"
+                    f"{self._test_excerpts()}")
         planner = Planner(self.llm, self.assembler, self.router)
         out = planner.run(RoleContext(task=state, subtask=None, volatile=volatile))
         self.store.save_plan(task_id, Plan(version=1, goal=out.goal,
@@ -291,7 +292,8 @@ class Orchestrator:
                     + json.dumps([p.model_dump() for p in completed]) + "\n"
                     f"Old plan: {state.plan.model_dump_json()}\n"
                     f"Repository files:\n{self._repo_listing()}\n"
-                    f"Available test command ids: {sorted(self._test_cmd_ids())}\n"
+                    f"Available test command ids: {sorted(self._test_cmd_ids())}"
+                    f"{self._test_excerpts()}\n"
                     "Produce a corrected plan; do not repeat the failed approach.")
         planner = Planner(self.llm, self.assembler, self.router)
         try:
