@@ -1,0 +1,5 @@
+# Profilo dev-fast: llama-server CUDA su questo PC (RTX 4080 Super).
+# SOLO per iterare sul codice: nessuna metrica ufficiale da questo profilo (D6).
+
+[llm]
+base_url = "http://127.0.0.1:8080"

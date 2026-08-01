@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redgiant"
+version = "1.0.2"
+description = "Red Giant — agentic system for tiny local models (Gemma 4 E2B) on non-prosumer hardware"
+requires-python = ">=3.12"
+# Versioni esatte (D14). Aggiornarle e' una decisione, non un side-effect:
+# si cambia qui, si rigenera requirements.lock, si annota nel commit.
+dependencies = [
+    "pydantic==2.13.4",
+    "httpx==0.28.1",
+    "fastapi==0.141.1",
+    "uvicorn==0.52.0",
+    "jinja2==3.1.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pip-tools==7.6.0",
+]
+
+[project.scripts]
+rg = "redgiant.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["redgiant*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "llm: integration tests that require a running llama-server (deselect with '-m \"not llm\"')",
+]

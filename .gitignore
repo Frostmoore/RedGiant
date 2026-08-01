@@ -1,0 +1,15 @@
+# artefatti Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.pytest_cache/
+
+# pesi del modello (ricreabili con scripts/download-model.ps1)
+models/
+
+# stato runtime (DB, log task, slot KV)
+data/
+
+# risultati grezzi dei bench (i report .md/.csv aggregati SONO committati)
+bench/results/raw/

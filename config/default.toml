@@ -1,0 +1,37 @@
+# Red Giant — configurazione di default (piano §A6).
+# I profili in config/profiles/*.toml sovrascrivono solo le chiavi che differiscono.
+# llama.cpp version pin: <DA FISSARE IN F0.2> — cambiarlo = rifare bench F0.5.
+
+[llm]
+base_url = "http://127.0.0.1:8080"   # endpoint llama-server del profilo
+ctx_size = 8192                      # tetto duro per chiamata (D8; rivisto in F0.6 coi numeri)
+timeout_s = 600                      # alto: su CPU una chiamata lunga e' normale, non un errore
+temperature = 0.2                    # default; override per ruolo in futuro [roles.<name>]
+max_tokens_default = 1024            # tetto generazione se il ruolo non specifica
+
+[paths]
+db = "data/redgiant.db"
+models_dir = "models/"
+tasks_dir = "data/tasks/"            # log e artefatti per task
+slots_dir = "data/slots/"            # (F5) KV salvate
+ripgrep = "rg"                       # binario di sistema
+
+[budget]                             # default per task; l'Assessor (F6) li modula
+max_total_tokens = 32000
+max_tool_calls = 100
+max_retries_per_subtask = 2          # specsheet §13
+max_wall_s = 7200
+
+[worker]
+max_steps = 20                       # passi ReAct per sottofase (D20)
+
+[web]
+host = "127.0.0.1"
+port = 8090
+
+[security]
+writable_globs = []                  # riempito per task, mai globale
+shell_whitelist = ["pytest", "php", "composer", "git"]
+
+[eval]
+tasks_dir = "redgiant/eval/tasks"
