@@ -2,7 +2,8 @@
 {% block content %}
 <h2>Nuovo task</h2>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-<form class="card" method="post" action="/tasks">
+<form class="card" method="post" action="/tasks"
+      onsubmit="const b=this.querySelector('button:last-of-type'); b.disabled=true; b.textContent='Avvio…'">
   <label>Richiesta</label>
   <textarea name="prompt" rows="3" required>{{ form.prompt if form else "" }}</textarea>
   <label>Directory bersaglio (assoluta)</label>

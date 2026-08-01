@@ -60,6 +60,12 @@ class JobQueue:
         self._thread = threading.Thread(target=self._worker, daemon=True,
                                         name="redgiant-jobqueue")
         self._thread.start()
+        # ripresa post-riavvio (feedback F2.5): i task queued/running nel DB
+        # esistono solo li' — la coda in-memory muore col processo. Si riaccodano
+        # (l'Orchestrator reclama le sottofasi running orfane).
+        for t in self.store.list_tasks(200):
+            if t["status"] in ("queued", "running"):
+                self.submit(t["id"])
 
     # ── API ──────────────────────────────────────────────────────────────────
 

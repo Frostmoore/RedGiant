@@ -3,6 +3,11 @@
      {% if t.status in ("queued", "running", "blocked") %}
      hx-get="/tasks/{{ t.id }}/tree" hx-trigger="every 2s" hx-swap="outerHTML"
      {% endif %}>
+  {% if t.status == "queued" %}
+  <p class="muted">⏳ in coda{% if t.id in queue %} (posizione {{ queue.index(t.id) + 1 }}){% endif %}
+     — parte appena l'inferenza corrente termina: una alla volta per design (D7).
+     Le sottofasi compariranno all'avvio.</p>
+  {% endif %}
   <p>
     <span class="badge b-{{ t.status }}">{{ t.status }}</span>
     {% if t.plan %}<span class="muted"> · piano v{{ t.plan.version }}: {{ t.plan.goal[:80] }}</span>{% endif %}
