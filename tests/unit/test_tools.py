@@ -75,6 +75,37 @@ def test_write_patch_creates_new_file(scope, root):
     assert (root / "src" / "new.py").read_text(encoding="utf-8") == "x = 1\ny = 2\n"
 
 
+def test_edit_file_unique_replacement(scope, root):
+    r = fs.edit_file(scope, "src/a.py", "return 1", "return 2")
+    assert r.ok and r.data["replaced"] == 1
+    assert "return 2" in (root / "src" / "a.py").read_text(encoding="utf-8")
+
+
+def test_write_file_creates_and_respects_scope(scope, root):
+    r = fs.write_file(scope, "src/fresh.py", "a = 1\n")
+    assert r.ok and r.data["created"]
+    assert (root / "src" / "fresh.py").read_text(encoding="utf-8") == "a = 1\n"
+    r = fs.write_file(scope, "outside.txt", "x")
+    assert not r.ok and r.error.startswith("scope:")
+
+
+def test_edit_file_strips_lineno_prefixes(scope, root):
+    # il modello copia 'N<TAB>' da read_file: l'ambiente normalizza
+    r = fs.edit_file(scope, "src/a.py", "1\tdef f():\n2\t    return 1", "def f():\n    return 9")
+    assert r.ok
+    assert "return 9" in (root / "src" / "a.py").read_text(encoding="utf-8")
+
+
+def test_edit_file_rejects_ambiguous_and_missing(scope, root):
+    (root / "src" / "dup.py").write_text("x = 1\nx = 1\n", encoding="utf-8")
+    r = fs.edit_file(scope, "src/dup.py", "x = 1", "x = 2")
+    assert not r.ok and r.error == "not_unique" and r.data["occurrences"] == 2
+    r = fs.edit_file(scope, "src/dup.py", "GHOST", "y")
+    assert not r.ok and r.error == "not_found_in_file"
+    r = fs.edit_file(scope, "src/dup.py", "x = 1", "x = 2", replace_all=True)
+    assert r.ok and r.data["replaced"] == 2
+
+
 # ── run_tests ────────────────────────────────────────────────────────────────
 
 def test_run_tests_rejects_unknown_and_unwhitelisted(scope):

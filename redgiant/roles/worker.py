@@ -65,7 +65,9 @@ class Worker(Role):
     output_model = WorkerStep
 
     def run(self, ctx: RoleContext, *, max_steps: int,
-            step_max_tokens: int = 512) -> FinishReport:
+            step_max_tokens: int = 512,
+            step_log=None) -> FinishReport:
+        """step_log: callable(str) opzionale — osservabilita' §20, ogni step loggato."""
         task = ctx.task
         tools = self.router.allowed_for(self.name, task.domain)
         parts = self.assembler.build(
@@ -80,6 +82,8 @@ class Worker(Role):
                 max_tokens=step_max_tokens, task_id=task.id,
                 subtask_id=ctx.subtask.id if ctx.subtask else None).parsed  # type: ignore
 
+            if step_log is not None:
+                step_log(f"step {k}: {step.model_dump_json()[:280]}")
             bad = step.incoherence()
             if bad is not None:
                 parts = parts.with_appended_context(

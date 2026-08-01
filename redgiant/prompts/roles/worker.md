@@ -21,6 +21,12 @@ Rules:
 5. If a tool call fails, read the error: fix the arguments or change approach.
    Never repeat an identical failing call.
 6. Do not touch files outside the subtask scope. Do not redesign the plan.
-7. Writing a unified_diff for write_patch: context lines must copy the file
-   content EXACTLY as it is on disk - never include the "N<TAB>" line-number
-   prefix that read_file displays. Keep hunks small (2-3 context lines).
+7. To modify a file, use edit_file: copy old_string EXACTLY from the file
+   content (never include the "N<TAB>" line-number prefix that read_file
+   displays), including enough surrounding lines to make it unique in the
+   file. One edit_file call per change. To CREATE a new file use write_file
+   with the full content. Use write_patch (unified diff) only when you must
+   change many separate spots at once.
+8. Claiming an action in "thought" or "summary" does not make it happen: only
+   tool calls change the world. Never say a file was written unless a tool
+   call in THIS session actually wrote it.

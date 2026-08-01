@@ -43,7 +43,13 @@ def default_catalog(cfg: Config, scope: Scope,
                  "low", True, False, 10.0, fs.ListFilesArgs, partial(fs.list_files, scope)),
         ToolSpec("search_code", "Search file contents with a regex (ripgrep).",
                  "low", True, False, 30.0, search.SearchCodeArgs, _search),
-        ToolSpec("write_patch", "Apply a unified diff to one file inside the writable scope.",
+        ToolSpec("edit_file", "Replace an exact string in a file (must match exactly once). "
+                 "PRIMARY editing tool.",
+                 "medium", True, False, 10.0, fs.EditFileArgs, partial(fs.edit_file, scope)),
+        ToolSpec("write_file", "Create a NEW small text file (or fully overwrite one) with "
+                 "the given content.",
+                 "medium", True, False, 10.0, fs.WriteFileArgs, partial(fs.write_file, scope)),
+        ToolSpec("write_patch", "Apply a unified diff to one file (for multi-spot edits).",
                  "medium", True, False, 10.0, fs.WritePatchArgs, partial(fs.write_patch, scope)),
         ToolSpec("run_tests", "Run a whitelisted test command by its cmd_id.",
                  "medium", True, False, 300.0, proc.RunTestsArgs,
@@ -80,6 +86,9 @@ class ToolRouter:
             result = ToolResult(ok=False, data={"known": sorted(self.catalog)},
                                 error="unknown_tool")
             return self._done(task_id, subtask_id, name, args, result, t0)
+        # tolleranza F1.11: i modelli piccoli echeggiano il nome del tool negli args
+        if args.get("tool") == name:
+            args = {k: v for k, v in args.items() if k != "tool"}
         try:
             parsed = spec.input_model.model_validate(args)
         except ValidationError as e:

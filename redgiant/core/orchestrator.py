@@ -137,7 +137,8 @@ class Orchestrator:
 
         ctx = RoleContext(task=state, subtask=spec, volatile=volatile)
         try:
-            report = worker.run(ctx, max_steps=self.cfg.worker_max_steps)
+            report = worker.run(ctx, max_steps=self.cfg.worker_max_steps,
+                                step_log=lambda m: log.line("step", m))
         except LlmError as e:
             log.line("worker", f"{spec.id} LLM error: {e}")
             from redgiant.roles.worker import FinishReport
