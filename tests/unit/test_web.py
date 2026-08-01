@@ -125,6 +125,30 @@ def test_creation_without_test_commands_is_allowed(client):
     assert r.status_code == 303
 
 
+def test_grant_override_and_revoke(client):
+    c, app, tmp = client
+    store = app.state.store
+    tid = store.create_task("t", str(tmp), "dev-fast",
+                            Budget(max_total_tokens=1, max_tool_calls=1,
+                                   max_retries_per_subtask=1, max_wall_s=1))
+    aid = store.add_approval(tid, kind="irreversible_op",
+                             payload=json.dumps({"tool": "edit_file",
+                                                 "args": {"path": "s.py"}}))
+    store.answer_approval(aid, "no")
+    key = json.dumps({"path": "s.py"}, sort_keys=True)
+    assert store.consume_matching_approval(tid, "edit_file", key) == "no"
+    # override no -> yes (richiesta utente)
+    r = c.post(f"/approvals/{aid}/override", data={"answer": "yes"},
+               follow_redirects=False)
+    assert r.status_code == 303
+    assert store.consume_matching_approval(tid, "edit_file", key) == "yes"
+    # revoca: la grant sparisce, si richiedera'
+    c.post(f"/approvals/{aid}/override", data={"answer": "revoke"})
+    assert store.consume_matching_approval(tid, "edit_file", key) is None
+    # una grant revocata non e' piu' attiva: override -> 409
+    assert c.post(f"/approvals/{aid}/override", data={"answer": "no"}).status_code == 409
+
+
 def test_metrics_page(client):
     c, _, _ = client
     assert c.get("/metrics").status_code == 200

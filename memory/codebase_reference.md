@@ -104,6 +104,8 @@ class StateStore
     def add_approval(self, task_id: str, *, kind: str, payload: str) -> int
     def pending_approvals(self, task_id: str | None = None) -> list[dict]
     def answer_approval(self, approval_id: int, answer: str) -> str
+    def list_grants(self, task_id: str | None = None) -> list[dict]
+    def override_approval(self, approval_id: int, answer: str | None) -> str
     def consume_matching_approval(self, task_id: str, tool: str, args_json: str) -> str | None
     def latest_clarification_answer(self, task_id: str) -> str | None
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str, target: str | None = None) -> None

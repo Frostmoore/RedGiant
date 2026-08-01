@@ -320,6 +320,36 @@ class StateStore:
                            str(approval_id))
             return row["task_id"]
 
+    def list_grants(self, task_id: str | None = None) -> list[dict]:
+        """Le concessioni attive (answered): visibili e ribaltabili dall'utente (F2.5)."""
+        q = ("SELECT id, task_id, kind, payload, answer FROM approvals"
+             " WHERE status='answered' AND kind='irreversible_op'")
+        args: tuple = ()
+        if task_id is not None:
+            q += " AND task_id=?"
+            args = (task_id,)
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(q + " ORDER BY id DESC", args).fetchall()]
+
+    def override_approval(self, approval_id: int, answer: str | None) -> str:
+        """Ribalta o revoca una grant (richiesta utente: 'devo poter overriddare il no').
+        answer 'yes'/'no' = nuova risposta; None = revoca (expired: si richiedera')."""
+        with self._conn() as c:
+            row = c.execute("SELECT task_id, status FROM approvals WHERE id=?",
+                            (approval_id,)).fetchone()
+            if row is None:
+                raise KeyError(approval_id)
+            if row["status"] != "answered":
+                raise ValueError("not an active grant")
+            if answer is None:
+                c.execute("UPDATE approvals SET status='expired' WHERE id=?", (approval_id,))
+                self._decision(c, row["task_id"], "user", "grant_revoked", "", str(approval_id))
+            else:
+                c.execute("UPDATE approvals SET answer=? WHERE id=?", (answer, approval_id))
+                self._decision(c, row["task_id"], "user", "grant_override", answer,
+                               str(approval_id))
+            return row["task_id"]
+
     def consume_matching_approval(self, task_id: str, tool: str, args_json: str) -> str | None:
         """F2.3: alla ri-esecuzione di un tool sospeso, consuma l'approvazione risposta
         che matcha; ritorna la risposta ('yes'/'no') o None.

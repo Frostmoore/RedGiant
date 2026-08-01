@@ -19,4 +19,27 @@
   {% endif %}
 </form>
 {% endfor %}
+
+{% if grants %}
+<h3>Concessioni attive</h3>
+<p class="muted">Valgono per tutto il task. Puoi ribaltarle o revocarle (alla prossima
+scrittura ti verrà richiesto di nuovo).</p>
+<table>
+  <tr><th>task</th><th>concessione</th><th>risposta</th><th></th></tr>
+  {% for g in grants %}
+  <tr>
+    <td><a href="/tasks/{{ g.task_id }}">{{ g.task_id[-8:] }}</a></td>
+    <td><code>{{ g.summary }}</code></td>
+    <td><span class="badge {{ 'b-completed' if g.answer == 'yes' else 'b-failed' }}">{{ g.answer }}</span></td>
+    <td>
+      <form method="post" action="/approvals/{{ g.id }}/override" style="display:inline">
+        {% if g.answer == "no" %}<button name="answer" value="yes">rendi sì</button>
+        {% else %}<button name="answer" value="no" class="secondary">rendi no</button>{% endif %}
+        <button name="answer" value="revoke" class="secondary">revoca</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
 {% endblock %}

@@ -182,6 +182,14 @@ def create_app(cfg: Config) -> FastAPI:
 
     # ── approvals ────────────────────────────────────────────────────────────
 
+    def _resume_if_blocked(task_id: str) -> None:
+        for r in store.list_subtasks(task_id):
+            if r["status"] == "blocked":
+                store.set_subtask_status(task_id, r["subtask_id"], "pending", actor="user")
+        if store.load_task(task_id).status == "blocked":
+            store.set_task_status(task_id, "queued", actor="user", error=None)
+            jobs.submit(task_id)
+
     @app.get("/approvals", response_class=HTMLResponse)
     def approvals(request: Request):
         items = []
@@ -189,7 +197,27 @@ def create_app(cfg: Config) -> FastAPI:
             a = dict(a)
             a["payload_pretty"] = json.dumps(json.loads(a["payload"]), indent=1)[:800]
             items.append(a)
-        return page(request, "approvals.html", items=items)
+        grants = []
+        for g in store.list_grants():
+            g = dict(g)
+            p = json.loads(g["payload"])
+            g["summary"] = f"{p.get('tool')} → {(p.get('args') or {}).get('path', '?')}"
+            grants.append(g)
+        return page(request, "approvals.html", items=items, grants=grants)
+
+    @app.post("/approvals/{approval_id}/override")
+    def approval_override(approval_id: int, answer: str = Form(...)):
+        """Richiesta utente: 'devo poter overriddare il negate'. yes/no/revoke."""
+        try:
+            task_id = store.override_approval(
+                approval_id, None if answer == "revoke" else answer)
+        except KeyError:
+            return HTMLResponse("grant sconosciuta", status_code=404)
+        except ValueError:
+            return HTMLResponse("non è una grant attiva", status_code=409)
+        if answer == "yes":
+            _resume_if_blocked(task_id)
+        return RedirectResponse("/approvals", status_code=303)
 
     @app.post("/approvals/{approval_id}")
     def approval_answer(approval_id: int, answer: str = Form(...)):
@@ -199,15 +227,7 @@ def create_app(cfg: Config) -> FastAPI:
             return HTMLResponse("richiesta sconosciuta", status_code=404)
         except ValueError:
             return HTMLResponse("gia' risposta", status_code=409)
-        # ripartenza: sottofasi blocked -> pending, task -> queued, resubmit
-        for r in store.list_subtasks(task_id):
-            if r["status"] == "blocked":
-                store.set_subtask_status(task_id, r["subtask_id"], "pending", actor="user")
-        st = store.load_task(task_id)
-        if st.status == "blocked":
-            store.set_task_status(task_id, "queued", actor="user",
-                                  error=None)
-            app.state.jobs.submit(task_id)
+        _resume_if_blocked(task_id)
         return RedirectResponse("/approvals", status_code=303)
 
     # ── metrics ──────────────────────────────────────────────────────────────
