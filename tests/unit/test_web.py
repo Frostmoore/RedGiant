@@ -82,6 +82,11 @@ def test_approval_flow_answer_and_requeue(client):
         tid, "write_file",
         json.dumps({"path": "x", "content": "altro edit"}, sort_keys=True))
     assert ans == "yes"  # stessa path, edit diverso: ancora concesso
+    # famiglia di scrittura: la grant su write_file vale anche per edit_file
+    ans = store.consume_matching_approval(
+        tid, "edit_file", json.dumps({"path": "x", "old_string": "a",
+                                      "new_string": "b"}, sort_keys=True))
+    assert ans == "yes"
     assert store.consume_matching_approval(
         tid, "write_file", json.dumps({"path": "ALTRO_FILE"}, sort_keys=True)) is None
 

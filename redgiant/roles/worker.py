@@ -78,6 +78,8 @@ class Worker(Role):
         from redgiant.llm.client import LlmTruncated
 
         last_call_sig: str | None = None
+        last_fail_key: tuple | None = None
+        fail_streak = 0
         for k in range(1, max_steps + 1):
             try:
                 step: WorkerStep = self.llm.complete(
@@ -124,6 +126,26 @@ class Worker(Role):
                 repeat_note = ("\n[NOTE] identical call repeated - change approach "
                                "or finish (blocked) instead of retrying it again.")
             last_call_sig = sig
+
+            # F2.5 (loop da 12 step): la ripetizione VA fermata anche quando i
+            # tentativi variano nei dettagli — conta (tool, errore), non i byte.
+            fail_key = (call.tool, result.error) if not result.ok else None
+            if fail_key is not None and fail_key == last_fail_key:
+                fail_streak += 1
+            else:
+                fail_streak = 1 if fail_key is not None else 0
+            last_fail_key = fail_key
+            if fail_streak >= 6:
+                return FinishReport(
+                    status="blocked",
+                    summary=f"tool '{call.tool}' failed {fail_streak} times in a row "
+                            f"with '{result.error}': aborting this attempt early",
+                    evidence=[], verification_requested=[])
+            if fail_streak == 3:
+                repeat_note += (f"\n[ADVICE] '{call.tool}' has now failed {fail_streak} "
+                                f"times with '{result.error}'. STOP retrying it the same "
+                                f"way: switch tool (e.g. write_file to rewrite the whole "
+                                f"file - you already read its content) or finish blocked.")
 
             parts = parts.with_appended_context(
                 f"\n[STEP {k}] {step.model_dump_json()}"

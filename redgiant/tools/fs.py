@@ -135,12 +135,15 @@ def edit_file(scope: Scope, path: str, old_string: str, new_string: str,
         return ToolResult(ok=False, data={}, error=f"scope:{e}")
     if not real.is_file():
         return ToolResult(ok=False, data={}, error="not_found")
-    text = real.read_text(encoding="utf-8", errors="replace")
+    # Trappola F2.5 (loop da 12 step): i checkout git su Windows sono CRLF ma
+    # read_file mostra LF -> l'old_string del modello non matcha MAI. Si lavora
+    # e si scrive in LF: l'ambiente non deve mentire al modello.
+    text = real.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
     # F1.11: i modelli copiano SEMPRE i prefissi 'N<TAB>' di read_file, regola o
     # non regola. L'ambiente si adatta: prefissi normalizzati via da entrambe.
     strip = __import__("re").compile(r"^\d+\t", __import__("re").MULTILINE)
-    old_string = strip.sub("", old_string)
-    new_string = strip.sub("", new_string)
+    old_string = strip.sub("", old_string).replace("\r\n", "\n")
+    new_string = strip.sub("", new_string).replace("\r\n", "\n")
     n = text.count(old_string)
     if n == 0:
         return ToolResult(ok=False, data={"hint": "copy old_string EXACTLY from the file, "

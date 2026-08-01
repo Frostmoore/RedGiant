@@ -103,6 +103,15 @@ def test_write_file_strips_lineno_prefixes_with_guard(scope, root):
     assert "3\tz = 3" in (root / "src" / "u.txt").read_text(encoding="utf-8")
 
 
+def test_edit_file_matches_crlf_files(scope, root):
+    # Trappola F2.5: checkout git Windows = CRLF, il modello scrive LF
+    (root / "src" / "win.py").write_bytes(b"def f():\r\n    return 1\r\n")
+    r = fs.edit_file(scope, "src/win.py", "def f():\n    return 1",
+                     "def f():\n    return 2")
+    assert r.ok
+    assert "return 2" in (root / "src" / "win.py").read_text(encoding="utf-8")
+
+
 def test_edit_file_strips_lineno_prefixes(scope, root):
     # il modello copia 'N<TAB>' da read_file: l'ambiente normalizza
     r = fs.edit_file(scope, "src/a.py", "1\tdef f():\n2\t    return 1", "def f():\n    return 9")

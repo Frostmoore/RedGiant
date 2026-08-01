@@ -366,9 +366,15 @@ class StateStore:
             rows = c.execute(
                 "SELECT id, payload, answer FROM approvals WHERE task_id=? AND"
                 " kind='irreversible_op' AND status='answered'", (task_id,)).fetchall()
+            write_family = {"edit_file", "write_file", "write_patch"}
             for r in rows:
                 p = json.loads(r["payload"])
-                if p.get("tool") != tool:
+                p_tool = p.get("tool")
+                # F2.5: stessa famiglia di rischio = stessa grant — approvare la
+                # scrittura su un file vale per TUTTI i tool di scrittura su quel file
+                same_tool = (p_tool == tool or
+                             (p_tool in write_family and tool in write_family))
+                if not same_tool:
                     continue
                 p_args = p.get("args") or {}
                 same_path = ("path" in p_args and "path" in args
@@ -436,9 +442,12 @@ class StateStore:
         """Aggregato dal DB: una sola fonte di verita', mai contatori in RAM.
         wall_s la calcola il BudgetTracker (dal created_at del task)."""
         with self._conn() as c:
+            # F2.5: il budget misura il LAVORO, non la dimensione dei prompt — i token
+            # serviti dalla KV cache non costano: (prompt - cached) + gen. Contare il
+            # prompt intero a ogni step gonfiava il consumo quadraticamente.
             llm = c.execute(
-                "SELECT COALESCE(SUM(prompt_tokens + gen_tokens), 0) AS t FROM llm_calls"
-                " WHERE task_id=?", (task_id,)).fetchone()
+                "SELECT COALESCE(SUM(prompt_tokens - cached_tokens + gen_tokens), 0) AS t"
+                " FROM llm_calls WHERE task_id=?", (task_id,)).fetchone()
             tools = c.execute("SELECT COUNT(*) AS n FROM tool_calls WHERE task_id=?",
                               (task_id,)).fetchone()
         return BudgetUsed(tokens=llm["t"], tool_calls=tools["n"], wall_s=0.0)

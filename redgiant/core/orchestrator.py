@@ -68,6 +68,13 @@ class Orchestrator:
                 log.line("orchestrator", f"stopping loop: task {state.status}")
                 return state
 
+            # F2.5: prima si guarda se c'e' ancora lavoro — un task che ha finito
+            # si chiude e basta (chiedere un'estensione budget a task completato
+            # e' successo davvero: mai piu')
+            spec = self._next_subtask(state)
+            if spec is None:
+                return self._finalize(state)
+
             key = tracker.exceeded()
             if key is not None:
                 outcome = self._handle_budget_exhaustion(task_id, key, tracker, log)
@@ -76,10 +83,6 @@ class Orchestrator:
                 # estensione concessa: budget ricaricato, si prosegue
                 tracker = BudgetTracker(self.store,
                                         self.store.load_task(task_id).budget, task_id)
-
-            spec = self._next_subtask(state)
-            if spec is None:
-                return self._finalize(state)
 
             verdict = self._execute_subtask(state, spec, worker, log)
             if verdict is None:  # blocked (approvazione): il loop riprendera' dopo

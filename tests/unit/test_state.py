@@ -75,7 +75,8 @@ def test_budget_used_aggregates_from_db(store, budget):
         subtask_id="P1.S1", tool="read_file", args={"path": "a.py"}, ok=True,
         evidence=["read a.py:1-10"], duration_ms=5.0))
     used = store.budget_used(tid)
-    assert used.tokens == 300 and used.tool_calls == 1
+    # il budget misura il LAVORO: (prompt - cached) + gen = (100-90+50) * 2
+    assert used.tokens == 120 and used.tool_calls == 1
 
 
 def test_plan_versioning_monotonic(store, budget):
