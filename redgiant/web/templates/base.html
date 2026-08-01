@@ -39,6 +39,10 @@
   .tree li { list-style:none; padding:.15rem 0; }
   .tree { padding-left:.4rem; margin:.4rem 0; }
   .muted { color:#9a8f93; font-size:.85rem; }
+  .alive { color:#ffb84d; font-size:.85rem; animation: alivepulse 1.6s ease-in-out infinite; }
+  .alive code { font-size:.78rem; color:#d8cfa8; }
+  .b-running { animation: alivepulse 1.6s ease-in-out infinite; }
+  @keyframes alivepulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
 </style>
 </head>
 <body>

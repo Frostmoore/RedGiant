@@ -117,7 +117,7 @@ def create_app(cfg: Config) -> FastAPI:
         return page(request, "task.html", t=st, subtasks=store.list_subtasks(task_id),
                     used=store.budget_used(task_id),
                     approvals=store.pending_approvals(task_id),
-                    failures=failures)
+                    failures=failures, last_activity=_last_activity(task_id))
 
     @app.post("/tasks/{task_id}/relaunch")
     def task_relaunch(task_id: str, guidance: str = Form("")):
@@ -149,6 +149,14 @@ def create_app(cfg: Config) -> FastAPI:
         jobs.submit(new_id)
         return RedirectResponse(f"/tasks/{new_id}", status_code=303)
 
+    def _last_activity(task_id: str) -> str | None:
+        """Prova di vita (feedback F2.5): l'ultima riga del task.log."""
+        p = cfg.paths.tasks_dir / task_id / "task.log"
+        if not p.is_file():
+            return None
+        lines = p.read_text(encoding="utf-8").splitlines()
+        return lines[-1][:180] if lines else None
+
     @app.get("/tasks/{task_id}/tree", response_class=HTMLResponse)
     def task_tree(request: Request, task_id: str):
         try:
@@ -156,7 +164,8 @@ def create_app(cfg: Config) -> FastAPI:
         except KeyError:
             return HTMLResponse("", status_code=404)
         return page(request, "tree.html", t=st, subtasks=store.list_subtasks(task_id),
-                    used=store.budget_used(task_id))
+                    used=store.budget_used(task_id),
+                    last_activity=_last_activity(task_id))
 
     @app.get("/tasks/{task_id}/log", response_class=HTMLResponse)
     def task_log(request: Request, task_id: str, tail: int = 200):
