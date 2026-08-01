@@ -4,7 +4,7 @@
 
 Red Giant wraps a ~2B-effective-parameter model — **Gemma 4 E2B, Q4 QAT, GGUF, CPU-only** — in a deterministic pipeline of decomposition, continuous verification, minimal context, and KV-cache-aware prompt engineering. The model stays small; the *system* becomes large.
 
-> The name is a deliberate counterpoint to [antirez's **Dwarf Star**](https://github.com/antirez), which targets huge models. Red Giant goes the opposite way: the smallest usable model, on the kind of machine a non-prosumer actually owns — a 15W mini-PC with 4 CPU cores and no usable GPU. Anyone can build agents on a workstation-class GPU box; the interesting problem is closing the gap between local inference on consumer hardware and the inevitable scarcity of that scenario.
+> Most agentic projects chase the biggest model they can reach. Red Giant goes the opposite way: the smallest usable model, on the kind of machine a non-prosumer actually owns — a 15W mini-PC with 4 CPU cores and no usable GPU. Anyone can build agents on a workstation-class GPU box; the interesting problem is closing the gap between local inference on consumer hardware and the inevitable scarcity of that scenario.
 
 **Status:** early development — Phase 0 (foundations & baseline measurements) in progress. This README is updated at the end of every development phase.
 
@@ -27,7 +27,7 @@ Small language models don't fail because they lack intelligence for a single ste
 | **Runtime: llama.cpp `llama-server`, version-pinned** (container digest = the reference) | Direct access to grammar-constrained decoding, KV-cache control (`cache_prompt`, slots, `--slot-save-path`), and separate prefill/generation timings. |
 | **Grammar-constrained decoding on every structured output** (JSON Schema → GBNF) | The sampler *cannot* produce malformed output: the "malformed output retry" failure class is eliminated by construction. Measured overhead: 0.4–10%. |
 | **JSON-only runtime, one small Pydantic schema per role, closed enums** | A 2B model fills 8 constrained fields well and 40 free-text fields badly. Schemas are also the grammar contract. |
-| **Stable prompt prefixes (S1→S7 layout), append-only agent loop** | llama.cpp reuses KV cache only for byte-identical prefixes. Prefill is the dominant cost on CPU — prefill engineering is a first-class goal (the Dwarf Star inspiration). |
+| **Stable prompt prefixes (S1→S7 layout), append-only agent loop** | llama.cpp reuses KV cache only for byte-identical prefixes. Prefill is the dominant cost on CPU — prefill engineering is a first-class goal of the project. |
 | **Strictly sequential, batch-style execution; one inference at a time** | On 4 shared cores, concurrent inference is self-sabotage. Tasks are async jobs (launch, close the page, come back), not a chat. |
 | **Every cognitive role must earn its place** (A/B in a built-in evaluator) | Guard against governance overhead exceeding useful work. Guiding metric: useful tokens / total tokens. A role that doesn't pay for itself is removed. |
 | **Official metrics are CPU-only, on resource-capped profiles** | A dev GPU hides every token-economy problem. The reference profile is a Docker container capped to Severino-equivalent resources. |
