@@ -821,6 +821,9 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
       # e a GUI/CLI (albero) — letture pure, nessun nuovo write-path
       def get_subtask(self, task_id: str, subtask_id: str) -> tuple[SubtaskSpec, SubtaskStatus, int]
       def list_subtasks(self, task_id: str) -> list[dict]
+      # anticipati da F2 (il dispatch §A7 li richiede gia' in F1.4):
+      def add_approval(self, task_id: str, *, kind: str, payload: str) -> int
+      def pending_approvals(self, task_id: str | None = None) -> list[dict]
   ```
   Dettagli di comportamento: `create_task` genera l'ULID, scrive `tasks` + le 4 righe `budgets` in una transazione; `set_subtask_status` incrementa `attempts` quando lo stato entra in `retry`/`repair`; `load_task` ricostruisce `TaskState` dall'ultima versione del piano + aggregati (è LA funzione di ripresa: un processo ucciso a metà task deve poter ripartire da qui); `budget_used` aggrega da `llm_calls`/`tool_calls` — i contatori non si tengono in RAM, si leggono dal DB: una sola fonte di verità.
 - **Casi limite:** doppio `upsert_subtask` sullo stesso id → aggiorna spec, non duplica; DB inesistente → `init_schema` alla prima apertura; task inesistente → `KeyError(task_id)` esplicito.

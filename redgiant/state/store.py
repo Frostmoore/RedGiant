@@ -287,6 +287,23 @@ class StateStore:
                 raise KeyError((task_id, subtask_id))
             self._decision(c, task_id, actor, f"subtask_status={status}", "", subtask_id)
 
+    # ── approvals (schema F2; scrittura gia' necessaria al ToolRouter F1.4) ──
+
+    def add_approval(self, task_id: str, *, kind: str, payload: str) -> int:
+        with self._conn() as c:
+            cur = c.execute("INSERT INTO approvals (task_id, kind, payload, status)"
+                            " VALUES (?,?,?, 'pending')", (task_id, kind, payload))
+            return int(cur.lastrowid)
+
+    def pending_approvals(self, task_id: str | None = None) -> list[dict]:
+        q = "SELECT id, task_id, kind, payload, status FROM approvals WHERE status='pending'"
+        args: tuple = ()
+        if task_id is not None:
+            q += " AND task_id=?"
+            args = (task_id,)
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(q, args).fetchall()]
+
     # ── log e budget ─────────────────────────────────────────────────────────
 
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str,
