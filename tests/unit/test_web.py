@@ -73,10 +73,17 @@ def test_approval_flow_answer_and_requeue(client):
     # doppia risposta -> 409; risposta a id ignoto -> 404
     assert c.post(f"/approvals/{aid}", data={"answer": "yes"}).status_code == 409
     assert c.post("/approvals/99999", data={"answer": "yes"}).status_code == 404
-    # il consumo dell'approvazione matcha tool+args
+    # la grant matcha tool+path ed e' PERMANENTE per il task (non un gettone):
+    # il modello deve poter iterare sul file concesso
     ans = store.consume_matching_approval(tid, "write_file",
                                           json.dumps({"path": "x"}, sort_keys=True))
     assert ans == "yes"
+    ans = store.consume_matching_approval(
+        tid, "write_file",
+        json.dumps({"path": "x", "content": "altro edit"}, sort_keys=True))
+    assert ans == "yes"  # stessa path, edit diverso: ancora concesso
+    assert store.consume_matching_approval(
+        tid, "write_file", json.dumps({"path": "ALTRO_FILE"}, sort_keys=True)) is None
 
 
 def test_relaunch_clones_task_with_guidance(client):

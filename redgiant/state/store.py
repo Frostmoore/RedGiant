@@ -324,10 +324,13 @@ class StateStore:
         """F2.3: alla ri-esecuzione di un tool sospeso, consuma l'approvazione risposta
         che matcha; ritorna la risposta ('yes'/'no') o None.
 
-        Match su (tool, path): l'ambito del consenso e' "questo tool su questo file",
-        non i byte esatti dell'edit — il modello, rieseguendo, rigenera l'edit in forma
-        diversa e l'identita' byte-per-byte costringerebbe a doppie approvazioni
-        (osservato in F2.5). Fallback su args interi se il tool non ha 'path'."""
+        Match su (tool, path) e consenso PERMANENTE per il task (feedback F2.5,
+        secondo giro): approvare "scrivi su stack.py" vale per TUTTO il task — il
+        modello deve poter iterare sul file concesso (correggere un edit sbagliato
+        richiede un'altra scrittura: ri-chiedere ogni volta = riavvii che bruciano
+        budget mentre si aspetta l'umano, osservato dal vivo). Un 'no' e' permanente
+        allo stesso modo. La riga resta 'answered': e' una GRANT, non un gettone.
+        Fallback su args interi se il tool non ha 'path'."""
         args = json.loads(args_json)
         with self._conn() as c:
             rows = c.execute(
@@ -342,7 +345,6 @@ class StateStore:
                              and p_args["path"] == args["path"])
                 same_all = json.dumps(p_args, sort_keys=True) == json.dumps(args, sort_keys=True)
                 if same_path or same_all:
-                    c.execute("UPDATE approvals SET status='expired' WHERE id=?", (r["id"],))
                     return r["answer"]
         return None
 
