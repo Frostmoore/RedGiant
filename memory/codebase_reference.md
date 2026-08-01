@@ -246,6 +246,27 @@ class Worker
     def run(self, ctx: RoleContext, *, max_steps: int, step_max_tokens: int = 512, step_log=None, resume_file=None) -> FinishReport
 ```
 
+### `redgiant/roles/planner.py` + `redgiant/roles/phase_designer.py` — pianificazione (F3)
+
+Planner: mappa sintetica (≤7 fasi), la LOGICA validata deterministicamente (id univoci, dipendenze acicliche, root presente, fasi completate conservate al replanning) con UNA richiamata correttiva poi `PlanRejected`. PhaseDesigner: espande solo la fase corrente (≤6 sottofasi, id `P<x>.S<n>`); D10: ogni sottofase deve avere verifica eseguibile O expected_outputs (l'esistenza è un oracolo); i cmd di verifica devono essere registrati.
+
+```python
+class PlannerOutput      # goal<=300, success_criteria<=6, phases<=7
+def validate_plan_logic(out: PlannerOutput, required_phase_ids: list[str] | None = None) -> list[str]
+class Planner
+    def run(self, ctx: RoleContext, *, max_tokens: int = 1536, required_phase_ids: list[str] | None = None) -> PlannerOutput
+class PlanRejected
+    def __init__(self, problems: list[str]) -> None
+class PhaseDesign        # phase_id, subtasks<=6
+def validate_design_logic(out: PhaseDesign, current_phase_id: str, known_cmd_ids: set[str]) -> list[str]
+class PhaseDesigner
+    def run(self, ctx: RoleContext, *, current_phase_id: str, known_cmd_ids: set[str], max_tokens: int = 2048) -> PhaseDesign
+class DesignRejected
+    def __init__(self, problems: list[str]) -> None
+```
+
+Orchestrator v1 (F3.3/F3.4): piano generato se assente, espansione lazy della sola fase eleggibile, sottofase fallita oltre i retry → **replanning** (max 2; fasi completate immutabili, sottofasi orfane → skipped) → poi `failed` esplicito.
+
 ### `redgiant/core/verify.py` — verifica deterministica (F1.6, D10)
 
 Il trust boundary: tutti i check girano sempre; un check di `verification` sconosciuto è un FAIL (silenzio ≠ successo).
@@ -291,8 +312,10 @@ class EvalTask      # id, domain, prompt, repo_dir, plan_file, success_cmd, time
 class EvalResult    # task_id, completed, verified, skipped, total_tokens, useful_tokens,
                     # wall_s, llm_calls, tool_calls, retries
 def discover_tasks(tasks_dir: Path) -> list[EvalTask]
-def run_eval(profile: str, only: list[str] | None, out_dir: Path) -> Path
-def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path) -> Path
+def run_eval(profile: str, only: list[str] | None, out_dir: Path, use_planner: bool = False) -> Path
+def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path, use_planner: bool = False) -> Path
+# F3.5: use_planner=True ignora plan.json (genera il Planner); False = statico o
+# piano "ingenuo" _naive_plan (baseline D11)
 ```
 
 ### `redgiant/web/jobs.py` + `redgiant/web/app.py` — GUI (F2)

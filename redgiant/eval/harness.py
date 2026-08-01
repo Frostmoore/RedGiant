@@ -86,7 +86,24 @@ def discover_tasks(tasks_dir: Path) -> list[EvalTask]:
     return tasks
 
 
-def run_eval(profile: str, only: list[str] | None, out_dir: Path) -> Path:
+def _naive_plan(task: EvalTask) -> dict:
+    """Baseline F3.5: il piano 'ingenuo' — una fase, una sottofase do-everything.
+    Rappresenta cio' che farebbe un agente naive; e' il gruppo di controllo del
+    Planner (D11)."""
+    first_cmd = next(iter(task.test_commands), None)
+    return {
+        "plan": {"goal": task.prompt[:290], "success_criteria": ["verification passes"],
+                 "phases": [{"id": "P1", "title": "Do the task", "depends_on": [],
+                             "completion_criteria": ["verification passes"]}]},
+        "subtasks": [{
+            "id": "P1.S1", "phase_id": "P1", "title": "Do the task",
+            "objective": task.prompt, "inputs": [], "tools": [],
+            "expected_outputs": [], "completion_criteria": ["verification passes"],
+            "verification": [first_cmd] if first_cmd else []}]}
+
+
+def run_eval(profile: str, only: list[str] | None, out_dir: Path,
+             use_planner: bool = False) -> Path:
     cfg = Config.load(profile)
     store = StateStore(cfg.paths.db)
     llm = LlamaClient(cfg.llm, store)
@@ -108,10 +125,10 @@ def run_eval(profile: str, only: list[str] | None, out_dir: Path) -> Path:
                                       total_tokens=0, useful_tokens=0, wall_s=0.0,
                                       llm_calls=0, tool_calls=0, retries=0))
             continue
-        results.append(_run_one(cfg, store, llm, assembler, task))
+        results.append(_run_one(cfg, store, llm, assembler, task, use_planner))
 
     git_ref = _git_ref()
-    report = write_report(results, profile, git_ref, out_dir)
+    report = write_report(results, profile, git_ref, out_dir, use_planner)
     store_row = StateStore(cfg.paths.db)
     with store_row._conn() as c:  # riga eval_runs (harness = unico scrittore)
         c.execute("INSERT INTO eval_runs (started_at, profile, git_ref, report_path)"
@@ -122,7 +139,8 @@ def run_eval(profile: str, only: list[str] | None, out_dir: Path) -> Path:
 
 
 def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
-             assembler: PromptAssembler, task: EvalTask) -> EvalResult:
+             assembler: PromptAssembler, task: EvalTask,
+             use_planner: bool = False) -> EvalResult:
     workdir = Path(tempfile.mkdtemp(prefix=f"rgeval_{task.id}_"))
     shutil.copytree(task.repo_dir, workdir, dirs_exist_ok=True)
 
@@ -135,8 +153,17 @@ def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
                     max_retries_per_subtask=cfg.budget.max_retries_per_subtask,
                     max_wall_s=min(cfg.budget.max_wall_s, task.timeout_s))
     tid = store.create_task(task.prompt, str(workdir), cfg.profile_name, budget)
-    if task.plan_file is not None:
-        load_static_plan(store, tid, task.plan_file)
+    # F3.5 A/B: con use_planner il piano lo genera il Planner (si IGNORA il
+    # plan.json); senza, si usa il piano statico o quello 'ingenuo' come baseline
+    if not use_planner:
+        if task.plan_file is not None:
+            load_static_plan(store, tid, task.plan_file)
+        else:
+            import json as _json
+            p = workdir / "_naive_plan.json"
+            p.write_text(_json.dumps(_naive_plan(task)), encoding="utf-8")
+            load_static_plan(store, tid, p)
+            p.unlink()
 
     t0 = time.monotonic()
     state = orch.run_task(tid)
@@ -187,15 +214,17 @@ def _metrics(store: StateStore, task_id: str) -> tuple[int, int, int, int, int]:
 
 
 def write_report(results: list[EvalResult], profile: str, git_ref: str,
-                 out_dir: Path) -> Path:
+                 out_dir: Path, use_planner: bool = False) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     official = profile != "dev-fast"
+    mode = "planner" if use_planner else "static"
     ran = [r for r in results if r.skipped is None]
     lines = [
         f"# Evaluator — run {stamp} UTC",
         "",
-        f"Profilo: `{profile}`" + ("" if official else " — ⚠️ NON UFFICIALE (D6)"),
+        f"Profilo: `{profile}` · modalità piano: **{mode}**"
+        + ("" if official else " — ⚠️ NON UFFICIALE (D6)"),
         f" · commit: `{git_ref}` · task: {len(results)}",
         "",
         "| task | completed | verified | tokens | useful | useful% | wall_s | llm calls | tool calls | retries |",
@@ -215,7 +244,7 @@ def write_report(results: list[EvalResult], profile: str, git_ref: str,
         lines += ["",
                   f"**Verified: {v}/{len(ran)}** · forbice completed≠verified: {lied} "
                   f"(deve essere 0) · token totali: {sum(r.total_tokens for r in ran)}"]
-    path = out_dir / f"eval_{profile}_{stamp}.md"
+    path = out_dir / f"eval_{profile}_{mode}_{stamp}.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 

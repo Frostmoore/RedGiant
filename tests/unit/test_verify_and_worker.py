@@ -40,6 +40,46 @@ def _done(evidence=("did it",)):
                         verification_requested=[])
 
 
+def test_plan_logic_validation_and_eligibility():
+    # F3.1: validazioni deterministiche della LOGICA del piano
+    from redgiant.roles.planner import PlannerOutput, validate_plan_logic
+    from redgiant.state.models import PhaseSpec as PS
+    ok = PlannerOutput(goal="g", success_criteria=[], phases=[
+        PS(id="P1", title="a", depends_on=[], completion_criteria=[]),
+        PS(id="P2", title="b", depends_on=["P1"], completion_criteria=[])])
+    assert validate_plan_logic(ok) == []
+    dup = PlannerOutput(goal="g", success_criteria=[], phases=[
+        PS(id="P1", title="a", depends_on=[], completion_criteria=[]),
+        PS(id="P1", title="b", depends_on=[], completion_criteria=[])])
+    assert any("duplicate" in p for p in validate_plan_logic(dup))
+    cyc = PlannerOutput(goal="g", success_criteria=[], phases=[
+        PS(id="P1", title="a", depends_on=["P2"], completion_criteria=[]),
+        PS(id="P2", title="b", depends_on=["P1"], completion_criteria=[])])
+    probs = validate_plan_logic(cyc)
+    assert any("cycle" in p or "root" in p for p in probs)
+    dropped = validate_plan_logic(ok, required_phase_ids=["P9"])
+    assert any("dropped" in p for p in dropped)
+
+
+def test_design_logic_validation():
+    # F3.2: D10 — sottofase senza verifica NE' output = respinta
+    from redgiant.roles.phase_designer import PhaseDesign, validate_design_logic
+    from redgiant.state.models import SubtaskSpec as SS
+    good = PhaseDesign(phase_id="P1", subtasks=[
+        SS(id="P1.S1", phase_id="P1", title="t", objective="o", inputs=[], tools=[],
+           expected_outputs=["a.py"], completion_criteria=[], verification=["pytest"])])
+    assert validate_design_logic(good, "P1", {"pytest"}) == []
+    bad = PhaseDesign(phase_id="P1", subtasks=[
+        SS(id="P1.S1", phase_id="P1", title="t", objective="o", inputs=[], tools=[],
+           expected_outputs=[], completion_criteria=[], verification=[])])
+    assert any("nothing mechanical" in p for p in validate_design_logic(bad, "P1", set()))
+    wrong_cmd = PhaseDesign(phase_id="P1", subtasks=[
+        SS(id="P1.S1", phase_id="P1", title="t", objective="o", inputs=[], tools=[],
+           expected_outputs=[], completion_criteria=[], verification=["ghost"])])
+    assert any("not a known" in p for p in validate_design_logic(wrong_cmd, "P1", {"pytest"}))
+    assert any("phase_id" in p for p in validate_design_logic(good, "P2", {"pytest"}))
+
+
 def test_oracles_beat_claims_in_both_directions(env, tmp_path):
     # F2.5: worker blocked MA output esistente + test verdi -> pass (con warning).
     scope, router, tid = env
@@ -118,6 +158,11 @@ def test_budget_exhaustion_asks_instead_of_killing(env, tmp_path, monkeypatch):
     from redgiant.state.models import LlmCallRow
     scope, router, tid = env
     store = router.store
+    from redgiant.state.models import Plan, PhaseSpec
+    store.save_plan(tid, Plan(version=0, goal="g", success_criteria=[],
+                              phases=[PhaseSpec(id="P1", title="t", depends_on=[],
+                                                completion_criteria=[])]),
+                    actor="system", reason="static (test)")
     store.upsert_subtask(tid, _spec(), actor="t")
     # budget tokens = 1, gia' sforato da una chiamata loggata
     store.log_llm_call(tid, LlmCallRow(

@@ -38,6 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     p_eval.add_argument("--profile", default="severino-sim")
     p_eval.add_argument("--only", default=None, help="lista di id separati da virgola")
     p_eval.add_argument("--out", type=Path, default=Path("bench/results"))
+    p_eval.add_argument("--planner", action="store_true",
+                        help="F3: il piano lo genera il Planner (A/B vs baseline statica)")
 
     p_bench = sub.add_parser("bench", help="wrapper di bench/run_bench.py")
     p_bench.add_argument("--profile", required=True)
@@ -124,7 +126,7 @@ def _print_tree(store, task_id: str) -> None:
 def _eval(ns: argparse.Namespace) -> int:
     from redgiant.eval.harness import run_eval
     only = ns.only.split(",") if ns.only else None
-    report = run_eval(ns.profile, only, ns.out)
+    report = run_eval(ns.profile, only, ns.out, use_planner=ns.planner)
     print(f"report: {report}")
     print(Path(report).read_text(encoding="utf-8"))
     return 0
