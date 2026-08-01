@@ -42,8 +42,12 @@ def main(argv: list[str] | None = None) -> int:
     p_bench = sub.add_parser("bench", help="wrapper di bench/run_bench.py")
     p_bench.add_argument("--profile", required=True)
 
+    p_serve = sub.add_parser("serve", help="avvia la GUI web (F2)")
+    p_serve.add_argument("--profile", default="severino-sim")
+
     ns = parser.parse_args(argv)
-    return {"run": _run, "status": _status, "eval": _eval, "bench": _bench}[ns.cmd](ns)
+    return {"run": _run, "status": _status, "eval": _eval, "bench": _bench,
+            "serve": _serve}[ns.cmd](ns)
 
 
 def _run(ns: argparse.Namespace) -> int:
@@ -123,6 +127,17 @@ def _eval(ns: argparse.Namespace) -> int:
     report = run_eval(ns.profile, only, ns.out)
     print(f"report: {report}")
     print(Path(report).read_text(encoding="utf-8"))
+    return 0
+
+
+def _serve(ns: argparse.Namespace) -> int:
+    import uvicorn
+    from redgiant.config import Config
+    from redgiant.web.app import create_app
+
+    cfg = Config.load(ns.profile)
+    print(f"Red Giant GUI su http://{cfg.web.host}:{cfg.web.port} (profilo {ns.profile})")
+    uvicorn.run(create_app(cfg), host=cfg.web.host, port=cfg.web.port, log_level="warning")
     return 0
 
 

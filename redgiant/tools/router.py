@@ -96,13 +96,23 @@ class ToolRouter:
             return self._done(task_id, subtask_id, name, args, result, t0)
 
         if spec.requires_approval:
-            self.store.add_approval(task_id, kind="irreversible_op",
-                                    payload=json.dumps({"tool": name, "args": args,
-                                                        "subtask_id": subtask_id}))
-            self.store.set_task_status(task_id, "blocked", actor="tool_router",
-                                       error=f"awaiting approval for {name}")
-            result = ToolResult(ok=False, data={}, error="awaiting_approval")
-            return self._done(task_id, subtask_id, name, args, result, t0)
+            # F2.3: se l'utente ha GIA' risposto a questa identica richiesta, consumala
+            answer = self.store.consume_matching_approval(
+                task_id, name, json.dumps(args, sort_keys=True))
+            if answer == "no":
+                result = ToolResult(ok=False, data={"hint": "the user denied this "
+                                                            "operation; choose another way"},
+                                    error="approval_denied")
+                return self._done(task_id, subtask_id, name, args, result, t0)
+            if answer != "yes":
+                self.store.add_approval(task_id, kind="irreversible_op",
+                                        payload=json.dumps({"tool": name, "args": args,
+                                                            "subtask_id": subtask_id}))
+                self.store.set_task_status(task_id, "blocked", actor="tool_router",
+                                           error=f"awaiting approval for {name}")
+                result = ToolResult(ok=False, data={}, error="awaiting_approval")
+                return self._done(task_id, subtask_id, name, args, result, t0)
+            # answer == "yes": si prosegue con l'esecuzione normale qui sotto
 
         try:
             result = spec.handler(**parsed.model_dump())

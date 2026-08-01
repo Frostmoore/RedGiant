@@ -304,6 +304,43 @@ class StateStore:
         with self._conn() as c:
             return [dict(r) for r in c.execute(q, args).fetchall()]
 
+    def answer_approval(self, approval_id: int, answer: str) -> str:
+        """Risponde a una richiesta pending; ritorna il task_id. KeyError se assente,
+        ValueError se gia' risposta (409 in GUI)."""
+        with self._conn() as c:
+            row = c.execute("SELECT task_id, status FROM approvals WHERE id=?",
+                            (approval_id,)).fetchone()
+            if row is None:
+                raise KeyError(approval_id)
+            if row["status"] != "pending":
+                raise ValueError("already answered")
+            c.execute("UPDATE approvals SET status='answered', answer=? WHERE id=?",
+                      (answer, approval_id))
+            self._decision(c, row["task_id"], "user", "approval_answer", answer,
+                           str(approval_id))
+            return row["task_id"]
+
+    def consume_matching_approval(self, task_id: str, tool: str, args_json: str) -> str | None:
+        """F2.3: alla ri-esecuzione di un tool sospeso, consuma l'approvazione risposta
+        che matcha (tool+args); ritorna la risposta ('yes'/'no') o None."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT id, payload, answer FROM approvals WHERE task_id=? AND"
+                " kind='irreversible_op' AND status='answered'", (task_id,)).fetchall()
+            for r in rows:
+                p = json.loads(r["payload"])
+                if p.get("tool") == tool and json.dumps(p.get("args"), sort_keys=True) == args_json:
+                    c.execute("UPDATE approvals SET status='expired' WHERE id=?", (r["id"],))
+                    return r["answer"]
+        return None
+
+    def latest_clarification_answer(self, task_id: str) -> str | None:
+        with self._conn() as c:
+            r = c.execute(
+                "SELECT answer FROM approvals WHERE task_id=? AND kind='clarification'"
+                " AND status='answered' ORDER BY id DESC LIMIT 1", (task_id,)).fetchone()
+        return r["answer"] if r else None
+
     # ── log e budget ─────────────────────────────────────────────────────────
 
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str,

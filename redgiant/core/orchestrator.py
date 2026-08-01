@@ -126,6 +126,9 @@ class Orchestrator:
         log.line("worker", f"start {spec.id} '{spec.title}' (attempt {attempts + 1})")
 
         volatile = f"Subtask spec: {spec.model_dump_json()}"
+        answer = self.store.latest_clarification_answer(task_id)
+        if answer:
+            volatile += f"\n[USER ANSWER] {answer}"
         if attempts > 0:
             prev = next((r["result"] for r in self.store.list_subtasks(task_id)
                          if r["subtask_id"] == spec.id and r["result"]), None)

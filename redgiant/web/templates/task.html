@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Task {{ t.id[-8:] }} — Red Giant{% endblock %}
+{% block content %}
+<h2>Task {{ t.id[-8:] }}</h2>
+<p class="muted">{{ t.request }}</p>
+<p class="muted">target: <code>{{ t.target_dir }}</code> · dominio {{ t.domain }}</p>
+{% if t.error %}<p class="error">{{ t.error }}</p>{% endif %}
+{% include "tree.html" %}
+{% if approvals %}
+<p>⏸ <a href="/approvals">{{ approvals | length }} richieste in attesa della tua risposta</a></p>
+{% endif %}
+<p>
+  <a href="/tasks/{{ t.id }}/log">log completo</a>
+  {% if t.status in ("queued", "running", "blocked") %}
+  · <form method="post" action="/tasks/{{ t.id }}/cancel" style="display:inline">
+      <button class="secondary">annulla</button></form>
+  {% endif %}
+</p>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Metriche</h2>
+<h3>Ultime run dell'Evaluator</h3>
+<table>
+  <tr><th>quando</th><th>profilo</th><th>commit</th><th>report</th></tr>
+  {% for e in evals %}
+  <tr><td>{{ e.started_at[:19] }}</td><td>{{ e.profile }}</td>
+      <td><code>{{ e.git_ref }}</code></td><td><code>{{ e.report_path }}</code></td></tr>
+  {% endfor %}
+</table>
+<h3>Task recenti</h3>
+<table>
+  <tr><th>id</th><th>stato</th><th>richiesta</th></tr>
+  {% for t in tasks %}
+  <tr><td><a href="/tasks/{{ t.id }}">{{ t.id[-8:] }}</a></td>
+      <td><span class="badge b-{{ t.status }}">{{ t.status }}</span></td>
+      <td class="muted">{{ t.request[:60] }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

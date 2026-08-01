@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Task {% if pending %}<a href="/approvals">⏸ {{ pending }} in attesa di risposta</a>{% endif %}</h2>
+{% if not tasks %}<p class="muted">Nessun task. <a href="/tasks/new">Creane uno</a>.</p>{% endif %}
+<table>
+  <tr><th>id</th><th>richiesta</th><th>dominio</th><th>stato</th><th>profilo</th><th>creato</th></tr>
+  {% for t in tasks %}
+  <tr>
+    <td><a href="/tasks/{{ t.id }}">{{ t.id[-8:] }}</a></td>
+    <td>{{ t.request[:70] }}</td>
+    <td>{{ t.domain }}</td>
+    <td><span class="badge b-{{ t.status }}">{{ t.status }}</span></td>
+    <td class="muted">{{ t.profile }}</td>
+    <td class="muted">{{ t.created_at[11:19] }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

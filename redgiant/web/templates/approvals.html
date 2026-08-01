@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Approvazioni e chiarimenti</h2>
+{% if not items %}<p class="muted">Nessuna richiesta in attesa.</p>{% endif %}
+{% for a in items %}
+<form class="card" method="post" action="/approvals/{{ a.id }}" style="margin-bottom:1rem">
+  <b>Task <a href="/tasks/{{ a.task_id }}">{{ a.task_id[-8:] }}</a> —
+     {% if a.kind == "irreversible_op" %}richiede approvazione{% else %}chiede un chiarimento{% endif %}</b>
+  <pre>{{ a.payload_pretty }}</pre>
+  {% if a.kind == "irreversible_op" %}
+    <div>
+      <button name="answer" value="yes">Approva</button>
+      <button name="answer" value="no" class="secondary">Nega</button>
+    </div>
+  {% else %}
+    <label>La tua risposta</label>
+    <input type="text" name="answer" required>
+    <button>Rispondi</button>
+  {% endif %}
+</form>
+{% endfor %}
+{% endblock %}
