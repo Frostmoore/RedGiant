@@ -112,6 +112,7 @@ class StateStore
     def latest_clarification_answer(self, task_id: str) -> str | None
     def extend_budget(self, task_id: str, key: str, add: int) -> None
     def take_budget_extension(self, task_id: str) -> tuple[str, str, int] | None
+    def list_decisions(self, task_id: str) -> list[dict]
     def save_ps_artifact(self, task_id: str, *, kind: str, ref: str, payload_json: str, actor: str) -> int
     def load_ps_artifact(self, task_id: str, kind: str, ref: str = "", version: int | None = None) -> dict
     def list_ps_artifacts(self, task_id: str, kind: str | None = None) -> list[dict]
@@ -298,7 +299,17 @@ class PlansysCfg      # (in config.py) max_phases, max_micro_per_phase, projecti
 def render_macro_plan(plan: MacroPlan) -> str
 def render_blueprint(bp: PhaseBlueprint, vbp: VerificationBlueprint | None, analysis: PhaseAnalysis | None) -> str
 def write_plan_doc(tasks_dir: Path, task_id: str, name: str, content: str) -> Path
+def normalize_signature(sig: str) -> str
+def file_signatures(path: Path) -> list[str]
+def extract_signatures(pkg_dir: Path) -> dict[str, list[str]]
+class LedgerEntry   # kind signature|test|artifact|decision|failure|fact, ref, text<=300
+class TaskLedger    # task_id, entries
+def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger
+def render_ledger(ledger: TaskLedger) -> str
+def project_for_phase(ledger: TaskLedger, plan: MacroPlan, phase_id: str, max_tokens: int, count: Callable[[str], int]) -> str
 ```
+
+**PS1 (Ledger):** `astscan.py` è l'UNICO estrattore di firme del repo (nato in `scripts/check_reference.py`, spostato qui perché il Ledger Builder usa le stesse firme; lo script ora importa da qui). `build_ledger` = deterministico da DB (tool_calls→file toccati, decisions via `StateStore.list_decisions` aggiunto per questo, ps_gates ko→failure, sottofasi completate→artifact) + AST + test file; `project_for_phase` riempie a budget con ordine normativo (criteri e intent SEMPRE, poi firme/test/decisioni/failure, troncamento dichiarato `[LEDGER TRUNCATED…]`).
 
 ### `redgiant/core/verify.py` — verifica deterministica (F1.6, D10)
 
@@ -382,7 +393,7 @@ V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. N
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 60 test, nessuno tocca il modello (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
+`tests/unit/` — 63 test, nessuno tocca il modello (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
 | File | Dimostra |
 |---|---|

@@ -449,6 +449,13 @@ class StateStore:
 
     # ── plansys (PS0.2, piano plan_planner_system.md §PS-A3) ─────────────────
 
+    def list_decisions(self, task_id: str) -> list[dict]:
+        """PS1.1 (Ledger Builder): lettura pura della tabella decisions."""
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(
+                "SELECT * FROM decisions WHERE task_id=? ORDER BY id",
+                (task_id,)).fetchall()]
+
     def save_ps_artifact(self, task_id: str, *, kind: str, ref: str,
                          payload_json: str, actor: str) -> int:
         """Versione = MAX+1 per (task, kind, ref), in transazione. Ritorna la version."""

@@ -15,61 +15,23 @@ Uso:  python scripts/check_reference.py [--package redgiant] [--reference memory
 from __future__ import annotations
 
 import argparse
-import ast
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))  # eseguibile anche senza install -e
+
+# PS1.1: l'estrattore vive in redgiant/plansys/astscan.py (lo usa anche il
+# Ledger Builder); qui si importa — un solo estrattore in tutto il repo.
+from redgiant.plansys.astscan import extract_signatures, normalize_signature  # noqa: E402
+
+_normalize = normalize_signature
 
 _SECTION_RE = re.compile(r"^##\s+\d*\.?\s*Classi e metodi\s*$", re.MULTILINE)
 _NEXT_SECTION_RE = re.compile(r"^##\s+", re.MULTILINE)
 _FENCE_RE = re.compile(r"```python\n(.*?)```", re.DOTALL)
 _DOC_DEF_RE = re.compile(r"^(class\s+\w+(\(.*\))?\s*:?|(?:async\s+)?def\s+\w+\s*\(.*\)(\s*->\s*.+?)?\s*:?)$")
-
-
-def _normalize(sig: str) -> str:
-    sig = sig.strip().rstrip(":")
-    sig = sig.replace("'", "").replace('"', "")        # annotazioni stringa == annotazioni nude
-    sig = re.sub(r"\s+", " ", sig)
-    sig = re.sub(r"\s*([(),:\[\]|=])\s*", r"\1", sig)  # spazi attorno alla punteggiatura
-    sig = sig.replace(",", ", ").replace(":", ": ").replace("|", " | ")
-    sig = re.sub(r"\(\s+", "(", sig).replace(" )", ")")
-    sig = re.sub(r"\s+", " ", sig)
-    sig = sig.replace("->", " -> ")
-    return re.sub(r"\s+", " ", sig).strip()
-
-
-def _func_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-    args = ast.unparse(node.args)
-    ret = f" -> {ast.unparse(node.returns)}" if node.returns else ""
-    prefix = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
-    return _normalize(f"{prefix} {node.name}({args}){ret}")
-
-
-def _class_signature(node: ast.ClassDef) -> str:
-    # le basi non fanno parte del contratto documentale (rumore: _Strict, BaseModel...)
-    return f"class {node.name}"
-
-
-def extract_signatures(pkg_dir: Path) -> dict[str, list[str]]:
-    """Firme reali: {nome_qualificato: [firma_normalizzata]} per tutto il pacchetto.
-    Esclusi i repo-fixture dei task sintetici (eval/tasks/*/repo): sono cavie, non codebase."""
-    out: dict[str, list[str]] = {}
-    for py in sorted(pkg_dir.rglob("*.py")):
-        rel = py.relative_to(pkg_dir).as_posix()
-        if rel.startswith("eval/tasks/"):
-            continue
-        tree = ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                out.setdefault(node.name, []).append(_func_signature(node))
-            elif isinstance(node, ast.ClassDef):
-                out.setdefault(node.name, []).append(_class_signature(node))
-                for sub in node.body:
-                    if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        out.setdefault(f"{node.name}.{sub.name}", []).append(_func_signature(sub))
-    return out
 
 
 def extract_documented(md_path: Path) -> dict[str, list[str]]:

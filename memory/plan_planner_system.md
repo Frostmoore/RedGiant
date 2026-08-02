@@ -4,7 +4,7 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
-**Stato:** 🟢 **PS0 completata** (2026-08-03, `v3.1.0`) — prossima azione: **PS1** (Ledger Builder + proiezioni).
+**Stato:** 🟢 **PS1 completata** (2026-08-03, `v3.2.0`) — prossima azione: **PS2** (Senior Planner + macro validation).
 
 > **La regola che comanda questo documento:**
 > *The Senior defines what must be achieved. The Mid decides how to decompose it and how
@@ -407,7 +407,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS1.1 — TaskLedger e build
 
-- [ ] 🤖 **Obiettivo:** `redgiant/plansys/ledger.py`:
+- [x] 🤖 **Obiettivo:** `redgiant/plansys/ledger.py`: *(fatto; aggiunta in corso d'opera: `StateStore.list_decisions(task_id) -> list[dict]` — lettura pura richiesta dal builder, registrata in atlante)*
   ```python
   class LedgerEntry(BaseModel):
       kind: Literal["signature", "test", "artifact", "decision", "failure", "fact"]
@@ -425,7 +425,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS1.2 — Phase Context Projection
 
-- [ ] 🤖 **Obiettivo:** la proiezione minima per M (PS-D7):
+- [x] 🤖 **Obiettivo:** la proiezione minima per M (PS-D7):
   ```python
   def project_for_phase(ledger: TaskLedger, plan: MacroPlan, phase_id: str,
                         max_tokens: int, count: Callable[[str], int]) -> str
@@ -435,7 +435,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS1.3 — 🔎 Verifica di fase
 
-- [ ] Ledger e proiezione verdi su fixture; `ledger.md` renderizzato e greppabile; determinismo dimostrato (due build identiche); atlante aggiornato.
+- [x] Ledger e proiezione verdi su fixture; `ledger.md` renderizzato e greppabile; determinismo dimostrato (due build identiche); atlante aggiornato. *(63/63 unit; astscan unico estrattore, check_reference importa da lì)*
 
 **Rituale** → `v3.2.0`.
 
