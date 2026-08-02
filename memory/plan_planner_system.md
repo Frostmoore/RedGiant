@@ -4,7 +4,7 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
-**Stato:** 🟢 **PS1 completata** (2026-08-03, `v3.2.0`) — prossima azione: **PS2** (Senior Planner + macro validation).
+**Stato:** 🟢 **PS2 completata** (2026-08-03, `v3.3.0`) — prossima azione: **PS3** (Phase Compiler M1–M2).
 
 > **La regola che comanda questo documento:**
 > *The Senior defines what must be achieved. The Mid decides how to decompose it and how
@@ -447,7 +447,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS2.1 — Card e ruolo
 
-- [ ] 🤖 **Obiettivo:** `redgiant/prompts/roles/senior_planner.md` + in `roles.py`:
+- [x] 🤖 **Obiettivo:** `redgiant/prompts/roles/senior_planner.md` + in `roles.py`:
   ```python
   class SeniorPlanner(Role):
       name = "senior_planner"; output_model = MacroPlan
@@ -458,7 +458,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS2.2 — Macro validation gate
 
-- [ ] 🤖 **Obiettivo:** in `gates.py`:
+- [x] 🤖 **Obiettivo:** in `gates.py`:
   ```python
   def macro_validation_gate(plan: MacroPlan) -> GateReport
   ```
@@ -467,7 +467,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS2.3 — 🔎 Verifica di fase
 
-- [ ] S su 3 richieste-fixture produce MacroPlan validi e renderizzati (`macro_plan.md` greppabile); gate coperto da unit; zero chiamate LLM fuori da `SeniorPlanner.run` (grep su plansys: `llm.complete` solo in roles.py/compiler.py).
+- [x] S su 3 richieste-fixture produce MacroPlan validi e renderizzati (`macro_plan.md` greppabile); gate coperto da unit; zero chiamate LLM fuori da `SeniorPlanner.run` (grep su plansys: `llm.complete` solo in roles.py/compiler.py). *(smoke live severino-sim 3/3: 34s/12s/18s, copertura totale sempre; 67/67 unit)*
 
 **Rituale** → `v3.3.0`.
 

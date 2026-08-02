@@ -307,7 +307,17 @@ class TaskLedger    # task_id, entries
 def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger
 def render_ledger(ledger: TaskLedger) -> str
 def project_for_phase(ledger: TaskLedger, plan: MacroPlan, phase_id: str, max_tokens: int, count: Callable[[str], int]) -> str
+def dag_problems(pairs: list[tuple[str, list[str]]]) -> list[str]
+def normalize_macro(plan: MacroPlan) -> MacroPlan
+def macro_validation_gate(plan: MacroPlan) -> GateReport
+class MacroRejected
+    def __init__(self, problems: list[str]) -> None
+class SeniorPlanner
+    def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> MacroPlan
+def parse_artifact(model: type[BaseModel], payload_json: str) -> BaseModel
 ```
+
+**PS2 (Senior):** `dag_problems` è l'UNICO validatore di grafi del repo (estratto da `roles/planner.py::validate_plan_logic`, che ora lo importa lazy — messaggi identici a F3); `macro_validation_gate` valida id (C\d+/P\d+), grafo e **copertura totale** (criterio scoperto = piano respinto); `SeniorPlanner.run` = 1 chiamata + 1 richiamata correttiva che cita le REGOLE, poi `MacroRejected`. Card `prompts/roles/senior_planner.md`. Smoke live PS2.3 su severino-sim: 3/3 piani validi (12–34s, copertura sempre totale).
 
 **PS1 (Ledger):** `astscan.py` è l'UNICO estrattore di firme del repo (nato in `scripts/check_reference.py`, spostato qui perché il Ledger Builder usa le stesse firme; lo script ora importa da qui). `build_ledger` = deterministico da DB (tool_calls→file toccati, decisions via `StateStore.list_decisions` aggiunto per questo, ps_gates ko→failure, sottofasi completate→artifact) + AST + test file; `project_for_phase` riempie a budget con ordine normativo (criteri e intent SEMPRE, poi firme/test/decisioni/failure, troncamento dichiarato `[LEDGER TRUNCATED…]`).
 
@@ -393,7 +403,7 @@ V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. N
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 63 test, nessuno tocca il modello (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
+`tests/unit/` — 67 test, nessuno tocca il modello (delta PS2 in `test_plansys_gates.py`: gate macro su copertura/id/grafo, normalize dei sentinelli, richiamata correttiva del Senior con [RULES] e MacroRejected) (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
 | File | Dimostra |
 |---|---|
