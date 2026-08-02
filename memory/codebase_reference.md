@@ -311,7 +311,7 @@ def project_for_phase(ledger: TaskLedger, plan: MacroPlan, phase_id: str, max_to
 def ablated(component: str) -> bool   # PS6.2: RG_PLANSYS_ABLATE="oracle,ledger,entry" (solo A/B)
 def dag_problems(pairs: list[tuple[str, list[str]]]) -> list[str]
 def normalize_macro(plan: MacroPlan) -> MacroPlan
-def macro_validation_gate(plan: MacroPlan) -> GateReport
+def macro_validation_gate(plan: MacroPlan, request: str | None = None) -> GateReport  # request: check copertura-richiesta (file .py nominati => criteri/intent, forbice T041)
 class MacroRejected
     def __init__(self, problems: list[str]) -> None
 class SeniorPlanner
@@ -353,7 +353,7 @@ class PlanSysEngine
     def _load_or_create_macro_plan(self, task_id: str, log: TaskLog) -> MacroPlan | TaskState
     def _eligible_macro_phase(self, task_id: str, plan: MacroPlan) -> MacroPhase | None
     def _phase_entry_gate(self, task_id: str, plan: MacroPlan, phase: MacroPhase) -> GateReport
-    def _phase_synthesis_gate(self, task_id: str, phase: MacroPhase, vbp: VerificationBlueprint) -> GateReport
+    def _phase_synthesis_gate(self, task_id: str, phase: MacroPhase, vbp: VerificationBlueprint, plan: MacroPlan | None = None) -> GateReport  # SCOPED: suite piena solo all'ultima fase; regression = proof delle fasi chiuse
     def _register_proof_commands(self, vbp: VerificationBlueprint) -> None
     def _run_micro(self, task_id: str, micro: MicroPhase, vbp: VerificationBlueprint, worker: Worker, tracker: BudgetTracker, log: TaskLog) -> TaskState | None
 ```

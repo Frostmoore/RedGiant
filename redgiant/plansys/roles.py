@@ -35,7 +35,7 @@ class SeniorPlanner(Role):
         out: MacroPlan = self.llm.complete(
             parts, role=self.name, schema=MacroPlan, max_tokens=max_tokens,
             task_id=ctx.task.id).parsed  # type: ignore[assignment]
-        report = macro_validation_gate(normalize_macro(out))
+        report = macro_validation_gate(normalize_macro(out), ctx.task.request)
         # fino a DUE richiamate correttive (fast #4: la coverage e' l'errore
         # piu' meccanicamente correggibile; una richiamata sola perdeva task
         # interi su code di instabilita' — revisione annotata nel piano),
@@ -52,11 +52,12 @@ class SeniorPlanner(Role):
                   " covers list of at least one phase; depends_on may list ONLY"
                   " ids of phases in THIS plan (like \"P1\"); a phase with no"
                   " dependencies has depends_on: []; at least one phase must"
-                  " have depends_on: [].")
+                  " have depends_on: []; every file named in the request must"
+                  " appear in a criterion or phase intent — plan ALL of it.")
             out = self.llm.complete(
                 retry, role=self.name, schema=MacroPlan, max_tokens=max_tokens,
                 task_id=ctx.task.id).parsed  # type: ignore[assignment]
-            report = macro_validation_gate(normalize_macro(out))
+            report = macro_validation_gate(normalize_macro(out), ctx.task.request)
         if not report.ok:
             raise MacroRejected(
                 [f"{c.name}: {c.detail}" for c in report.checks if not c.ok])

@@ -68,7 +68,8 @@ _CRIT_ID = re.compile(r"^C\d+$")
 _PHASE_ID = re.compile(r"^P\d+$")
 
 
-def macro_validation_gate(plan: MacroPlan) -> GateReport:
+def macro_validation_gate(plan: MacroPlan,
+                          request: str | None = None) -> GateReport:
     """PS2.2 — la logica del MacroPlan, validata in codice. Include la matrice
     di copertura (PS-D9/13): un criterio scoperto e' un piano respinto."""
     checks: list[CheckResult] = []
@@ -99,6 +100,24 @@ def macro_validation_gate(plan: MacroPlan) -> GateReport:
         name="coverage_total", ok=not uncovered,
         detail=f"criteria covered by no phase: {uncovered}" if uncovered
         else "every criterion covered"))
+
+    # A/B PS6 (forbice T041): il Senior aveva pianificato UN TERZO della
+    # richiesta e nessun gate confrontava i criteri col testo originale.
+    # Check deterministico: ogni file .py NOMINATO nella richiesta deve
+    # comparire nel testo di un criterio o nell'intent di una fase.
+    if request:
+        named = {m.group(0) for m in
+                 re.finditer(r"[A-Za-z_][\w-]*\.py\b", request)}
+        plan_text = " ".join([c.text for c in plan.criteria]
+                             + [p.intent for p in plan.phases]
+                             + [p.title for p in plan.phases])
+        missing = sorted(f for f in named if f not in plan_text)
+        checks.append(CheckResult(
+            name="request_coverage", ok=not missing,
+            detail=(f"the request names {missing} but no criterion or phase "
+                    f"mentions them: the plan under-scopes the request — add "
+                    f"criteria for EVERY named file" if missing
+                    else "every file named in the request is planned")))
 
     return GateReport(gate="macro_validation", target="macro_plan",
                       ok=all(c.ok for c in checks), checks=checks)

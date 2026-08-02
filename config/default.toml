@@ -58,7 +58,7 @@ max_phases = 6
 max_micro_per_phase = 6
 projection_max_tokens = 2500         # budget della Phase Context Projection (dentro D8)
 m_pass_max_tokens = 2048             # M1/M2/M3 (1024 troncava M2 in PS4.3; 1536 troncava M2 sul T041 esteso a 3 moduli, GPU dry-run PS6)
-test_author_max_tokens = 3072        # M4 scrive file interi (2048 troncava, smoke PS4.3)
+test_author_max_tokens = 4096        # M4 scrive file interi (2048 troncava in PS4.3; 3072 = p95 nell'audit budget A/B PS6 — regola: cap >= 1.5x p95)
 mutation_probe = false               # PS-D5: probe assert-flip opzionale (costa run extra)
 
 [web]

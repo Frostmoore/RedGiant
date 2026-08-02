@@ -241,6 +241,22 @@ def test_validate_bundle_ghost_import(tmp_path):
     assert not any("will NOT exist" in p for p in probs2)
 
 
+def test_macro_gate_request_coverage():
+    # A/B PS6 (forbice T041): file nominati nella richiesta ma non pianificati
+    from redgiant.plansys.artifacts import Criterion, MacroPhase, MacroPlan
+    from redgiant.plansys.gates import macro_validation_gate
+    plan = MacroPlan(goal="g", criteria=[Criterion(id="C1", text="stats.py ok")],
+                     phases=[MacroPhase(id="P1", title="t", intent="do stats",
+                                        depends_on=[], covers=["C1"])])
+    req = "Build stats.py, hist.py and summary.py; pytest must pass."
+    rep = macro_validation_gate(plan, req)
+    ko = {c.name: c.detail for c in rep.checks if not c.ok}
+    assert "request_coverage" in ko and "hist.py" in ko["request_coverage"]
+    # con tutti i file citati nel piano, il check passa
+    plan.phases[0].intent = "do stats.py then hist.py then summary.py"
+    assert macro_validation_gate(plan, req).ok
+
+
 def test_config_still_loads():
     cfg = Config.load("dev-fast",
                       Path(__file__).resolve().parents[2] / "config")

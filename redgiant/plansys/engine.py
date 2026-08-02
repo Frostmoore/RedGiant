@@ -178,7 +178,7 @@ class PlanSysEngine(Orchestrator):
                                render_ledger(build_ledger(
                                    self.store, self.router.scope, task_id)))
 
-            syn = self._phase_synthesis_gate(task_id, phase, vbp)
+            syn = self._phase_synthesis_gate(task_id, phase, vbp, plan)
             self._log_gate(task_id, syn)
             if not syn.ok:
                 ko = [c.name for c in syn.checks if not c.ok]
@@ -300,20 +300,46 @@ class PlanSysEngine(Orchestrator):
                           ok=all(c.ok for c in checks), checks=checks)
 
     def _phase_synthesis_gate(self, task_id: str, phase: MacroPhase,
-                              vbp: VerificationBlueprint) -> GateReport:
+                              vbp: VerificationBlueprint,
+                              plan: MacroPlan | None = None) -> GateReport:
+        """A/B PS6 (T007/T010/T040): la suite PIENA a chiusura di fase incontra
+        i test delle fasi FUTURE, rossi per definizione — morte inevitabile a
+        P1 sui task multi-fase con suite fornita. La sintesi e' SCOPED: proof
+        di questa fase + proof delle fasi gia' chiuse; i synthesis_cmds interi
+        girano solo quando la copertura del piano e' completa (ultima fase)."""
         checks: list[CheckResult] = []
-        for cmd in vbp.synthesis_cmds:
-            res = self.router.dispatch(task_id, f"{phase.id}.synthesis",
-                                       "run_tests", {"cmd_id": cmd})
-            checks.append(CheckResult(
-                name=f"synthesis:{cmd}", ok=res.ok,
-                detail=str(res.data.get("exit_code", res.error))))
+        final = True
+        if plan is not None:
+            done = self._done_phases(task_id)
+            covered = set(phase.covers)
+            covered |= {cid for p in plan.phases if p.id in done
+                        for cid in p.covers}
+            final = covered >= {c.id for c in plan.criteria}
+        if final:
+            for cmd in vbp.synthesis_cmds:
+                res = self.router.dispatch(task_id, f"{phase.id}.synthesis",
+                                           "run_tests", {"cmd_id": cmd})
+                checks.append(CheckResult(
+                    name=f"synthesis:{cmd}", ok=res.ok,
+                    detail=str(res.data.get("exit_code", res.error))))
         for o in vbp.obligations:
             code, _ = _run_probe(self.router.scope,
                                  ["pytest", "-q",
                                   f"{o.test_file}::{o.test_name}"])
             checks.append(CheckResult(name=f"obligation:{o.id}", ok=code == 0,
                                       detail=f"exit={code}"))
+        if plan is not None and not final:
+            done = self._done_phases(task_id)
+            for bp_prev, vbp_prev in self._proof_pairs(task_id):
+                if bp_prev.phase_id == phase.id or bp_prev.phase_id not in done:
+                    continue
+                for o in vbp_prev.obligations:
+                    code, _ = _run_probe(self.router.scope,
+                                         ["pytest", "-q",
+                                          f"{o.test_file}::{o.test_name}"])
+                    checks.append(CheckResult(
+                        name=f"regression:{o.id}", ok=code == 0,
+                        detail=f"exit={code}"))
         return GateReport(gate="phase_synthesis", target=phase.id,
                           ok=all(c.ok for c in checks), checks=checks)
 

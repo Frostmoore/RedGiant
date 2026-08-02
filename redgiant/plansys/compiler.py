@@ -17,9 +17,9 @@ from redgiant.llm.client import LlamaClient
 from redgiant.plansys.artifacts import (BlueprintPatch, ChoicePoint, MacroPhase,
                                         MacroPlan, PhaseAnalysis, PhaseBlueprint,
                                         TestBundle, VerificationBlueprint)
-from redgiant.plansys.gates import (oracle_qualification_gate, validate_analysis,
-                                    validate_blueprint, validate_bundle,
-                                    validate_verification)
+from redgiant.plansys.gates import (_TEST_FILE, oracle_qualification_gate,
+                                    validate_analysis, validate_blueprint,
+                                    validate_bundle, validate_verification)
 from redgiant.plansys.ledger import build_ledger, project_for_phase, render_ledger
 from redgiant.plansys.render import render_blueprint, write_plan_doc
 from redgiant.plansys.roles import (PhaseAnalyst, TestAuthor,
@@ -339,7 +339,10 @@ class PhaseCompiler:
         (suite fornita), l'ancora resta il file reale."""
         counters: dict[str, int] = {}
         for o in vbp.obligations:
-            existing = (self.scope.root / o.test_file).is_file()
+            # A/B PS6 (T003): l'eccezione vale SOLO per test_*.py esistenti —
+            # M3 che punta a un 'test.php' reale non e' un'ancora, e' un derail
+            existing = ((self.scope.root / o.test_file).is_file()
+                        and _TEST_FILE.search(o.test_file) is not None)
             n = counters.get(o.micro_id, 0) + 1
             counters[o.micro_id] = n
             new_id = f"{o.micro_id}.O{n}"
