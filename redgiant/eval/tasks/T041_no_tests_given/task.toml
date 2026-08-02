@@ -1,14 +1,17 @@
 id = "T041"
 domain = "coding"
-prompt = "Add a stats.py module to this tool: mean(values) -> float, median(values) -> float (average of the two middle values for even length), and spread(values) -> float (max - min). Each raises ValueError on an empty list. Write tests that prove each behaviour; pytest must pass. Do not modify judge.py."
+prompt = "Extend this tool with three modules. (1) stats.py: mean(values) -> float, median(values) -> float (average of the two middle values for even length), spread(values) -> float (max - min); each raises ValueError on an empty list. (2) hist.py: histogram(values, bins) -> list[int] counting values into equal-width bins between min and max (last bin includes the upper edge; ValueError on empty values or bins < 1), and normalize(counts) -> list[float] returning fractions of the total (ValueError on empty counts or total 0). (3) summary.py: summarize(values) -> str returning EXACTLY four lines 'n=<count>', 'mean=<value>', 'median=<value>', 'spread=<value>' with the three values formatted to 2 decimals, computed via stats.py. Write tests that prove each behaviour; pytest must pass. Do not modify judge.py."
 success_cmd = "python judge.py"
 timeout_s = 3600
 tags = ["feature", "python", "no-tests-given", "plansys"]
-writable_globs = ["stats.py", "test_*.py"]
+writable_globs = ["stats.py", "hist.py", "summary.py", "test_*.py"]
 
 # PS6.1: NESSUN test fornito — il sistema deve scriverseli (M4) e qualificarli;
 # il giudice esterno (judge.py, non scrivibile) e' indipendente dai test
 # dell'imputato: verifica i comportamenti direttamente.
+# REVISIONE PS6.1: la baseline naive chiudeva la versione a 1 modulo (verified
+# in 99.8K tok) -> esteso a 3 moduli interdipendenti con formato esatto (D18:
+# i task si estendono, non si ammorbidiscono).
 
 [test_commands]
 pytest = ["pytest", "-q"]
