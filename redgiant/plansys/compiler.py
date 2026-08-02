@@ -230,6 +230,23 @@ class PhaseCompiler:
                 if m.work.files_owned:
                     deduped.append(m)
             b.micro = deduped[:6]
+            # PS5.5 tentativo 1: M2 ordina le micro col deposito INVERTITO
+            # (storage.py prima di models.py) e J sbatte sullo scope. L'ordine
+            # e' struttura, quindi identita': sort topologico inputs->owner.
+            owner = {f: i for i, m in enumerate(b.micro)
+                     for f in m.work.files_owned}
+            deps = {i: {owner[f] for f in m.work.inputs
+                        if f in owner and owner[f] != i}
+                    for i, m in enumerate(b.micro)}
+            ordered: list[int] = []
+            while len(ordered) < len(b.micro):
+                free = [i for i in range(len(b.micro))
+                        if i not in ordered and deps[i] <= set(ordered)]
+                if not free:
+                    break  # ciclo: si lascia l'ordine del modello
+                ordered.extend(free)
+            if len(ordered) == len(b.micro):
+                b.micro = [b.micro[i] for i in ordered]
             # id ri-numerati dal control plane (identita' canonica)
             for i, m in enumerate(b.micro, 1):
                 m.id = f"{phase.id}.S{i}"
