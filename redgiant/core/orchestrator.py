@@ -66,15 +66,20 @@ class Orchestrator:
 
         worker = Worker(self.llm, self.assembler, self.router)
 
-        # F3.3: se il piano non esiste, lo genera il Planner (v1: piano dinamico)
+        # F3.3: se il piano non esiste, lo genera il Planner (v1: piano dinamico).
+        # Gate D11 (A/B 2026-08-02: baseline 9/10 vs planner 2/10): Planner OFF
+        # di default -> piano ingenuo deterministico, zero chiamate LLM.
         if state.plan is None:
-            try:
-                self._generate_plan(task_id, log)
-            except (PlanRejected, LlmError) as e:
-                self.store.set_task_status(task_id, "failed", actor="planner",
-                                           error=f"planner failed: {e}"[:400])
-                log.line("planner", f"FAILED: {e}")
-                return self.store.load_task(task_id)
+            if not self.cfg.planner_enabled:
+                self._naive_plan(task_id, log)
+            else:
+                try:
+                    self._generate_plan(task_id, log)
+                except (PlanRejected, LlmError) as e:
+                    self.store.set_task_status(task_id, "failed", actor="planner",
+                                               error=f"planner failed: {e}"[:400])
+                    log.line("planner", f"FAILED: {e}")
+                    return self.store.load_task(task_id)
 
         replans = 0
         design_rounds: dict[str, int] = {}  # tetto strutturale anti-loop del designer
@@ -247,6 +252,26 @@ class Orchestrator:
 
     # ── pianificazione (F3) ──────────────────────────────────────────────────
 
+    def _naive_plan(self, task_id: str, log: TaskLog) -> None:
+        """Gate D11: col Planner spento il piano e' quello della baseline vincente
+        dell'A/B — una fase, una sottofase do-everything, verifica = primo cmd di
+        test noto. Deterministico, zero token."""
+        state = self.store.load_task(task_id)
+        first_cmd = next(iter(sorted(self._test_cmd_ids())), None)
+        self.store.save_plan(task_id, Plan(
+            version=0, goal=state.request[:290],
+            success_criteria=["verification passes"],
+            phases=[PhaseSpec(id="P1", title="Do the task", depends_on=[],
+                              completion_criteria=["verification passes"])]),
+            actor="orchestrator", reason="naive (planner disabled, D11)")
+        self.store.upsert_subtask(task_id, SubtaskSpec(
+            id="P1.S1", phase_id="P1", title="Do the task",
+            objective=state.request, inputs=[], tools=[],
+            expected_outputs=[], completion_criteria=["verification passes"],
+            verification=[first_cmd] if first_cmd else []), actor="orchestrator")
+        log.line("orchestrator", "piano ingenuo (planner OFF, verdetto D11): "
+                                 "1 fase, 1 sottofase")
+
     def _generate_plan(self, task_id: str, log: TaskLog) -> None:
         state = self.store.load_task(task_id)
         volatile = ("Produce the global plan for the task.\n"
@@ -281,6 +306,10 @@ class Orchestrator:
 
     def _replan(self, task_id: str, reason: str, log: TaskLog) -> bool:
         """F3.4: nuova versione del piano; le fasi completate sono IMMUTABILI."""
+        if not self.cfg.planner_enabled:
+            # gate D11: senza Planner niente replanning — si fallisce esplicito
+            log.line("orchestrator", "replanning saltato: planner OFF (D11)")
+            return False
         state = self.store.load_task(task_id)
         if state.plan is None:
             return False

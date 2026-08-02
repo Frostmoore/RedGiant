@@ -277,6 +277,26 @@ def test_budget_exhaustion_asks_instead_of_killing(env, tmp_path, monkeypatch):
     assert st.budget.max_total_tokens > 1  # esteso davvero
 
 
+def test_planner_gate_naive_plan_and_no_replan(env, tmp_path):
+    # Verdetto D11 (A/B 2026-08-02): planner OFF di default -> piano ingenuo
+    # deterministico (zero LLM) e replanning rifiutato (fallimento esplicito).
+    from redgiant.config import Config
+    from redgiant.core.orchestrator import Orchestrator, TaskLog
+    scope, router, tid = env
+    cfg = Config.load("dev-fast", CONFIG_DIR)
+    assert cfg.planner_enabled is False  # il default DEVE essere spento
+    object.__setattr__(cfg.paths, "tasks_dir", tmp_path)
+    orch = Orchestrator(cfg, router.store, llm=None, router=router, assembler=None)
+    log = TaskLog(tmp_path, tid)
+    orch._naive_plan(tid, log)
+    state = router.store.load_task(tid)
+    assert state.plan is not None
+    assert [p.id for p in state.plan.phases] == ["P1"]
+    spec, status, _ = router.store.get_subtask(tid, "P1.S1")
+    assert status == "pending" and spec.objective == state.request
+    assert orch._replan(tid, "whatever", log) is False
+
+
 def test_workerstep_coherence_is_structural():
     # F2.5: union discriminata — il ramo incompleto (finish:null) non e' nemmeno
     # rappresentabile: la grammatica non puo' produrlo, Pydantic non lo valida.

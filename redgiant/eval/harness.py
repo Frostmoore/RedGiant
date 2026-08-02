@@ -105,6 +105,10 @@ def _naive_plan(task: EvalTask) -> dict:
 def run_eval(profile: str, only: list[str] | None, out_dir: Path,
              use_planner: bool = False) -> Path:
     cfg = Config.load(profile)
+    if use_planner:
+        # gate D11: --planner e' la riaccensione ESPLICITA (config default: off)
+        from dataclasses import replace
+        cfg = replace(cfg, planner_enabled=True)
     store = StateStore(cfg.paths.db)
     llm = LlamaClient(cfg.llm, store)
     if not llm.health():

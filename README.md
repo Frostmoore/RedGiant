@@ -4,7 +4,7 @@
 
 **A verification-first agentic system that makes *tiny* local language models<br>reliably useful on non-prosumer hardware.**
 
-[![Status](https://img.shields.io/badge/status-F3_in_progress_·_planning_%2B_A%2FB_evaluation-blue)](memory/plan_red_giant.md)
+[![Status](https://img.shields.io/badge/status-F3_done_·_planner_gated_by_A%2FB_verdict-brightgreen)](memory/plan_red_giant.md)
 [![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Model](https://img.shields.io/badge/model-Gemma_4_E2B_·_Q4_QAT_·_GGUF-8A2BE2)](https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF)
 [![Runtime](https://img.shields.io/badge/runtime-llama.cpp_(pinned)-555555)](docker/severino-sim/compose.yml)
@@ -24,7 +24,7 @@ Red Giant wraps a **~2B-effective-parameter model** — Gemma 4 E2B, Q4 QAT, GGU
 
 > Most agentic projects chase the biggest model they can reach. Red Giant goes the opposite way: the smallest usable model, on the kind of machine a non-prosumer actually owns — a 15W mini-PC with 4 CPU cores and no usable GPU. Anyone can build agents on a workstation-class GPU box; the interesting problem is closing the gap between local inference on consumer hardware and the inevitable scarcity of that scenario.
 
-**Status:** early development — **Phase 3 (planning) in progress**: plan generation, deterministic logic validation, lazy phase expansion and replanning are operational; the completed A/B was decisive — **2/10 verified vs the static baseline's 9/10** on the micro-task battery — so planning is off by default while it is redesigned as a plan-document author behind deterministic gates. Behind it, the Phase 2 single-process web GUI (async job queue, live execution tree, consent-based approvals with standing per-file grants, budget-extension prompts, guided relaunch of failed tasks) was live-tested through 3 rounds of user testing plus an automated 5-task battery: **15 defects found and fixed**, zero false claims in either direction. This README is refreshed at the end of every development phase.
+**Status:** early development — **Phase 3 (planning) complete, with a negative verdict honestly enforced**: plan generation, deterministic logic validation, lazy phase expansion and replanning all work, but the official A/B was decisive — **2/10 verified vs the static baseline's 9/10** on the micro-task battery — so the planner is now **off by default behind a config gate**, and the main roadmap pauses while the planning system is redesigned in a dedicated plan (the planner as a plan-document *author* behind deterministic, zero-token gates). Behind it, the Phase 2 single-process web GUI (async job queue, live execution tree, consent-based approvals with standing per-file grants, budget-extension prompts, guided relaunch of failed tasks) was live-tested through 3 rounds of user testing plus an automated 5-task battery: **15 defects found and fixed**, zero false claims in either direction. This README is refreshed at the end of every development phase.
 
 ## 🧠 The thesis
 
@@ -188,16 +188,18 @@ mentioned here lives in full detail in its own document:
 - **A principle worth stealing:** verification is symmetric — if the tests are green, the work is done even when the model *believes* it failed. Claims never beat oracles, in either direction.
 - **Owed:** everything is proven on 2-4 file toy repos; several tolerances are calibrated on this exact model and build.
 
-### 🔄 F3 — Planning (in progress)
+### ✅ F3 — Planning (`v3.0.0`) — shipped, measured, and demoted by its own A/B
 
 *Goal: a Planner that maps the work into phases, expanded lazily, with replanning when reality disagrees.*
 
-- **Built and working:** plan generation, validation, lazy expansion, replanning (used correctly in live runs).
-- **Learned so far:** a planner that hasn't *seen* the tests invents function names the tests then reject; and a subtask judged by tests it's forbidden to fix will thrash forever (49 rewrites of one 5-line file). Both fixed: plans are now anchored to test excerpts, and verification is scoped to what each subtask owns.
-- **The honest verdict:** the official A/B was brutal — **2/10 verified vs the baseline's 9/10**, at higher token cost (815K vs 710K). On micro-tasks planning is not just overhead but a regression: redundant phases duplicated finished work, artificial "analysis" subtasks demanded artifacts nobody needed, and failed subtasks were retried verbatim. The planner is demoted to an off-by-default, gated mode, and is being redesigned in a dedicated plan — as a plan-document *author* that writes once and exits, behind deterministic gates (phase-entry, retry-must-differ, replan-must-differ). *When* to plan stays F6's routing question; the final word belongs to the real codebase (F8).
+- **How it went:** everything was built and works mechanically — plan generation, deterministic logic validation with rule-citing corrective re-calls, lazy expansion, bounded replanning. Along the way: a planner that hasn't *seen* the tests invents function names the tests then reject (fixed with contract anchoring), and a subtask judged by tests it's forbidden to fix thrashes forever — 49 rewrites of one 5-line file (fixed with scoped verification). A first A/B run had to be invalidated: it ran from an uncommitted working tree where one deleted prompt sentence killed 6 tasks out of 10 — two permanent method rules came out of that (prompt and validator are one artifact; official runs only from committed code).
+- **The honest verdict:** the official A/B was brutal — **2/10 verified vs the baseline's 9/10**, at higher token cost (815K vs 710K). On micro-tasks planning is not just overhead but a regression: redundant phases duplicated finished work, artificial "analysis" subtasks demanded artifacts nobody needed, and failed subtasks were retried verbatim. Per the project's own rule (every role earns its place or leaves), the planner is now **off by default behind a config gate** — tasks get the deterministic naive plan that won the A/B, at zero planning tokens.
+- **What the failure taught:** the thrashing was the *gates'* fault, not the proposer's — nothing checked whether a phase was already satisfied, whether a retry differed from the failed attempt, whether a new plan differed from the failed one. That diagnosis reshaped the design.
+- **Owed:** the planning system is being rebuilt as a standalone effort with its own plan — the planner as a plan-document *author* that writes once and exits, deterministic zero-token gates (phase-entry, retry-must-differ, replan-must-differ), a task ledger as external memory. *When* to plan stays F6's routing question; the final word belongs to the real codebase (F8).
 
 ### ⏭️ Next
 
+- **⏸️ Interlude (current): the planner-system redesign** — the main roadmap is paused while the planning system is rebuilt and A/B-ed as a standalone system (dedicated plan in `memory/`); the roadmap resumes at F3-bis when it earns its way back in.
 - **F3-bis — Multi-domain micro-slice** *(user-requested)*: prove the engine on everyday non-coding work — local document analysis, external API calls (never LLM APIs), document transforms — before designing the Supervisor, so F4 knows non-coding failure modes too.
 - **F4 — Continuous verification**: debugger, supervisor, anti-loop, git checkpoints. Two customers already waiting: the reasoning-trap task and a human protocol that evolves from answering machine to dialogue.
 - **F5 — Context & KV-cache engineering**: the cache already proved itself (88 calls cost only 82s of prefill on CPU); F5 makes it measured and engineered, and re-checks slot persistence.

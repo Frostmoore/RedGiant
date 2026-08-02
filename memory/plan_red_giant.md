@@ -4,7 +4,7 @@
 **Data:** 2026-08-01
 **Specsheet di riferimento:** [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) (v0.1)
 **Atlante della codebase:** [codebase_reference.md](codebase_reference.md) — aggiornato a ogni fine fase, mai dopo.
-**Stato:** 🟢 **F2 completata** (2026-08-02, `v2.1.0`) — prossima azione: **Fase 3, sottofase 3.1** (Planner; gate soddisfatto: Evaluator operativo con baseline F1 e T007 promosso; GUI collaudata dall'utente e dalla batteria — v. ESITO F2)
+**Stato:** 🟢 **F3 completata** (2026-08-02, `v3.0.0`) — verdetto D11: **Planner default OFF, gated** (A/B: baseline 9/10 · 710K tok vs planner 2/10 · 815K tok — v. ESITO F3). ⏸️ **Sviluppo generale IN PAUSA (decisione utente):** prossima azione = estendere e implementare [`plan_planner_system.md`](plan_planner_system.md) (il Planner come autore, i Gate come giudici), poi si riprende da **F3-bis**.
 
 ---
 
@@ -1158,7 +1158,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F3.1 — Planner
 
-- [ ] 🤖 **Obiettivo:** genera la mappa del lavoro: goal, criteri, macrofasi con dipendenze (specsheet §6.3). Sintetico per contratto.
+- [x] 🤖 **Obiettivo:** genera la mappa del lavoro: goal, criteri, macrofasi con dipendenze (specsheet §6.3). Sintetico per contratto. *(fatto; in corso d'opera: `normalize_plan` per i sentinelli in `depends_on` — "none", auto-dipendenza — e richiamata correttiva che CITA le regole violate, non solo i sintomi)*
 - **Motivazione:** "pianificazione globale, esecuzione locale" (specsheet §1). Il piano è una *mappa*, non un romanzo: il limite di token è un vincolo di qualità (un piano corto si aggiorna; uno lungo si abbandona) oltre che di costo (D8).
 - **Implementazione:** `roles/planner.py` + `prompts/roles/planner.md`:
   ```python
@@ -1176,7 +1176,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F3.2 — ⚠️ Phase Designer
 
-- [ ] 🤖 **Obiettivo:** converte UNA macrofase in sottofasi operative eseguibili dal Worker (specsheet §6.4).
+- [x] 🤖 **Obiettivo:** converte UNA macrofase in sottofasi operative eseguibili dal Worker (specsheet §6.4). *(fatto, con la REVISIONE sotto; trappola pagata: la regola 2 della card riscritta perdendo "cmd id esatti" ha ucciso 6 task su 10 — prompt e validatore sono un artefatto solo)*
 - **Motivazione:** è il punto di massima leva della qualità: qui si decide la *forma* del lavoro. La marca ⚠️ sta nel criterio D10: **la decomposizione preferisce sottofasi meccanicamente verificabili** — è la scelta di design che rende tutto il resto del sistema onesto, e se il Phase Designer la ignora, il Debugger (F4) erediterà verifiche impossibili.
 - **Implementazione:** `roles/phase_designer.py` + card:
   ```python
@@ -1194,7 +1194,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F3.3 — Orchestrator v1 (piano dinamico)
 
-- [ ] 🤖 **Obiettivo:** `run_task` guidato dal piano generato: fasi eleggibili per dipendenze, espansione lazy, stati §11 completi.
+- [x] 🤖 **Obiettivo:** `run_task` guidato dal piano generato: fasi eleggibili per dipendenze, espansione lazy, stati §11 completi. *(fatto; aggiunto post-verdetto: gate D11 — `planner.enabled=false` di default → `_naive_plan` deterministico, zero LLM)*
 - **Motivazione:** "solo la fase corrente viene dettagliata" (specsheet §25.5): l'espansione lazy non è un'ottimizzazione ma un principio — le fasi future cambieranno alla luce di quelle passate, dettagliarle ora sarebbe lavoro da buttare e contesto da pagare.
 - **Implementazione:** modifiche a `orchestrator.py`: `run_task` = [se manca il piano] Planner → save_plan; loop: prossima fase eleggibile (tutte le `depends_on` completate, ordine del piano) → [se non espansa] PhaseDesigner → upsert delle sottofasi → loop sottofasi come F1; fase completata quando tutte le sottofasi sono `completed`/`completed_with_warnings` — più il check dei `completion_criteria` di fase dove constatabili; `current_phase`/`current_subtask` sempre aggiornati (la GUI li mostra). Nuovo metodo: `def _eligible_phase(self, state: TaskState) -> PhaseSpec | None`.
 - **Casi limite:** dipendenze che diventano insoddisfacibili (fase `failed` a monte) → le fasi a valle diventano `skipped` con decisione loggata; il task chiude `partial` se qualcosa di utile è stato completato.
@@ -1202,14 +1202,14 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F3.4 — Replanning minimale
 
-- [ ] 🤖 **Obiettivo:** richiamare il Planner quando il piano non è più vero (specsheet §10), senza replanning-mania.
+- [x] 🤖 **Obiettivo:** richiamare il Planner quando il piano non è più vero (specsheet §10), senza replanning-mania. *(fatto; max 2 replan, fasi completate immutabili; col gate D11 il replanning è rifiutato a Planner spento — fallimento esplicito)*
 - **Motivazione:** la specsheet è netta: "il replanning non deve avvenire per ogni piccolo errore locale". In F3 i trigger sono pochi e deterministici; il raffinamento decisionale è del Supervisor (F4).
 - **Implementazione:** trigger (tutti deterministici in F3): sottofase `failed` oltre i retry → la fase va in `failed` → replanning; budget totale sotto il 25% con >50% delle fasi pending → replanning "descope" (il Planner riceve l'istruzione di ridurre l'ambizione ai criteri minimi); `_eligible_phase` = None ma piano incompleto (incoerenza) → replanning. Meccanica: contesto al Planner = piano corrente + cosa è fallito e perché (dal Verdict) + cosa è già `completed` (IMMUTABILE: le fasi completate non si toccano — validazione deterministica sulla nuova versione); `save_plan` con `reason` esplicita; le sottofasi pending della vecchia versione → `skipped`.
 - **Accettazione:** T010 (piano-trappola: il `plan` iniziale porta a un vicolo cieco progettato) esegue almeno un replanning e completa; le fasi completate risultano intatte tra le versioni.
 
 #### F3.5 — 📌 A/B: il Planner si guadagna il posto
 
-- [ ] 🤖 **Obiettivo:** la sottofase che decide se F3 resta.
+- [x] 🤖 **Obiettivo:** la sottofase che decide se F3 resta. *(fatto: report committati, conclusione = ESCE dal default — v. ESITO F3)*
 - **Motivazione:** D11 applicato per la prima volta. Il confronto è contro una baseline *degradata ma onesta*: F1 non sa fare multi-step senza piano scritto a mano, quindi la baseline per i nuovi task è "piano statico ingenuo" = una sola fase con una sola sottofase "do everything", che rappresenta ciò che farebbe un agente naive.
 - **Implementazione:** nuovi task multi-step: **T007** refactoring 3-file con test · **T008** feature cross-module · **T009** fix con migrazione dati fittizia (ordine obbligato: prima lo script, poi il codice) · **T010** piano-trappola per il replanning. Eval su tutto il set (T001–T010) in due configurazioni: `--ab no-planner` (piano ingenuo) vs pipeline F3, stesso profilo, stesso commit. Report di confronto per le 5 metriche.
 - **Accettazione:** report A/B committato e nell'atlante con la conclusione scritta (resta / esce / resta con riserva su X).
@@ -1220,7 +1220,25 @@ Concordato prima dei numeri ufficiali: (1) il fix perimetro/verifica di F3.2-REV
 
 #### F3.6 — 🔎 Verifica di fase
 
-- [ ] T007–T009 `verified` con piano generato; T010 replanning corretto; A/B documentato; nessun piano oltre budget; forbice completed/verified ancora zero.
+- [x] T007–T009 `verified` con piano generato; T010 replanning corretto; A/B documentato; nessun piano oltre budget; forbice completed/verified ancora zero. *(eseguita, esito NEGATIVO sui criteri originali: col piano generato solo 2/10 verified — il criterio vero di questa sottofase era il verdetto D11, ed è stato emesso: v. ESITO F3. Forbice = 0 in entrambe le run: il sistema non si è mai auto-illuso.)*
+
+#### ESITO F3 (2026-08-02) — il Planner perde l'A/B e esce dal default
+
+**Numeri ufficiali** (severino-sim, 10 task T001–T010, stesso profilo):
+
+| Run | Commit | Verified | Token totali | Tempo | Forbice |
+|---|---|---|---|---|---|
+| Baseline (piano statico ingenuo) | `32569a5` | **9/10** (unico caduto: T008) | 710.106 | ~27,5 min | 0 |
+| Planner (prima run) | `32569a5` + tree sporco | 0/10 — **INVALIDA** | 478.818 | ~34 min | 0 |
+| Planner (rerun, prompt fixato) | `611d894` | **2/10** (T001, T004) | 814.646 | ~44 min | 0 |
+
+**Verdetto D11 (deciso dall'utente): il Planner NON si guadagna il posto sui micro-task — default OFF, gated.** Implementazione: `planner.enabled = false` in `config/default.toml`; a Planner spento l'Orchestrator genera `_naive_plan` (il piano della baseline vincente, deterministico, zero LLM) e il replanning è rifiutato; riaccensione esplicita via `rg eval --planner` (l'harness fa `dataclasses.replace(cfg, planner_enabled=True)`).
+
+**Perché ha perso** (autopsia nei log e in atlante §9): (1) logica spazzatura residua del Planner (auto-dipendenze `P1→P1`, troncamenti) — 3 task morti in <3 chiamate; (2) **fasi ridondanti** che ripetono lavoro già fatto — il volto strutturale dell'overhead di governance, non un bug puntuale; (3) **sottofasi-analisi artificiali** indotte dalla revisione scoped (expected_outputs-compiti-in-classe che il Worker non produce); (4) retry fotocopia senza diagnosi; (5) interazione col guard `identical_repeat` appena introdotto (run_tests poi esentato). La prima run è stata invalidata da un mio errore di metodo: **A/B su working tree sporco con una frase cancellata dalla card del Designer** → 2 trappole permanenti: *prompt e validatore sono un artefatto solo*; *run ufficiali solo da codice committato*.
+
+**Limite dichiarato del verdetto:** vale su QUESTA batteria (micro-task 2–4 file, dove pianificare non serve per costruzione). L'ipotesi di valore su task larghi non è smentita: non è testabile col cassetto attuale (F3.5-nota, punto 3 — il giudizio definitivo resta F8).
+
+**Diagnosi condivisa con l'utente (2026-08-02): il thrashing era dei GATE, non del proponente** — retry identici, nessun gate d'ingresso fase, replan non diffati. Decisione utente: il rework della pianificazione è un **sistema a sé stante** con piano dedicato — [`plan_planner_system.md`](plan_planner_system.md) (il Planner come *autore* del piano-documento, plan-as-artifact, gate deterministici a zero token, ledger di task, Supervisor solo per diagnosi residua). **Lo sviluppo di questo piano generale è IN PAUSA finché quel sistema non è costruito e A/B-ato**; poi si riprende da F3-bis. Riferimenti: report in `bench/results/eval_severino-sim_{static,planner}_*.md`; trappole nuove in atlante §9 (batch A/B + batch rerun); fix di fase: scoped verification (F3.2-REVISIONE), contract anchoring, `normalize_plan`, richiamate correttive che citano le regole, `no_op_edit`, guard `identical_repeat` (run_tests esente), gate D11.
 
 **Rituale di fine fase** → `v3.0.0`.
 

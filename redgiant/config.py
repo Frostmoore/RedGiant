@@ -23,6 +23,7 @@ _KNOWN_KEYS: dict[str, set[str]] = {
     "paths": {"db", "models_dir", "tasks_dir", "slots_dir", "ripgrep"},
     "budget": {"max_total_tokens", "max_tool_calls", "max_retries_per_subtask", "max_wall_s"},
     "worker": {"max_steps", "step_max_tokens"},
+    "planner": {"enabled"},
     "web": {"host", "port"},
     "security": {"writable_globs", "shell_whitelist"},
     "eval": {"tasks_dir"},
@@ -78,6 +79,7 @@ class Config:
     security: SecurityCfg
     worker_max_steps: int
     worker_step_max_tokens: int
+    planner_enabled: bool
     eval_tasks_dir: Path
 
     @classmethod
@@ -132,6 +134,9 @@ class Config:
             ),
             worker_max_steps=int(worker["max_steps"]),
             worker_step_max_tokens=int(worker.get("step_max_tokens", 768)),
+            # Verdetto D11 (A/B 2026-08-02, baseline 9/10 vs planner 2/10):
+            # il Planner e' OFF di default, si riaccende solo esplicitamente.
+            planner_enabled=bool(merged.get("planner", {}).get("enabled", False)),
             eval_tasks_dir=Path(eval_["tasks_dir"]),
         )
 

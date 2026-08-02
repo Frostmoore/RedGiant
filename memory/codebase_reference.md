@@ -291,7 +291,7 @@ class BudgetTracker
 
 ### `redgiant/core/orchestrator.py` — Orchestrator v0 (F1.7) + TaskLog (F1.8)
 
-Loop sequenziale su piano statico; pass→next, fail→retry entro budget→failed (la sofisticazione è F4, D11). Ripresa: sottofasi `running` orfane → pending. Stop budget = partial/failed spiegato.
+Loop sequenziale su piano statico; pass→next, fail→retry entro budget→failed (la sofisticazione è F4, D11). Ripresa: sottofasi `running` orfane → pending. Stop budget = partial/failed spiegato. **Gate D11 (F3, post-A/B):** se `cfg.planner_enabled` è False (default), piano mancante → `_naive_plan` (1 fase / 1 sottofase do-everything, verification = primo cmd di test noto, zero LLM) e `_replan` ritorna False (fallimento esplicito, niente replanning).
 
 ```python
 class TaskLog
@@ -300,6 +300,7 @@ class TaskLog
 class Orchestrator
     def __init__(self, cfg: Config, store: StateStore, llm: LlamaClient, router: ToolRouter, assembler: PromptAssembler) -> None
     def run_task(self, task_id: str) -> TaskState
+    def _naive_plan(self, task_id: str, log: TaskLog) -> None
 def load_static_plan(store: StateStore, task_id: str, plan_file: Path) -> None
 ```
 
@@ -345,11 +346,11 @@ Nessuna rotta nostra (GUI = F2). Endpoint llama-server usati: `POST /completion`
 
 ## 6. Configurazione
 
-V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
+V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 48 test, nessuno tocca il modello (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli):
+`tests/unit/` — 55 test, nessuno tocca il modello (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
 | File | Dimostra |
 |---|---|
@@ -373,6 +374,7 @@ D1–D21 (piano §0) + rituale con Passo 2-bis (README) e regola main (merge a o
 
 F0 (invariati): prefill 6.8/30.7/69.6/173.6s @ 1/4/8/16K · gen 35.8 tok/s · riuso 65 vs 7971 · grammatica 0.4–9.8%.
 F1 (run ufficiale severino-sim, 2 core): **4/6 verified** (T001/T003/T004/T005: 100% useful, 0 retry, 5-8 chiamate, 45-65s); T002/T006 falliti onesti (debiti F4); forbice completed≠verified = 0; 184k token totali per la run. Report: `bench/results/eval_severino-sim_*.md`.
+F3 (A/B ufficiale severino-sim, T001–T010): baseline statica **9/10 verified** (710.106 token, ~27,5 min, unico caduto T008) vs planner **2/10** (814.646 token, ~44 min; T001, T004) → **verdetto D11: Planner default OFF**. Prima run planner (0/10) INVALIDA: working tree sporco. Forbice = 0 in tutte le run. Report: `bench/results/eval_severino-sim_{static,planner}_2026080*.md`.
 
 ## 9. Trappole già disinnescate
 
@@ -447,4 +449,4 @@ Ereditate da F0 (QAT, digest-pin, 2 core, ctx 16K nel sim, niente framework, JSO
 
 ## 12. Cosa NON esiste ancora
 
-Planner/PhaseDesigner e piano dinamico (F3) · Debugger/Supervisor/LoopGuard/Checkpoint/BudgetManager (F4) · ContextBuilder/CacheProbe/SlotManager/Compressor (F5) · routing/Classifier/Assessor (F6) · tool web e verifica citazioni (F7) · deploy (F8). Il chatbot Laravel 13 vive in un altro scenario (F8). Esclusi per design: multi-modalità, multi-modello, parallelismo tra agenti, API JSON pubblica.
+Il sistema "Planner come autore + Gate" (`plan_planner_system.md` — seed, da estendere e implementare: plan-as-artifact/renderer, gate d'ingresso fase, retry/replan-deve-differire, ledger di task) · Debugger/Supervisor/LoopGuard/Checkpoint/BudgetManager (F4) · ContextBuilder/CacheProbe/SlotManager/Compressor (F5) · routing/Classifier/Assessor (F6) · tool web e verifica citazioni (F7, salvo `http_get` previsto in F3-bis) · deploy (F8). Il chatbot Laravel 13 vive in un altro scenario (F8). **Esiste ma è SPENTO di default:** Planner/PhaseDesigner/replanning (gate D11, `planner.enabled=false` — si riaccende con `rg eval --planner`). Esclusi per design: multi-modalità, multi-modello, parallelismo tra agenti, API JSON pubblica.
