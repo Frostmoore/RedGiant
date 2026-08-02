@@ -16,3 +16,6 @@ data/
 
 # risultati grezzi dei bench (i report .md/.csv aggregati SONO committati)
 bench/results/raw/
+
+# richiesta utente 2026-08-03: le ambizioni restano locali
+memory/ambition.md
