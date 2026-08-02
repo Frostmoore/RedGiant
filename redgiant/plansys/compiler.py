@@ -723,7 +723,8 @@ class PhaseCompiler:
             patches += 1
             log.line("compiler", f"{step} respinto ({len(problems)}): patch {patches}")
             patch = self._request_patch(ctx, role.name, problems,
-                                        artifact.model_dump_json())
+                                        artifact.model_dump_json(),
+                                        max_tokens=max_tokens)
             try:
                 artifact = model.model_validate_json(
                     self._apply_patch(model, artifact.model_dump_json(), patch))
@@ -747,7 +748,8 @@ class PhaseCompiler:
         return artifact
 
     def _request_patch(self, ctx: RoleContext, role_name: str,
-                       violations: list[str], current_json: str) -> BlueprintPatch:
+                       violations: list[str], current_json: str,
+                       max_tokens: int | None = None) -> BlueprintPatch:
         # enum dinamico anche sul TARGET della patch: si puo' patchare solo
         # un elemento che ESISTE nell'artefatto corrente
         targets: list[str] = []
@@ -777,9 +779,11 @@ class PhaseCompiler:
                         'mod.f() == 1\\n"}]}'),
             output_schema=BlueprintPatch.model_json_schema(),
             schema_name="BlueprintPatch")
+        # batch n.6 run 15: la patch di M4 porta file di test INTERI nel
+        # payload — col budget m_pass (1536) troncava; usa quello del chiamante
         return self.llm.complete(
             parts, role=role_name, schema=BlueprintPatch,
-            max_tokens=self.cfg.plansys.m_pass_max_tokens,
+            max_tokens=max_tokens or self.cfg.plansys.m_pass_max_tokens,
             task_id=ctx.task.id,
             grammar_schema=patch_grammar).parsed  # type: ignore[return-value]
 

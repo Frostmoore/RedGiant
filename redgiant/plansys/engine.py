@@ -364,14 +364,16 @@ class PlanSysEngine(Orchestrator):
                                             errors="replace").splitlines()[:120])
                 proof_block += f"\n[PROOF TEST SOURCE {tf}]\n{src}"
 
+        failure_block = ""
         while True:
             state = self.store.load_task(task_id)
             spec, status, attempts = self.store.get_subtask(task_id, micro.id)
             if status in ("completed", "completed_with_warnings"):
                 return None
-            if proof_block:
+            if proof_block or failure_block:
                 spec = spec.model_copy(
-                    update={"objective": spec.objective + proof_block})
+                    update={"objective": spec.objective + proof_block
+                            + failure_block})
 
             key = tracker.exceeded()
             if key is not None:
@@ -424,6 +426,15 @@ class PlanSysEngine(Orchestrator):
                 log.line("gate", f"{micro.id} {reason}: {failed}")
                 return self.store.load_task(task_id)
             prev_sig = new_sig
+            # batch n.6 (Sol): al retry J vede la CODA dell'output dei proof
+            # falliti — l'assertion diff dice il formato esatto atteso, che J
+            # non puo' dedurre dal solo nome del check
+            tails = [f"- {c.name}:\n...{c.detail[-500:]}"
+                     for c in verdict.checks if not c.ok and c.detail]
+            failure_block = ("\n[PREVIOUS ATTEMPT FAILED] the proof tests "
+                             "produced this output; fix YOUR code to satisfy "
+                             "exactly what the test asserts:\n"
+                             + "\n".join(tails[:3])) if tails else ""
             self.store.set_subtask_status(task_id, micro.id, "retry",
                                           actor="plansys",
                                           result={"verdict": verdict.model_dump()})
