@@ -315,7 +315,22 @@ class MacroRejected
 class SeniorPlanner
     def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> MacroPlan
 def parse_artifact(model: type[BaseModel], payload_json: str) -> BaseModel
+class PhaseAnalyst    # M1 — single-shot, output PhaseAnalysis
+class WorkDecomposer  # M2 — single-shot, output PhaseBlueprint
+def validate_analysis(analysis: PhaseAnalysis, projection: str, phase_id: str) -> list[str]
+def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis, covers: list[str]) -> list[str]
+class CompileFailed
+    def __init__(self, step: str, problems: list[str]) -> None
+class NeedsDecision
+    def __init__(self, phase_id: str, choice: ChoicePoint) -> None
+class PhaseCompiler
+    def __init__(self, cfg: Config, store: StateStore, llm: LlamaClient, assembler: PromptAssembler, router: ToolRouter, scope: Scope) -> None
+    def projection(self, task_id: str, plan: MacroPlan, phase: MacroPhase) -> str
+    def analyze(self, task_id: str, plan: MacroPlan, phase: MacroPhase, projection: str, log) -> PhaseAnalysis
+    def decompose(self, task_id: str, phase: MacroPhase, analysis: PhaseAnalysis, projection: str, log) -> PhaseBlueprint
 ```
+
+**PS3 (M1–M2):** M1/M2 sono SINGLE-SHOT (base `_SingleShot`: una chiamata, un parse — le correzioni vivono nel compiler come patch, PS-D6). `validate_analysis` fa l'anti-invenzione MECCANICA (`involved` deve apparire testualmente nella proiezione); `validate_blueprint` impone ownership ESCLUSIVA dei file e perimetri dal ledger. `PhaseCompiler._repair_loop`: max 2 patch (`_request_patch` → schema `BlueprintPatch`, `_apply_patch` deterministico sulle liste patchabili micro/obligations/decisions/artifacts per id/path) + 1 rigenerazione citando le violazioni + `CompileFailed`. `decision_required` → `NeedsDecision` (analisi comunque persistita). Il ledger ora include il **listato repo come fact (max 40)**: a task fresco è l'unico ancoraggio possibile per gli `involved`. Card: `phase_analyst.md`, `work_decomposer.md`. Smoke live PS3.4 (severino-sim, brownfield csv_tools): M1 25s (involved ancorati, 2 decisioni), M2 20s (ownership esclusiva), blueprint renderizzato.
 
 **PS2 (Senior):** `dag_problems` è l'UNICO validatore di grafi del repo (estratto da `roles/planner.py::validate_plan_logic`, che ora lo importa lazy — messaggi identici a F3); `macro_validation_gate` valida id (C\d+/P\d+), grafo e **copertura totale** (criterio scoperto = piano respinto); `SeniorPlanner.run` = 1 chiamata + 1 richiamata correttiva che cita le REGOLE, poi `MacroRejected`. Card `prompts/roles/senior_planner.md`. Smoke live PS2.3 su severino-sim: 3/3 piani validi (12–34s, copertura sempre totale).
 
@@ -403,7 +418,7 @@ V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. N
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 67 test, nessuno tocca il modello (delta PS2 in `test_plansys_gates.py`: gate macro su copertura/id/grafo, normalize dei sentinelli, richiamata correttiva del Senior con [RULES] e MacroRejected) (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
+`tests/unit/` — 72 test, nessuno tocca il modello (delta PS2 in `test_plansys_gates.py`: gate macro su copertura/id/grafo, normalize dei sentinelli, richiamata correttiva del Senior con [RULES] e MacroRejected; delta PS3 in `test_plansys_compiler.py`: anti-invenzione M1, ownership esclusiva M2, _apply_patch replace/add/remove con ValueError su target ignoto, flusso patch→rigenerazione→CompileFailed, NeedsDecision con analisi persistita) (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
 | File | Dimostra |
 |---|---|

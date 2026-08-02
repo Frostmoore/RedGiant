@@ -9,7 +9,8 @@ from __future__ import annotations
 import re
 
 from redgiant.core.verify import CheckResult
-from redgiant.plansys.artifacts import GateReport, MacroPlan
+from redgiant.plansys.artifacts import (GateReport, MacroPlan, PhaseAnalysis,
+                                        PhaseBlueprint)
 
 
 def dag_problems(pairs: list[tuple[str, list[str]]]) -> list[str]:
@@ -94,3 +95,59 @@ def macro_validation_gate(plan: MacroPlan) -> GateReport:
 
     return GateReport(gate="macro_validation", target="macro_plan",
                       ok=all(c.ok for c in checks), checks=checks)
+
+
+def validate_analysis(analysis: PhaseAnalysis, projection: str,
+                      phase_id: str) -> list[str]:
+    """PS3.1 — M1 validata in codice. Anti-invenzione MECCANICA: gli 'involved'
+    devono apparire testualmente nella proiezione del ledger (il modello puo'
+    solo COPIARE identificatori, mai coniarli — contract anchoring)."""
+    problems: list[str] = []
+    if analysis.phase_id != phase_id:
+        problems.append(f"phase_id must be '{phase_id}', got '{analysis.phase_id}'")
+    for sym in analysis.involved:
+        if sym and sym not in projection:
+            problems.append(f"involved '{sym}' does not appear in CONTEXT: "
+                            f"copy identifiers exactly, never invent them")
+    dec_ids = [d.id for d in analysis.decisions]
+    if len(dec_ids) != len(set(dec_ids)):
+        problems.append(f"duplicate decision ids: {dec_ids}")
+    for a in analysis.artifacts:
+        if not a.strip():
+            problems.append("empty path in artifacts")
+    return problems
+
+
+_MICRO_ID = re.compile(r"^(P\d+)\.S(\d+)$")
+
+
+def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis,
+                       covers: list[str]) -> list[str]:
+    """PS3.2 — M2 validata in codice. Ownership ESCLUSIVA dei file (il difetto
+    'fasi ridondanti' di F3 reso irrappresentabile) e perimetri dal ledger."""
+    problems: list[str] = []
+    if bp.phase_id != analysis.phase_id:
+        problems.append(f"phase_id must be '{analysis.phase_id}', got '{bp.phase_id}'")
+    ids = [m.id for m in bp.micro]
+    if len(ids) != len(set(ids)):
+        problems.append(f"duplicate micro ids: {ids}")
+    for m in bp.micro:
+        mm = _MICRO_ID.match(m.id)
+        if not mm or mm.group(1) != bp.phase_id:
+            problems.append(f"micro id '{m.id}' must match {bp.phase_id}.S<n>")
+    owned: dict[str, str] = {}
+    allowed = set(analysis.artifacts) | set(analysis.involved)
+    for m in bp.micro:
+        for f in m.work.files_owned:
+            if f in owned:
+                problems.append(f"file '{f}' owned by both {owned[f]} and {m.id}: "
+                                f"ownership is EXCLUSIVE")
+            owned[f] = m.id
+            if allowed and f not in allowed:
+                problems.append(f"{m.id} owns '{f}' which is neither in the "
+                                f"analysis artifacts nor in involved")
+        for cid in m.proves:
+            if cid not in covers:
+                problems.append(f"{m.id} proves '{cid}' which this phase does "
+                                f"not cover (covers: {covers})")
+    return problems

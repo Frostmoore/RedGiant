@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from redgiant.plansys.artifacts import MacroPlan
+from redgiant.plansys.artifacts import MacroPlan, PhaseAnalysis, PhaseBlueprint
 from redgiant.plansys.gates import macro_validation_gate, normalize_macro
 from redgiant.roles.base import Role, RoleContext
 
@@ -58,3 +58,30 @@ class SeniorPlanner(Role):
 def parse_artifact(model: type[BaseModel], payload_json: str) -> BaseModel:
     """Helper condiviso: rilettura tipizzata di un artefatto persistito."""
     return model.model_validate_json(payload_json)
+
+
+class _SingleShot(Role):
+    """M1..M4 sono passi di compilazione SINGLE-SHOT: una chiamata, un parse.
+    Le correzioni non vivono qui ma nel PhaseCompiler come patch (PS-D6)."""
+
+    def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> BaseModel:
+        parts = self.assembler.build(
+            self.name, task=ctx.task, subtask=None, tools=[],
+            volatile=ctx.volatile,
+            output_schema=self.output_model.model_json_schema(),
+            schema_name=self.output_model.__name__)
+        return self.llm.complete(
+            parts, role=self.name, schema=self.output_model,
+            max_tokens=max_tokens, task_id=ctx.task.id).parsed
+
+
+class PhaseAnalyst(_SingleShot):
+    """M1: analisi della macrofase, decisioni esplicite, choice point."""
+    name = "phase_analyst"
+    output_model = PhaseAnalysis
+
+
+class WorkDecomposer(_SingleShot):
+    """M2: decomposizione in microfasi con ownership esclusiva."""
+    name = "work_decomposer"
+    output_model = PhaseBlueprint

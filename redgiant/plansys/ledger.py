@@ -75,6 +75,19 @@ def _touched_paths(store: StateStore, scope: Scope, task_id: str) -> list[Path]:
 def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger:
     entries: list[LedgerEntry] = []
 
+    # 0. listato repo come fact (max 40): a task fresco e' l'UNICO ancoraggio
+    #    possibile per gli 'involved' di M1 (anti-invenzione senza storia)
+    listed = 0
+    for p in sorted(scope.root.rglob("*")):
+        if p.is_dir() or ".git" in p.parts or p.suffix in (".db", ".rgedit"):
+            continue
+        rel = p.relative_to(scope.root).as_posix()
+        entries.append(_entry("fact", rel, "exists"))
+        listed += 1
+        if listed >= 40:
+            entries.append(_entry("fact", "...", "repo listing truncated at 40"))
+            break
+
     # 1. firme reali (AST) dei file toccati — la verita' sul codice, mai ricordata
     for real in _touched_paths(store, scope, task_id):
         rel = real.relative_to(scope.root).as_posix()

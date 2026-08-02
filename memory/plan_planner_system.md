@@ -4,7 +4,7 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
-**Stato:** 🟢 **PS2 completata** (2026-08-03, `v3.3.0`) — prossima azione: **PS3** (Phase Compiler M1–M2).
+**Stato:** 🟢 **PS3 completata** (2026-08-03, `v3.4.0`) — prossima azione: **PS4** (Verification Compiler M3–M4 + Oracle Qualification).
 
 > **La regola che comanda questo documento:**
 > *The Senior defines what must be achieved. The Mid decides how to decompose it and how
@@ -479,21 +479,21 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS3.1 — M1 Phase Analyst
 
-- [ ] 🤖 **Obiettivo:** card `phase_analyst.md` + `PhaseAnalyst(Role)` (`output_model = PhaseAnalysis`), input = proiezione di fase (S6) + MacroPhase corrente.
+- [x] 🤖 **Obiettivo:** card `phase_analyst.md` + `PhaseAnalyst(Role)` (`output_model = PhaseAnalysis`), input = proiezione di fase (S6) + MacroPhase corrente. *(firma estesa in implementazione: `validate_analysis(analysis, projection, phase_id)` — il check di coerenza dell'id sta nel validatore, non nel compiler; ragione: tutti i check nello stesso posto)*
   Card: analyse ONLY this phase; `involved` MUST quote identifiers that appear in CONTEXT (ledger projection) — never invent; every design choice goes in `decisions` with the constraint that forced it; if the codebase and plan do not determine a choice, emit `decision_required` instead of choosing silently.
 - **Validazione deterministica** (`gates.py::validate_analysis(analysis, projection) -> list[str]`): `involved` ⊆ simboli/path presenti nella proiezione o nel ledger (anti-invenzione meccanica); `decisions` senza duplicati; `decision_required` → il compiler si ferma (PS-D8) e scrive la clarification.
 - **Accettazione:** su fixture con simbolo inventato → bocciato con la voce esatta; con choice point → riga `approvals` kind clarification creata e compilazione sospesa.
 
 #### PS3.2 — M2 Work Decomposer
 
-- [ ] 🤖 **Obiettivo:** card `work_decomposer.md` + `WorkDecomposer(Role)` (`output_model = PhaseBlueprint`), input = proiezione + PhaseAnalysis validata.
+- [x] 🤖 **Obiettivo:** card `work_decomposer.md` + `WorkDecomposer(Role)` (`output_model = PhaseBlueprint`), input = proiezione + PhaseAnalysis validata. *(firma estesa: `validate_blueprint(bp, analysis, covers)` — il check `proves ⊆ covers` richiede i criteri della fase)*
   Card: one micro-phase per coherent artifact (PS-D10 come guida, non regola); each micro OWNS its files exclusively; boundary states what it does NOT do; signatures verbatim from analysis/ledger; ≤6 micro.
 - **Validazione** (`validate_blueprint(bp, analysis) -> list[str]`): ownership dei file ESCLUSIVA tra micro della fase (il difetto "fasi ridondanti" di F3, reso impossibile); ogni `files_owned` ⊆ `analysis.artifacts ∪ analysis.involved`; id `P<k>.S<n>` ordinati; tetti; ogni micro `proves` ⊆ criteri coperti dalla fase.
 - **Accettazione:** fixture con ownership duplicata → bocciata; blueprint valido → renderizzato.
 
 #### PS3.3 — PhaseCompiler (prima metà) + patch
 
-- [ ] 🤖 **Obiettivo:** `compiler.py`:
+- [x] 🤖 **Obiettivo:** `compiler.py`: *(in corso d'opera: aggiunto `projection(task_id, plan, phase) -> str` — il compiler costruisce da sé ledger+proiezione, l'engine chiama solo compile; e il ledger ora include il listato repo come fact, max 40: a task fresco è l'unico ancoraggio per gli involved)*
   ```python
   class PhaseCompiler:
       def __init__(self, cfg: Config, store: StateStore, llm: LlamaClient,
@@ -509,7 +509,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS3.4 — 🔎 Verifica di fase
 
-- [ ] M1+M2 end-to-end su fixture reale (severino-sim, smoke CPU-bound): blueprint valido per una macrofase di T040-bozza, con decisioni esplicite e ownership pulita; `P<k>.blueprint.md` renderizzato; unit compiler verdi.
+- [x] M1+M2 end-to-end su fixture reale (severino-sim, smoke CPU-bound): blueprint valido per una macrofase di T040-bozza, con decisioni esplicite e ownership pulita; `P<k>.blueprint.md` renderizzato; unit compiler verdi. *(smoke live: M1 25s con involved ancorati ai file veri, M2 20s, 0 patch necessarie; 72/72 unit)*
 
 **Rituale** → `v3.4.0`.
 
