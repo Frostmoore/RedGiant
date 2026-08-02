@@ -97,6 +97,29 @@ stessa sessione di cache:
 la generazione del pensiero: `think_budget/35,8 s` per chiamata su severino-sim — ed è esattamente
 una delle due grandezze che l'esperimento deve misurare.
 
+### TH-D2 (vincolo Gemma 4, indicazione utente 2026-08-02): il ragionamento NON entra mai nella catena duratura
+
+Le linee guida di Gemma 4 impongono di **non ripassare il ragionamento nel contesto** dei turni
+successivi. Regola meccanica, non fiduciaria:
+
+- **Il pensiero vive SOLO dentro la sua coppia think→emit**: compare nel prompt della chiamata 2
+  (il modello deve vederlo per usarlo — è il comportamento nativo entro il turno) e in nessun
+  altro prompt, mai. Non nel ledger, non nella projection, non nel volatile dei passi successivi,
+  non nei retry.
+- **Per S e M** il vincolo è soddisfatto per costruzione: ogni passo è single-shot con prompt
+  proprio; la coppia think→emit nasce e muore lì.
+- **Per J (braccio T-J)** serve il **fork della cache**: sia `P` il prompt canonico append-only
+  dello step N. Chiamata 1 = `P + invito a pensare` → pensiero `T` (ramo usa-e-getta). Chiamata 2
+  = `P + [THINKING]T + S7` → JSON (secondo ramo, riusa il prefisso `P`). La **catena canonica
+  prosegue da `P + JSON + tool result`**: lo step N+1 condivide con la storia il prefisso fino a
+  `P` e ri-prefilla solo il proprio output JSON (piccolo) — `T` non entra MAI nella catena.
+  Costo extra per step: prefill di `T` una volta (chiamata 2) + re-prefill del JSON allo step
+  successivo. Niente strappi di byte a metà prefisso (F10), niente ragionamento trascinato
+  (linee guida Gemma 4).
+- Implementazione: `complete(think=N)` NON altera `parts` per il chiamante — i due prompt
+  arricchiti sono costruiti e scartati dentro il client; il chiamante riceve solo `LlmResult`
+  (con `thinking_text` a scopo di LOG, mai di contesto).
+
 ### TH0.1 — Client
 
 `redgiant/llm/client.py`:
@@ -144,7 +167,9 @@ e `SeniorPlanner.run`) passando `think=budget if role in thinking_roles() else N
 
 - Unit: (1) `think=None` produce payload identico a oggi (spia sul transport); (2) two-call con
   stop e budget; (3) troncamento del pensiero non alza `LlmTruncated`; (4) `[THINKING]` appeso al
-  volatile della chiamata 2; (5) migrazione DB idempotente. Suite intera verde.
+  volatile della chiamata 2; (5) migrazione DB idempotente; (6) **TH-D2**: `parts` del chiamante
+  intatte dopo `complete(think=N)` e il prompt dello step successivo di J NON contiene
+  `[THINKING]`. Suite intera verde.
 - Smoke GPU: 1 task pilota con `RG_THINKING_ROLES=worker` — nel log si vedono le coppie di
   chiamate, i thinking_tokens nel DB, e il template markers verificati contro `/props`.
 
@@ -203,7 +228,9 @@ Documentazione: questo piano aggiornato, atlante (firme + trappole), README (nuo
    pinnato via `/props`, MAI dai docs generici (lezione F0.3: il template sbagliato produce
    nonsense ben formato).
 2. **Il pensiero nel volatile sposta i byte**: `[THINKING]` va SEMPRE in coda al volatile (S6),
-   mai prima — il prefisso stabile S1→S5 non deve cambiare di un byte (F10).
+   mai prima — il prefisso stabile S1→S5 non deve cambiare di un byte (F10). E per TH-D2 il
+   pensiero resta nel ramo usa-e-getta: la catena canonica di J non lo contiene MAI (unit
+   dedicato in TH0.4: il prompt dello step N+1 non contiene `[THINKING]`).
 3. **Seed e two-call**: la chiamata 1 consuma stato del sampler? No (seed per-richiesta, F1.11),
    ma va provato nello smoke: due run identiche → stesso pensiero, stesso output.
 4. **Il thinking troncato che finisce a metà frase** può indurre la chiamata 2 a completarlo
