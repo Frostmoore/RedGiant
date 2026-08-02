@@ -184,6 +184,31 @@ class PhaseCompiler:
                                       for f in m.work.files_owned]
                 m.work.inputs = [self._relativize(f) for f in m.work.inputs]
                 m.work.outputs = [self._relativize(f) for f in m.work.outputs]
+            # batch n.3 (PS-D11): AUTO-SPLIT — una micro che crea N file nuovi
+            # viene divisa dal control plane in N micro (un file nuovo l'una):
+            # la STRUTTURA e' identita', non significato. La patch non sa
+            # "dividere"; il codice si'.
+            existing_set = set(self._existing_files())
+            split: list = []
+            for m in b.micro:
+                new_files = [f for f in m.work.files_owned
+                             if f not in existing_set]
+                if len(new_files) <= 1:
+                    split.append(m)
+                    continue
+                olds = [f for f in m.work.files_owned if f in existing_set]
+                for i, nf in enumerate(new_files):
+                    clone = m.model_copy(deep=True)
+                    clone.work.files_owned = ([*olds, nf] if i == 0 else [nf])
+                    keep = set(clone.work.files_owned)
+                    clone.work.outputs = ([o for o in clone.work.outputs
+                                           if o in keep] or [nf])
+                    clone.title = f"{m.title} ({nf})"[:80]
+                    split.append(clone)
+            b.micro = split[:6]
+            # id ri-numerati dal control plane (identita' canonica)
+            for i, m in enumerate(b.micro, 1):
+                m.id = f"{phase.id}.S{i}"
             # fast #6: con UNA sola micro l'assegnazione dei criteri orfani e'
             # INEQUIVOCA (possono andare solo li'): riparazione deterministica.
             # Con piu' micro resta una scelta di design -> violazione a M2.
@@ -254,6 +279,7 @@ class PhaseCompiler:
             "M3", role, ctx, out, VerificationBlueprint,
             lambda v: validate_verification(_norm_kinds(v), bp, known), log,
             grammar_schema=grammar)
+        self._canonical_names(out, log)
         self.store.save_ps_artifact(task_id, kind="verification_blueprint",
                                     ref=phase.id,
                                     payload_json=out.model_dump_json(),
@@ -261,40 +287,74 @@ class PhaseCompiler:
         log.line("compiler", f"{phase.id} M3: {len(out.obligations)} obblighi")
         return out
 
+    def _canonical_names(self, vbp: VerificationBlueprint, log) -> None:
+        """Batch20 n.2 → n.3 (Closed Reference Loop, PS-D11): 'il modello crea
+        il significato, il control plane crea l'IDENTITA''. Dopo M3 i nomi
+        id/test_file/test_name diventano canonici e derivati — UNA autorita'
+        nominale, mai due. Eccezione: se M3 punta a un test file ESISTENTE
+        (suite fornita), l'ancora resta il file reale."""
+        counters: dict[str, int] = {}
+        for o in vbp.obligations:
+            existing = (self.scope.root / o.test_file).is_file()
+            n = counters.get(o.micro_id, 0) + 1
+            counters[o.micro_id] = n
+            new_id = f"{o.micro_id}.O{n}"
+            if o.id != new_id:
+                o.id = new_id
+            if not existing:
+                snake = o.micro_id.lower().replace(".", "_")
+                o.test_file = f"test_{snake}.py"
+                o.test_name = f"test_{snake}_o{n}"
+        log.line("compiler", "nomi canonici assegnati agli obblighi "
+                             f"({len(vbp.obligations)})")
+
     def author_tests(self, task_id: str, phase: MacroPhase, bp: PhaseBlueprint,
                      vbp: VerificationBlueprint, projection: str,
                      log) -> TestBundle:
         state = self.store.load_task(task_id)
-        required = sorted({o.test_file for o in vbp.obligations})
-        volatile = (f"{projection}\n[BLUEPRINT] {bp.model_dump_json()}"
-                    f"\n[OBLIGATIONS] {vbp.model_dump_json()}"
-                    f"\n[REQUIRED TEST FILES] exactly these relative paths, "
-                    f"one artifact each, nothing else: {', '.join(required)}"
-                    f"\n{self._import_hint(bp, vbp)}")
-        # smoke PS4.3: se un test_file degli obblighi ESISTE, M4 deve vederne
-        # il contenuto per includerlo (la guardia di materializzazione rifiuta
-        # i test persi) — senza il sorgente non potrebbe che inventare
+        role = TestAuthor(self.llm, self.assembler, self.router)
+        artifacts = []
+        # batch n.3: M4 lavora PER-FILE — un file di test per chiamata, con i
+        # soli obblighi di quel file (ask piccolo = niente file mancanti,
+        # niente troncamenti; i nomi sono gia' canonici, PS-D11)
         for tf in sorted({o.test_file for o in vbp.obligations}):
+            subset = VerificationBlueprint(
+                phase_id=vbp.phase_id,
+                obligations=[o for o in vbp.obligations if o.test_file == tf],
+                synthesis_cmds=vbp.synthesis_cmds)
+            volatile = (f"{projection}\n[BLUEPRINT] {bp.model_dump_json()}"
+                        f"\n[OBLIGATIONS] {subset.model_dump_json()}"
+                        f"\n[REQUIRED TEST FILES] exactly ONE artifact with "
+                        f"path '{tf}' containing the test functions named by "
+                        f"the obligations above, nothing else"
+                        f"\n{self._import_hint(bp, subset)}")
             existing = self.scope.root / tf
             if existing.is_file():
                 volatile += (f"\n[EXISTING TEST FILE {tf}]\n"
                              + existing.read_text(encoding="utf-8",
                                                   errors="replace"))
-        ctx = RoleContext(task=state, subtask=None, volatile=volatile)
-        role = TestAuthor(self.llm, self.assembler, self.router)
-        def _val(b: TestBundle) -> list[str]:
-            self._dedup_bundle(vbp, b, log)
-            self._reconcile_test_names(vbp, b, log)
-            return validate_bundle(b, vbp)
+            ctx = RoleContext(task=state, subtask=None, volatile=volatile)
+            grammar = self._enum_schema(TestBundle, [
+                ("TestArtifact", "path", [tf], False)])
 
-        grammar = self._enum_schema(TestBundle, [
-            ("TestArtifact", "path", required, False)])
-        out: TestBundle = role.run(
-            ctx, max_tokens=self.cfg.plansys.test_author_max_tokens,
-            grammar_schema=grammar)  # type: ignore
-        out = self._repair_loop("M4", role, ctx, out, TestBundle, _val, log,
-                                max_tokens=self.cfg.plansys.test_author_max_tokens,
-                                grammar_schema=grammar)
+            def _val(b: TestBundle) -> list[str]:
+                self._dedup_bundle(subset, b, log)
+                self._reconcile_test_names(subset, b, log)
+                return validate_bundle(b, subset, bp)
+
+            one: TestBundle = role.run(
+                ctx, max_tokens=self.cfg.plansys.test_author_max_tokens,
+                grammar_schema=grammar)  # type: ignore
+            one = self._repair_loop(
+                "M4", role, ctx, one, TestBundle, _val, log,
+                max_tokens=self.cfg.plansys.test_author_max_tokens,
+                grammar_schema=grammar)
+            artifacts.extend(a for a in one.artifacts if a.path == tf)
+
+        out = TestBundle(phase_id=vbp.phase_id, artifacts=artifacts)
+        probs = validate_bundle(out, vbp, bp)
+        if probs:
+            raise CompileFailed("M4", probs)
         self.store.save_ps_artifact(task_id, kind="test_bundle", ref=phase.id,
                                     payload_json=out.model_dump_json(),
                                     actor="phase_compiler")
@@ -467,7 +527,7 @@ class PhaseCompiler:
                                             bundle.model_dump_json())
                 bundle = TestBundle.model_validate_json(self._apply_patch(
                     TestBundle, bundle.model_dump_json(), patch))
-                probs = validate_bundle(bundle, vbp)
+                probs = validate_bundle(bundle, vbp, bp)
                 if probs:
                     raise CompileFailed("M4-patch", probs)
                 self.store.save_ps_artifact(
@@ -554,7 +614,7 @@ class PhaseCompiler:
                                                 bundle.model_dump_json())
                     cand = TestBundle.model_validate_json(self._apply_patch(
                         TestBundle, bundle.model_dump_json(), patch))
-                    probs = validate_bundle(cand, vbp)
+                    probs = validate_bundle(cand, vbp, bp)
                     if probs:
                         raise ValueError("; ".join(probs)[:300])
                     bundle = cand

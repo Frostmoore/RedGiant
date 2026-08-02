@@ -218,9 +218,24 @@ def validate_verification(vbp: VerificationBlueprint, bp: PhaseBlueprint,
     return problems
 
 
-def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint) -> list[str]:
+def _fn_identifiers(fn: "ast.FunctionDef", imports_src: str) -> set[str]:
+    used: set[str] = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Name):
+            used.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            used.add(node.attr)
+    for tok in imports_src.replace(",", " ").split():
+        used.add(tok.strip("."))
+    return used
+
+
+def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint,
+                    bp: PhaseBlueprint | None = None) -> list[str]:
     """PS4.1 — M4 validata in codice PRIMA della materializzazione: file giusti,
-    sintassi che parsa, niente file fuori nomenclatura."""
+    sintassi che parsa, niente file fuori nomenclatura. Batch n.3: con `bp`
+    anche l'AGGANCIO al bersaglio si valida QUI (riparazione nel loop giusto,
+    non al gate finale)."""
     problems: list[str] = []
     if bundle.phase_id != vbp.phase_id:
         problems.append(f"phase_id must be '{vbp.phase_id}', got '{bundle.phase_id}'")
@@ -237,11 +252,23 @@ def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint) -> list[str]
         content = by_path.get(o.test_file)
         if content is None:
             continue
-        fns, _ = _parse_tests(content)
+        fns, imports_src = _parse_tests(content)
         if o.test_name not in fns:
             problems.append(f"obligation {o.id} requires test function "
                             f"'{o.test_name}' in {o.test_file} — missing "
                             f"(found: {sorted(fns)[:6]})")
+            continue
+        if bp is not None:
+            try:
+                syms = _micro_symbols(bp, o.micro_id)
+            except StopIteration:
+                continue
+            used = _fn_identifiers(fns[o.test_name], imports_src)
+            if syms and not (syms & used):
+                problems.append(f"{o.test_name} in {o.test_file} references "
+                                f"NONE of {sorted(syms)}: import and call the "
+                                f"target module — a test that avoids the "
+                                f"target proves nothing")
     for a in bundle.artifacts:
         if re.match(r"^[A-Za-z]:[\\/]|^[\\/]", a.path):
             problems.append(f"artifact '{a.path}': paths must be RELATIVE to "
@@ -372,14 +399,7 @@ def oracle_qualification_gate(vbp: VerificationBlueprint, bundle: TestBundle,
         # attributi, import) — mai sottostringhe (fast #1: "models" dentro un
         # letterale ingannava il check) ne' il nome del test stesso
         syms = _micro_symbols(bp, o.micro_id)
-        used: set[str] = set()
-        for node in ast.walk(fn):
-            if isinstance(node, ast.Name):
-                used.add(node.id)
-            elif isinstance(node, ast.Attribute):
-                used.add(node.attr)
-        for tok in imports_src.replace(",", " ").split():
-            used.add(tok.strip("."))
+        used = _fn_identifiers(fn, imports_src)
         hooked = bool(syms & used)
         checks.append(CheckResult(
             name=f"{o.id}:targets_contract", ok=hooked,
