@@ -14,7 +14,7 @@
 
 *The model stays small. The **system** becomes large.*
 
-[Thesis](#-the-thesis) · [Niche](#-where-this-sits--the-niche-honestly) · [Decisions](#-key-technical-decisions) · [Findings](#-empirical-findings-so-far-phases-0-3) · [Pipeline](#-pipeline-at-a-glance) · [Hardware](#-target-hardware-severino) · [Roadmap](#%EF%B8%8F-roadmap--and-how-its-actually-going) · [Docs](#-repository-map) · [Quickstart](#-getting-started-development-windows)
+[Thesis](#-the-thesis) · [Niche](#-where-this-sits--the-niche-honestly) · [Decisions](#-key-technical-decisions) · [Discoveries](#-discoveries--field-notes-with-standalone-value) · [Pipeline](#-pipeline-at-a-glance) · [Hardware](#-target-hardware-severino) · [Roadmap](#%EF%B8%8F-roadmap--and-how-its-actually-going) · [Docs](#-repository-map) · [Quickstart](#-getting-started-development-windows)
 
 </div>
 
@@ -67,20 +67,56 @@ If you are trying to make a small local model do real, verified work on hardware
 | 🚫 **No external LLM APIs, ever** | A system that escapes to a big model under pressure proves nothing. Honest explicit failure is a valid result |
 | 🪶 **Stack: Python · FastAPI + HTMX + Jinja2 · SQLite · zero frontend build** | One process, one port, deployable as one container next to llama-server |
 
-## 🔬 Empirical findings so far (Phases 0-3)
+## 🔬 Discoveries — field notes with standalone value
 
-Field notes from building on Gemma 4 E2B — useful to anyone working with small models. Every finding is tracked with its technical cause in the [codebase atlas, §9](memory/codebase_reference.md):
+Everything below was *measured on this project*, not read somewhere: each discovery has its technical cause recorded in the [codebase atlas, §9](memory/codebase_reference.md), the measurement behind it in [`bench/results/`](bench/results/), and a countermeasure that now lives in the code. IDs (**D1**–**D14**) are stable — the [summary table](#-discovery-index) at the end of this section details them all. If you work with small local models, this section is probably the most reusable part of the repository.
 
-1. **The grammar constrains, but does not inform.** With guided decoding active but the schema absent from the prompt, the model produces structurally valid JSON filled with literal placeholders (`"..."`, `"$id"`). The schema must be shown *in the prompt*; the grammar only guarantees shape.
-2. **Instruction-tuned models need their chat template even for raw completions.** Without Gemma's turn markers, output degenerates.
-3. **The grammar guarantees shape only within the generation budget.** Output truncated at `n_predict` is broken JSON *despite* the grammar. Stop reason `limit` must be treated as an explicit error, and per-role token budgets sized with headroom. Compact JSON (no pretty-printing) saves 20–30% of output tokens.
-4. **KV-slot `save`/`restore` round-trips cleanly but does not restore cache-reuse state** (llama.cpp build b10200): after a restore, the very same prompt reprocesses 100% of its tokens, while normal `cache_prompt` reuse works perfectly (1/872 reprocessed on a repeated prompt, 59 on append). Slot persistence is unusable as a prefill-skip on this build.
-5. **Unified diffs are hostile to small models** (Phase 1 field data): logically-correct fixes got rejected in loops over a single blank-line context mismatch. Exact-string replacement (`edit_file`) turned 20-call failures into 5-call successes. Small models also *always* copy the `N<TAB>` line-number prefixes they see in file reads — into diffs, into edit strings, into whole-file writes — so every writing tool normalizes them.
-6. **Seed-fixed generation is deterministic per backend, not across backends**: the same seed produces different trajectories on CUDA vs CPU builds. Official metrics must come from the target-equivalent backend — a GPU dev pass is a hint, never a result.
-7. **The unescaped-quote derail** (Phase 2's root-cause find): when a small model emits a raw `"` inside a JSON string value, the grammar legally closes the string and the model derails; if the schema offers an "empty" escape branch (`finish: null`), it becomes a 60-call chaos loop. Fix: **discriminated unions** — make the incoherent branch grammatically unproducible — plus an anti-quote rule in the preamble.
-8. **Verification must be symmetric**: oracles beat model claims in *both* directions. A worker that believes it is blocked while the tests are green has still succeeded — objective checks (files exist, tests pass) override self-reports, flagged as warnings.
+### Constrained decoding & prompting
 
-With the first three fixed: **60/60 structurally valid, 60/60 semantically filled outputs** across decision / plan / subtask-design schemas, at near-zero grammar overhead on large payloads. Full report: [`bench/results/f0_constrained_decoding.md`](bench/results/f0_constrained_decoding.md).
+- **D1 — The grammar constrains, but does not inform.** With guided decoding active but the schema absent from the prompt, the model produces structurally valid JSON filled with literal placeholders (`"..."`, `"$id"`). The schema must be shown *in the prompt*; the grammar only guarantees shape.
+- **D2 — Instruction-tuned models need their chat template even for raw completions.** Without Gemma's turn markers, output degenerates.
+- **D3 — The grammar guarantees shape only within the generation budget.** Output truncated at `n_predict` is broken JSON *despite* the grammar. Stop reason `limit` must be treated as an explicit error, and per-role token budgets sized with headroom. Compact JSON (no pretty-printing) saves 20–30% of output tokens.
+- **D4 — KV-slot `save`/`restore` round-trips cleanly but does not restore cache-reuse state** (llama.cpp build b10200): after a restore, the very same prompt reprocesses 100% of its tokens, while normal `cache_prompt` reuse works perfectly. Slot persistence is unusable as a prefill-skip on this build.
+
+With D1–D3 fixed: **60/60 structurally valid, 60/60 semantically filled outputs** across decision / plan / subtask-design schemas, at near-zero grammar overhead on large payloads ([full report](bench/results/f0_constrained_decoding.md)).
+
+### The model ↔ environment interface
+
+- **D5 — Unified diffs are hostile to small models.** Logically-correct fixes got rejected in loops over a single blank-line context mismatch. Exact-string replacement (`edit_file`) turned 20-call failures into 5-call successes. Small models also *always* copy the `N<TAB>` line-number prefixes they see in file reads — into diffs, into edit strings, into whole-file writes — so every writing tool normalizes them. The environment adapts to the model, not vice versa.
+- **D6 — Seed-fixed generation is deterministic per backend, not across backends**: the same seed produces different trajectories on CUDA vs CPU builds. Official metrics must come from the target-equivalent backend — a GPU dev pass is a hint, never a result.
+- **D7 — The unescaped-quote derail** (Phase 2's root-cause find): when a small model emits a raw `"` inside a JSON string value, the grammar legally closes the string and the model derails; if the schema offers an "empty" escape branch (`finish: null`), it becomes a 60-call chaos loop. Fix: **discriminated unions** — make the incoherent branch grammatically unproducible — plus an anti-quote rule in the preamble.
+- **D8 — "Success" that changes nothing is a loop generator.** An edit whose old and new strings are identical *succeeds* — so the model repeats it, identically, until the step budget dies (15 consecutive no-op edits observed). Degenerate repetition must be made visible: a no-op edit is now an explicit error, and identical consecutive calls count as failures even when they return ok.
+
+### Verification & trust
+
+- **D9 — Verification must be symmetric**: oracles beat model claims in *both* directions. A worker that believes it is blocked while the tests are green has still succeeded — objective checks (files exist, tests pass) override self-reports, flagged as warnings.
+- **D10 — Scope and verification must coincide.** A subtask punished by tests it is forbidden to fix rewrites the one file it *can* touch, forever (49 rewrites of the same file observed). The full test suite belongs only to the subtask that owns the final state; intermediate subtasks are verified on what they own.
+- **D11 — Small models invent identifiers under pressure.** Asked to plan around a module it hasn't seen, the model names things by association (`slugify` where the tests import `slug`) and the invention propagates from plan to code to failure. Fix: **contract anchoring** — planning roles receive verbatim excerpts of the tests they must satisfy, and objectives are phrased by outcome, not by imagined API.
+- **D12 — The prompt and the validator are one artifact.** Removing one sentence from a role's prompt (*"verification entries must be exactly the known command ids"*) while the validator kept enforcing it killed 6 tasks out of 10 before a single tool call. A 2B model executes exactly what it is told — nothing more. Every rule a validator enforces must have its sentence in the prompt, and every official measurement must run from committed, tested code.
+
+### Token economy on CPU
+
+- **D13 — Call count is not the cost; prefix instability is.** An 88-call planner session cost only ~82s of *total* prefill on 2 CPU cores, because the append-only context kept KV-cache reuse near 100%. The same workload with an unstable prefix would reprocess ~120× more tokens (measured: 65 vs 7,971 on a one-byte mid-prompt change). On CPU, prompt layout is not a style choice — it is the performance model.
+- **D14 — Governance overhead is real, measurable, and must earn its keep.** On micro-tasks, planner-mode multiplies LLM calls ~10× vs a naive static plan (88 vs 8 on the same task; 710K tokens for a 10-task baseline battery). This is *by design* — the architecture bets the overhead pays off on tasks too wide for a single session — but the bet is treated as a hypothesis under A/B evaluation, not an assumption. When planning doesn't pay, the honest output is "don't plan". Open problem, tracked as such.
+
+### 📋 Discovery index
+
+| ID | Discovery | Hard evidence | Countermeasure → where it lives |
+|---|---|---|---|
+| D1 | Grammar constrains, doesn't inform | Valid JSON of literal `"..."` placeholders, 0/60 → 60/60 semantically filled | Schema rendered inside the prompt (S2) → `prompts/assemble.py` |
+| D2 | Chat template required even raw | Degenerate output without Gemma turn markers | Turn markers always applied → `llm/client.py` |
+| D3 | Truncation beats grammar | Stop reason `limit` = broken JSON despite GBNF | `LlmTruncated` as explicit in-loop error; sized budgets; compact JSON (−20–30%) → `llm/client.py`, role budgets |
+| D4 | Slot restore ≠ cache-reuse restore | 100% token reprocess after restore (b10200) | Feature shelved; append-only reuse instead → plan §F5.4 |
+| D5 | Diffs hostile; `N<TAB>` always copied | 20-call diff loops → 5-call `edit_file` successes | `edit_file` primary; prefix normalization in every writer → `tools/fs.py` |
+| D6 | Determinism is per-backend | Same seed, different CUDA vs CPU trajectories | Official metrics only on CPU-capped profiles → measurement policy |
+| D7 | Unescaped-quote derail | 60-call chaos loops via `finish: null` escape branch | Discriminated unions (incoherent branch ungenerable) → `roles/worker.py`; anti-quote preamble rule |
+| D8 | No-op success loops | 15 identical no-op edits to step-budget death | `no_op_edit` error + identical-repeat counted by cumulative guard → `tools/fs.py`, `roles/worker.py` |
+| D9 | Oracle symmetry | Worker "blocked" + green tests = real success | Objective checks override self-reports (`completed_with_warnings`) → `core/verify.py` |
+| D10 | Scope = verification | 49 rewrites of the only touchable file | Full suite only on the phase's last subtask → `roles/phase_designer.py` |
+| D11 | Identifier invention | `slugify` planned, `slug` required, task dead | Contract anchoring: test excerpts fed to Planner/Designer → `core/orchestrator.py` |
+| D12 | Prompt and validator are one artifact | One deleted sentence → 6/10 tasks dead at 0 tool calls | Rule restored; official runs only from committed code → atlas §9 |
+| D13 | Prefix stability is the cost model | 88 calls ≈ 82s total prefill; 65 vs 7,971 reprocessed tokens | S1→S7 stable layout, append-only agent loop → `prompts/assemble.py` |
+| D14 | Governance must earn its keep | ~10× calls on micro-tasks; 710K tokens / 10-task battery | Built-in A/B evaluator; when-to-plan policy is a planned phase → `eval/harness.py`, plan §F6 |
 
 **Measured baselines** on the capped reference profile (2 workstation cores ≈ 4 target cores, [full report](bench/results/f0_baseline_severino-sim.md)):
 

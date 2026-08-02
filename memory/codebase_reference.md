@@ -426,6 +426,7 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 | Evaluator senza varianza multi-seed (1 run = 1 traiettoria) | costa CPU; serve per distinguere "funziona" da "è passato" | F6 |
 | `task_config.json` su file = seconda fonte di stato oltre al DB | uso single-writer, fallimento benigno e visibile | con l'evoluzione GUI di F4 |
 | Protocollo umano = segreteria (solo ultima risposta, niente cronologia) | il dialogo vero è il protocollo F4 | F4.2/F4 GUI |
+| Overhead di governance (utente, post-A/B): ~10× chiamate in modalità planner sui micro-task, 710K token per la batteria baseline — accettato come overhead sperimentale by design, ma va affrontato | serve la policy when-to-plan (pianificare solo quando paga) e la riduzione dei giri (sessioni multiple per sottofase, replan) | F6 (routing/Assessor) + dati F8 |
 
 ## 11. Il perché delle scelte non ovvie
 
