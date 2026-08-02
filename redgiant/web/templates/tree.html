@@ -1,0 +1,40 @@
+{# frammento riusato dalla pagina task e dal polling HTMX #}
+<div id="tree"
+     {% if t.status in ("queued", "running", "blocked") %}
+     hx-get="/tasks/{{ t.id }}/tree" hx-trigger="every 2s" hx-swap="outerHTML"
+     {% endif %}>
+  {% if t.status == "queued" and t.id == current and used.tokens > 0 %}
+  <p class="alive">🔄 ripresa in corso — il worker sta riprendendo il task
+     (il lavoro precedente è conservato)</p>
+  {% elif t.status == "queued" and t.id == current %}
+  <p class="alive">🔄 preso in carico — avvio del server modello in corso (~1 minuto:
+     il container carica i pesi)</p>
+  {% elif t.status == "queued" %}
+  <p class="muted">⏳ in coda{% if t.id in queue %} (posizione {{ queue.index(t.id) + 1 }}){% endif %}
+     — parte appena l'inferenza corrente termina: una alla volta per design (D7).</p>
+  {% endif %}
+  {% if t.status == "running" and last_activity %}
+  <p class="alive">⚙️ al lavoro — ultima attività: <code>{{ last_activity }}</code></p>
+  {% endif %}
+  <p>
+    <span class="badge b-{{ t.status }}">{{ t.status }}</span>
+    {% if t.plan %}<span class="muted"> · piano v{{ t.plan.version }}: {{ t.plan.goal[:80] }}</span>{% endif %}
+    {% if t.status == "failed" and t.error %}<br><span class="error">{{ t.error[:160] }}</span>{% endif %}
+  </p>
+  <ul class="tree">
+  {% for s in subtasks %}
+    <li>
+      {% if s.status == "completed" %}✓{% elif s.status == "failed" %}✗
+      {% elif s.status == "running" %}▶{% elif s.status == "blocked" %}⏸
+      {% elif s.status in ("retry", "repair") %}↻{% elif s.status == "skipped" %}»
+      {% else %}·{% endif %}
+      <b>{{ s.subtask_id }}</b> {{ s.title[:60] }}
+      <span class="badge b-{{ s.status }}">{{ s.status }}</span>
+      {% if s.attempts %}<span class="muted">(tentativi {{ s.attempts }})</span>{% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+  <p class="muted">budget: {{ used.tokens }} token
+    ({{ (100 * used.tokens / t.budget.max_total_tokens) | round | int }}%) ·
+    {{ used.tool_calls }} tool call</p>
+</div>

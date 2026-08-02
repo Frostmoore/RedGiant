@@ -68,6 +68,15 @@ def verify_subtask(spec: SubtaskSpec, report: FinishReport, scope: Scope,
                 detail=f"unknown check '{check}' (known tools: {sorted(known_cmds)}) - "
                        f"a non-executable verification is a failed verification"))
 
+    # F2.5 (retest D3): gli oracoli battono le dichiarazioni IN ENTRAMBE le
+    # direzioni. Se TUTTI i check oggettivi passano (output esistenti + test verdi,
+    # con almeno un test eseguito), il lavoro e' fatto anche se il worker si
+    # crede blocked: i check soggettivi (worker_done, evidence) diventano warning.
+    subjective = {"worker_done", "evidence_present"}
+    objective = [c for c in checks if c.name not in subjective]
+    ran_tests = any(c.name.startswith("test:") for c in objective)
+    if objective and ran_tests and all(c.ok for c in objective):
+        return Verdict(verdict="pass", checks=checks)
     verdict: Literal["pass", "fail"] = "pass" if all(c.ok for c in checks) else "fail"
     return Verdict(verdict=verdict, checks=checks)
 

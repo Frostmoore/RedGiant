@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Log — task {{ task_id[-8:] }}</h2>
+<p><a href="/tasks/{{ task_id }}">← torna al task</a></p>
+<pre>{% for l in lines %}{{ l }}
+{% endfor %}</pre>
+{% endblock %}

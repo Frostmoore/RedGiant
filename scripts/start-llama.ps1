@@ -1,7 +1,9 @@
 # Avvia llama-server per il profilo indicato (piano F0.2, decisioni D2/D6/D7).
 #   scripts\start-llama.ps1 -Profile dev-fast [-Ctx 8192] [-Port 8080]
 #
-# dev-fast     -> binario CUDA locale, tutto su GPU (solo iterazione, MAI metriche)
+# dev-fast     -> CPU-bound, 24 thread (DECISIONE UTENTE 2026-08-02: anche gli smoke
+#                 devono sentire il peso della CPU — la GPU non si usa per l'inferenza
+#                 del progetto: renderebbe i giudizi troppo ottimisti)
 # severino-sim -> delega al Docker compose CPU-only (F0.4)
 # severino     -> il server gira SUL box (gestito da li'); qui solo promemoria
 param(
@@ -30,12 +32,12 @@ switch ($Profile) {
     }
     "dev-fast" {
         if (-not (Test-Path $Model)) { throw "modello mancante: esegui scripts\download-model.ps1" }
-        $exe = Join-Path $Root "bin\llama-$Tag\cuda\llama-server.exe"
+        $exe = Join-Path $Root "bin\llama-$Tag\cpu\llama-server.exe"
         if (-not (Test-Path $exe)) { throw "binari mancanti: esegui scripts\download-llama.ps1" }
         # --parallel 1 (D7: una inferenza alla volta) · --slot-save-path (predisposto per F0.5/F5)
         # --chat-template gemma: i token BOS/EOS di Gemma differiscono dai default (output
         # corrotto senza template corretto).
-        & $exe --model $Model --ctx-size $Ctx --parallel 1 -ngl 999 `
+        & $exe --model $Model --ctx-size $Ctx --parallel 1 --threads 24 `
                --slot-save-path $Slots --chat-template gemma `
                --host 127.0.0.1 --port $Port
     }

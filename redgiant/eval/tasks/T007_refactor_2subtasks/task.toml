@@ -1,0 +1,11 @@
+id = "T007"
+domain = "coding"
+prompt = "Two tests fail: the project wants circle functions in their own module. Create circle.py and make geometry.py delegate to it, keeping every test green. Do not change the tests."
+success_cmd = "pytest -q"
+timeout_s = 1500
+tags = ["refactoring", "python", "multi-subtask", "promosso-dal-collaudo-F2"]
+plan_file = "plan.json"
+writable_globs = ["geometry.py", "circle.py"]
+
+[test_commands]
+pytest = ["pytest", "-q"]

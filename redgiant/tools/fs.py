@@ -1,9 +1,14 @@
-"""Tool filesystem: read_file, list_files, write_patch (piano §A7)."""
+"""Tool filesystem: read_file, list_files, edit_file, write_file, write_patch (piano §A7)."""
 
 from __future__ import annotations
 
+import ast as _pyast
+import json as _json
 import os
+import shutil as _shutil
+import subprocess as _subprocess
 import tempfile
+import tomllib as _tomllib
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -11,6 +16,44 @@ from pydantic import BaseModel, ConfigDict
 from redgiant.tools.base import Scope, ToolResult
 
 _MAX_LINES = 400
+
+
+def syntax_check(path: Path, content: str) -> str | None:
+    """Syntax gate (§A7, richiesta utente pre-F2): messaggio d'errore o None se ok.
+
+    Verifica il contenuto RISULTANTE prima che tocchi il disco: un file
+    sintatticamente rotto non deve mai esistere. Estensioni non coperte -> None.
+    """
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".py":
+            _pyast.parse(content)
+        elif suffix == ".json":
+            _json.loads(content)
+        elif suffix == ".toml":
+            _tomllib.loads(content)
+        elif suffix == ".php":
+            php = _shutil.which("php")
+            if php is None:
+                return None  # niente interprete: gate non applicabile, dichiarato in doc
+            with tempfile.NamedTemporaryFile("w", suffix=".php", delete=False,
+                                             encoding="utf-8") as fh:
+                fh.write(content)
+                tmp = fh.name
+            try:
+                proc = _subprocess.run([php, "-l", tmp], capture_output=True,
+                                       text=True, timeout=15)
+                if proc.returncode != 0:
+                    return (proc.stdout + proc.stderr).strip()[:300].replace(tmp, str(path))
+            finally:
+                Path(tmp).unlink(missing_ok=True)
+    except SyntaxError as e:
+        return f"line {e.lineno}: {e.msg}"
+    except (_json.JSONDecodeError, _tomllib.TOMLDecodeError) as e:
+        return str(e)[:300]
+    except _subprocess.TimeoutExpired:
+        return None  # il gate non deve mai bloccare per proprie lentezze
+    return None
 
 
 class _Args(BaseModel):
@@ -92,23 +135,52 @@ def edit_file(scope: Scope, path: str, old_string: str, new_string: str,
         return ToolResult(ok=False, data={}, error=f"scope:{e}")
     if not real.is_file():
         return ToolResult(ok=False, data={}, error="not_found")
-    text = real.read_text(encoding="utf-8", errors="replace")
+    # Trappola F2.5 (loop da 12 step): i checkout git su Windows sono CRLF ma
+    # read_file mostra LF -> l'old_string del modello non matcha MAI. Si lavora
+    # e si scrive in LF: l'ambiente non deve mentire al modello.
+    text = real.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
     # F1.11: i modelli copiano SEMPRE i prefissi 'N<TAB>' di read_file, regola o
     # non regola. L'ambiente si adatta: prefissi normalizzati via da entrambe.
     strip = __import__("re").compile(r"^\d+\t", __import__("re").MULTILINE)
-    old_string = strip.sub("", old_string)
-    new_string = strip.sub("", new_string)
+    old_string = strip.sub("", old_string).replace("\r\n", "\n")
+    new_string = strip.sub("", new_string).replace("\r\n", "\n")
+    # A/B 2026-08-02: un edit con old==new "riusciva" senza cambiare nulla e il
+    # modello lo ripeteva fino a esaurire gli step. Un no-op e' un errore: deve
+    # essere visibile al guard cumulativo, non un successo silenzioso.
+    if old_string == new_string:
+        return ToolResult(ok=False, data={
+            "hint": "old_string and new_string are IDENTICAL: this edit changes "
+                    "nothing. Put the CORRECTED text in new_string, or use "
+                    "write_file to rewrite the file."},
+            error="no_op_edit")
     n = text.count(old_string)
     if n == 0:
-        return ToolResult(ok=False, data={"hint": "copy old_string EXACTLY from the file, "
-                                                  "without the N<TAB> line-number prefix"},
-                          error="not_found_in_file")
+        # Retest D2: "not found" secco non insegna niente — il tool trova la regione
+        # piu' simile e la restituisce, cosi' il giro dopo l'old_string e' giusto
+        # (mismatch tipico: numero di righe vuote tra funzioni).
+        data = {"hint": "old_string not found. Copy it EXACTLY from the snippet below "
+                        "(mind blank lines), or use write_file to rewrite the file."}
+        first = next((l for l in old_string.splitlines() if l.strip()), "")
+        if first:
+            lines = text.splitlines()
+            idx = next((i for i, l in enumerate(lines) if first.strip() in l), None)
+            if idx is not None:
+                lo = max(0, idx - 1)
+                hi = min(len(lines), idx + len(old_string.splitlines()) + 2)
+                data["closest_match"] = "\n".join(lines[lo:hi])
+        return ToolResult(ok=False, data=data, error="not_found_in_file")
     if n > 1 and not replace_all:
         return ToolResult(ok=False, data={"occurrences": n,
                                           "hint": "add surrounding lines to make it unique, "
                                                   "or set replace_all=true"},
                           error="not_unique")
     new_text = text.replace(old_string, new_string)
+    err = syntax_check(real, new_text)
+    if err is not None:
+        return ToolResult(ok=False, data={"detail": err,
+                                          "hint": "edit NOT applied: it would break the "
+                                                  "file's syntax. Fix new_string and retry."},
+                          error="syntax_error")
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgedit")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
@@ -139,6 +211,12 @@ def write_file(scope: Scope, path: str, content: str) -> ToolResult:
         content = "\n".join(_re.sub(r"^\d+\t", "", l) for l in lines)
         if not content.endswith("\n"):
             content += "\n"
+    err = syntax_check(real, content)
+    if err is not None:
+        return ToolResult(ok=False, data={"detail": err,
+                                          "hint": "file NOT written: content has a syntax "
+                                                  "error. Fix it and retry."},
+                          error="syntax_error")
     existed = real.is_file()
     real.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgwrite")
@@ -187,6 +265,13 @@ def write_patch(scope: Scope, path: str, unified_diff: str) -> ToolResult:
     if applied == 0:
         return ToolResult(ok=False, data={"applied": 0, "rejected": rejected},
                           error="all_hunks_rejected")
+
+    err = syntax_check(real, "\n".join(lines) + ("\n" if lines else ""))
+    if err is not None:
+        return ToolResult(ok=False, data={"detail": err,
+                                          "hint": "patch NOT applied: the result would "
+                                                  "break the file's syntax."},
+                          error="syntax_error")
 
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgpatch")
     try:

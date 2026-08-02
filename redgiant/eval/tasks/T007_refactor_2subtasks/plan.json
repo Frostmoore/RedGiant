@@ -1,0 +1,30 @@
+{
+  "plan": {
+    "goal": "Split circle functions into circle.py with geometry delegating to it",
+    "success_criteria": ["pytest exits 0"],
+    "phases": [
+      {"id": "P1", "title": "Extract circle module", "depends_on": [],
+       "completion_criteria": ["pytest exits 0"]}
+    ]
+  },
+  "subtasks": [
+    {
+      "id": "P1.S1", "phase_id": "P1", "title": "Create circle.py",
+      "objective": "ONLY create circle.py containing circle_area and circle_perimeter (same behaviour as in geometry.py). Do NOT modify geometry.py: that is the next subtask's job.",
+      "inputs": ["geometry.py", "test_geometry.py"],
+      "tools": ["read_file", "write_file", "run_tests"],
+      "expected_outputs": ["circle.py"],
+      "completion_criteria": ["circle.py exists with both functions"],
+      "verification": []
+    },
+    {
+      "id": "P1.S2", "phase_id": "P1", "title": "Make geometry delegate to circle",
+      "objective": "Refactor geometry.py to import circle_area and circle_perimeter from circle instead of defining them, keeping square_area defined in geometry.py. All tests must pass.",
+      "inputs": ["geometry.py", "circle.py", "test_geometry.py"],
+      "tools": ["read_file", "edit_file", "write_file", "run_tests"],
+      "expected_outputs": ["geometry.py"],
+      "completion_criteria": ["pytest exits 0"],
+      "verification": ["pytest"]
+    }
+  ]
+}

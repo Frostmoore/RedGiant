@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Task {{ t.id[-8:] }} — Red Giant{% endblock %}
+{% block content %}
+<h2>Task {{ t.id[-8:] }}</h2>
+<p class="muted">{{ t.request }}</p>
+<p class="muted">target: <code>{{ t.target_dir }}</code> · dominio {{ t.domain }}</p>
+{% if t.error %}<p class="error">{{ t.error }}</p>{% endif %}
+{% include "tree.html" %}
+{% if approvals %}
+<p>⏸ <a href="/approvals">{{ approvals | length }} richieste in attesa della tua risposta</a></p>
+{% endif %}
+{% if t.status in ("failed", "partial") %}
+<h3>Perché è fallito</h3>
+{% if t.error %}<p class="error">{{ t.error }}</p>{% endif %}
+{% if failures %}
+<table>
+  <tr><th>sottofase</th><th>check</th><th>dettaglio</th></tr>
+  {% for f in failures %}
+  <tr><td>{{ f.subtask }}</td><td><code>{{ f.check }}</code></td>
+      <td class="muted">{{ f.detail }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+<form class="card" method="post" action="/tasks/{{ t.id }}/relaunch"
+      onsubmit="const b=this.querySelector('button'); b.disabled=true; b.textContent='Avvio…'">
+  <label>Riparti con istruzioni aggiuntive (nuovo task: budget fresco, stesso target,
+    stessa config — ai mezzi tecnici pensa il sistema)</label>
+  <textarea name="guidance" rows="2"
+    placeholder="es. non toccare i test; il metodo va aggiunto in fondo alla classe"></textarea>
+  <button>Riparti</button>
+</form>
+{% endif %}
+<p>
+  <a href="/tasks/{{ t.id }}/log">log completo</a>
+  {% if t.status in ("queued", "running", "blocked") %}
+  · <form method="post" action="/tasks/{{ t.id }}/cancel" style="display:inline">
+      <button class="secondary">annulla</button></form>
+  {% endif %}
+</p>
+{% endblock %}

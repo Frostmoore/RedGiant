@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Red Giant{% endblock %}</title>
+<script src="/static/htmx.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; background:#141115; color:#e8e2e4;
+         max-width: 980px; margin: 0 auto; padding: 1.2rem; }
+  a { color:#ff6a4d; text-decoration: none; } a:hover { text-decoration: underline; }
+  nav { display:flex; gap:1.2rem; align-items:center; border-bottom:1px solid #3a3236;
+        padding-bottom:.7rem; margin-bottom:1.2rem; }
+  nav .brand { font-weight:700; color:#ff4d2e; font-size:1.15rem; }
+  nav .queue { margin-left:auto; color:#9a8f93; font-size:.85rem; }
+  table { border-collapse: collapse; width:100%; margin:.6rem 0; }
+  th, td { text-align:left; padding:.35rem .6rem; border-bottom:1px solid #2c262a; }
+  th { color:#9a8f93; font-weight:600; font-size:.8rem; text-transform:uppercase; }
+  .badge { padding:.1rem .5rem; border-radius:.6rem; font-size:.78rem; font-weight:600; }
+  .b-queued{background:#3a3236} .b-running{background:#7a4a12} .b-blocked{background:#7a1240}
+  .b-completed{background:#1c5c34} .b-partial{background:#5c5c1c} .b-failed{background:#6e1c1c}
+  .b-cancelled{background:#444} .b-pending{background:#2c262a} .b-retry{background:#7a4a12}
+  .b-repair{background:#7a4a12} .b-skipped{background:#444}
+  .b-completed_with_warnings{background:#5c5c1c}
+  pre { background:#1c181a; padding:.8rem; overflow-x:auto; border-radius:.5rem;
+        font-size:.82rem; }
+  form.card { background:#1c181a; padding:1rem 1.2rem; border-radius:.6rem;
+              display:grid; gap:.55rem; max-width:640px; }
+  label { color:#9a8f93; font-size:.82rem; }
+  input[type=text], textarea, input[type=number] { width:100%; background:#141115;
+      color:#e8e2e4; border:1px solid #3a3236; border-radius:.4rem; padding:.4rem .5rem;
+      font-family:inherit; }
+  textarea { font-family: ui-monospace, monospace; font-size:.82rem; }
+  button { background:#ff4d2e; color:#fff; border:0; border-radius:.4rem;
+           padding:.45rem 1rem; font-weight:600; cursor:pointer; }
+  button.secondary { background:#3a3236; }
+  .error { color:#ff8f7d; }
+  .tree li { list-style:none; padding:.15rem 0; }
+  .tree { padding-left:.4rem; margin:.4rem 0; }
+  .muted { color:#9a8f93; font-size:.85rem; }
+  .alive { color:#ffb84d; font-size:.85rem; animation: alivepulse 1.6s ease-in-out infinite; }
+  .alive code { font-size:.78rem; color:#d8cfa8; }
+  .b-running { animation: alivepulse 1.6s ease-in-out infinite; }
+  @keyframes alivepulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
+</style>
+</head>
+<body>
+<nav>
+  <a class="brand" href="/">🔴 Red Giant</a>
+  <a href="/tasks/new">nuovo task</a>
+  <a href="/approvals">approvazioni</a>
+  <a href="/metrics">metriche</a>
+  <span class="queue">profilo <b>{{ cfg.profile_name }}</b>
+    {% if current %}· in esecuzione: <a href="/tasks/{{ current }}">{{ current[-6:] }}</a>{% endif %}
+    {% if queue %}· in coda: {{ queue | length }}{% endif %}</span>
+</nav>
+{% block content %}{% endblock %}
+</body>
+</html>

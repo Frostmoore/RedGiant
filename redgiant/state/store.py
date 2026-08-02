@@ -251,11 +251,18 @@ class StateStore:
 
     def upsert_subtask(self, task_id: str, spec: SubtaskSpec, *, actor: str) -> None:
         with self._conn() as c:
+            # F3 (bug del designer-loop): una sottofase 'skipped' ri-upsertata dal
+            # redesign RISORGE a pending (e' lavoro nuovo); gli altri stati restano
+            # preservati (idempotenza del F1). attempts riparte con la resurrezione.
             c.execute(
                 "INSERT INTO subtasks (task_id, subtask_id, phase_id, title, status, spec)"
                 " VALUES (?,?,?,?, 'pending', ?)"
                 " ON CONFLICT(task_id, subtask_id) DO UPDATE SET"
-                " phase_id=excluded.phase_id, title=excluded.title, spec=excluded.spec",
+                " phase_id=excluded.phase_id, title=excluded.title, spec=excluded.spec,"
+                " status=CASE WHEN subtasks.status='skipped' THEN 'pending'"
+                "             ELSE subtasks.status END,"
+                " attempts=CASE WHEN subtasks.status='skipped' THEN 0"
+                "               ELSE subtasks.attempts END",
                 (task_id, spec.id, spec.phase_id, spec.title, spec.model_dump_json()))
             self._decision(c, task_id, actor, f"upsert_subtask={spec.id}", spec.title, spec.id)
 
@@ -304,6 +311,93 @@ class StateStore:
         with self._conn() as c:
             return [dict(r) for r in c.execute(q, args).fetchall()]
 
+    def answer_approval(self, approval_id: int, answer: str) -> str:
+        """Risponde a una richiesta pending; ritorna il task_id. KeyError se assente,
+        ValueError se gia' risposta (409 in GUI)."""
+        with self._conn() as c:
+            row = c.execute("SELECT task_id, status FROM approvals WHERE id=?",
+                            (approval_id,)).fetchone()
+            if row is None:
+                raise KeyError(approval_id)
+            if row["status"] != "pending":
+                raise ValueError("already answered")
+            c.execute("UPDATE approvals SET status='answered', answer=? WHERE id=?",
+                      (answer, approval_id))
+            self._decision(c, row["task_id"], "user", "approval_answer", answer,
+                           str(approval_id))
+            return row["task_id"]
+
+    def list_grants(self, task_id: str | None = None) -> list[dict]:
+        """Le concessioni attive (answered): visibili e ribaltabili dall'utente (F2.5)."""
+        q = ("SELECT id, task_id, kind, payload, answer FROM approvals"
+             " WHERE status='answered' AND kind='irreversible_op'")
+        args: tuple = ()
+        if task_id is not None:
+            q += " AND task_id=?"
+            args = (task_id,)
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(q + " ORDER BY id DESC", args).fetchall()]
+
+    def override_approval(self, approval_id: int, answer: str | None) -> str:
+        """Ribalta o revoca una grant (richiesta utente: 'devo poter overriddare il no').
+        answer 'yes'/'no' = nuova risposta; None = revoca (expired: si richiedera')."""
+        with self._conn() as c:
+            row = c.execute("SELECT task_id, status FROM approvals WHERE id=?",
+                            (approval_id,)).fetchone()
+            if row is None:
+                raise KeyError(approval_id)
+            if row["status"] != "answered":
+                raise ValueError("not an active grant")
+            if answer is None:
+                c.execute("UPDATE approvals SET status='expired' WHERE id=?", (approval_id,))
+                self._decision(c, row["task_id"], "user", "grant_revoked", "", str(approval_id))
+            else:
+                c.execute("UPDATE approvals SET answer=? WHERE id=?", (answer, approval_id))
+                self._decision(c, row["task_id"], "user", "grant_override", answer,
+                               str(approval_id))
+            return row["task_id"]
+
+    def consume_matching_approval(self, task_id: str, tool: str, args_json: str) -> str | None:
+        """F2.3: alla ri-esecuzione di un tool sospeso, consuma l'approvazione risposta
+        che matcha; ritorna la risposta ('yes'/'no') o None.
+
+        Match su (tool, path) e consenso PERMANENTE per il task (feedback F2.5,
+        secondo giro): approvare "scrivi su stack.py" vale per TUTTO il task — il
+        modello deve poter iterare sul file concesso (correggere un edit sbagliato
+        richiede un'altra scrittura: ri-chiedere ogni volta = riavvii che bruciano
+        budget mentre si aspetta l'umano, osservato dal vivo). Un 'no' e' permanente
+        allo stesso modo. La riga resta 'answered': e' una GRANT, non un gettone.
+        Fallback su args interi se il tool non ha 'path'."""
+        args = json.loads(args_json)
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT id, payload, answer FROM approvals WHERE task_id=? AND"
+                " kind='irreversible_op' AND status='answered'", (task_id,)).fetchall()
+            write_family = {"edit_file", "write_file", "write_patch"}
+            for r in rows:
+                p = json.loads(r["payload"])
+                p_tool = p.get("tool")
+                # F2.5: stessa famiglia di rischio = stessa grant — approvare la
+                # scrittura su un file vale per TUTTI i tool di scrittura su quel file
+                same_tool = (p_tool == tool or
+                             (p_tool in write_family and tool in write_family))
+                if not same_tool:
+                    continue
+                p_args = p.get("args") or {}
+                same_path = ("path" in p_args and "path" in args
+                             and p_args["path"] == args["path"])
+                same_all = json.dumps(p_args, sort_keys=True) == json.dumps(args, sort_keys=True)
+                if same_path or same_all:
+                    return r["answer"]
+        return None
+
+    def latest_clarification_answer(self, task_id: str) -> str | None:
+        with self._conn() as c:
+            r = c.execute(
+                "SELECT answer FROM approvals WHERE task_id=? AND kind='clarification'"
+                " AND status='answered' ORDER BY id DESC LIMIT 1", (task_id,)).fetchone()
+        return r["answer"] if r else None
+
     # ── log e budget ─────────────────────────────────────────────────────────
 
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str,
@@ -329,13 +423,41 @@ class StateStore:
                 (task_id, row.subtask_id, row.tool, json.dumps(row.args), int(row.ok),
                  json.dumps(row.evidence), row.duration_ms))
 
+    def extend_budget(self, task_id: str, key: str, add: int) -> None:
+        """F2.5 (richiesta utente): il budget si estende su consenso, non e' una ghigliottina."""
+        with self._conn() as c:
+            c.execute("UPDATE budgets SET limit_val = limit_val + ? WHERE task_id=? AND key=?",
+                      (add, task_id, key))
+            self._decision(c, task_id, "user", f"budget_extended:{key}", f"+{add}", None)
+
+    def take_budget_extension(self, task_id: str) -> tuple[str, str, int] | None:
+        """Consuma (one-shot: NON e' una grant permanente, ogni esaurimento ri-chiede)
+        la risposta a una richiesta di estensione budget: (answer, key, add) o None."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT id, payload, answer FROM approvals WHERE task_id=? AND"
+                " kind='irreversible_op' AND status='answered'", (task_id,)).fetchall()
+            for r in rows:
+                p = json.loads(r["payload"])
+                if p.get("tool") == "extend_budget":
+                    c.execute("UPDATE approvals SET status='expired' WHERE id=?", (r["id"],))
+                    args = p.get("args") or {}
+                    return r["answer"], args.get("key", "tokens"), int(args.get("add", 0))
+        return None
+
     def budget_used(self, task_id: str) -> BudgetUsed:
         """Aggregato dal DB: una sola fonte di verita', mai contatori in RAM.
         wall_s la calcola il BudgetTracker (dal created_at del task)."""
         with self._conn() as c:
+            # F2.5: il budget misura il LAVORO, non la dimensione dei prompt — i token
+            # serviti dalla KV cache non costano: (prompt - cached) + gen. Contare il
+            # prompt intero a ogni step gonfiava il consumo quadraticamente.
+            # clamp per riga (F2.5): il server puo' riportare piu' cache del nostro
+            # conteggio prompt (template/BOS) -> righe negative che cancellano i gen
+            # e DISATTIVANO il budget. MAX(prompt-cached,0)+gen.
             llm = c.execute(
-                "SELECT COALESCE(SUM(prompt_tokens + gen_tokens), 0) AS t FROM llm_calls"
-                " WHERE task_id=?", (task_id,)).fetchone()
+                "SELECT COALESCE(SUM(MAX(prompt_tokens - cached_tokens, 0) + gen_tokens), 0)"
+                " AS t FROM llm_calls WHERE task_id=?", (task_id,)).fetchone()
             tools = c.execute("SELECT COUNT(*) AS n FROM tool_calls WHERE task_id=?",
                               (task_id,)).fetchone()
         return BudgetUsed(tokens=llm["t"], tool_calls=tools["n"], wall_s=0.0)

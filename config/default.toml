@@ -22,6 +22,9 @@ ctx_size = 8192                      # tetto duro per chiamata (D8; confermato d
 timeout_s = 600                      # alto: su CPU una chiamata lunga e' normale, non un errore
 temperature = 0.2                    # default; override per ruolo in futuro [roles.<name>]
 max_tokens_default = 1024            # tetto generazione se il ruolo non specifica
+idle_shutdown_s = 1800               # F2.5 (decisione utente): il server gestito si spegne
+                                     # dopo 30 min di inutilizzo — non a ogni fine task
+                                     # (ricaricare i pesi a ogni ciclo costa ~1 min)
 
 [paths]
 db = "data/redgiant.db"
@@ -31,13 +34,23 @@ slots_dir = "data/slots/"            # (F5) KV salvate
 ripgrep = "rg"                       # binario di sistema
 
 [budget]                             # default per task; l'Assessor (F6) li modula
-max_total_tokens = 32000
+# 64000: tampone dichiarato (F2.5, richiesta utente: 32k troppo basso coi cicli di
+# approvazione). Taratura seria in F6 (budget adattivi) coi numeri dell'Evaluator.
+# A esaurimento NON si fallisce: si chiede all'utente l'estensione (+50%).
+max_total_tokens = 64000
 max_tool_calls = 100
 max_retries_per_subtask = 2          # specsheet §13
 max_wall_s = 7200
 
 [worker]
 max_steps = 20                       # passi ReAct per sottofase (D20)
+step_max_tokens = 768                # F2.5: 512 troncava gli edit lunghi (~21s/step a 35.8 tok/s)
+
+[planner]
+enabled = false                      # verdetto D11 (A/B 2026-08-02: baseline 9/10 vs
+                                     # planner 2/10 sui micro-task): OFF di default,
+                                     # piano ingenuo 1-fase; redesign in
+                                     # memory/plan_planner_system.md; riaccensione = F6
 
 [web]
 host = "127.0.0.1"

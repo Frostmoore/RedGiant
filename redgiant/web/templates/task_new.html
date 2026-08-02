@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Nuovo task</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form class="card" method="post" action="/tasks"
+      onsubmit="const b=this.querySelector('button:last-of-type'); b.disabled=true; b.textContent='Avvio…'">
+  <label>Richiesta</label>
+  <textarea name="prompt" rows="3" required>{{ form.prompt if form else "" }}</textarea>
+  <label>Directory bersaglio (assoluta)</label>
+  <input type="text" name="target_dir" value="{{ form.target_dir if form else "" }}" required>
+  <label>Dominio</label>
+  <input type="text" name="domain" value="coding">
+  <label>Glob scrivibili (separati da virgola — es. <code>src/*.py, answer.txt</code>)</label>
+  <input type="text" name="writable">
+  <label>Comandi di test (uno per riga, <code>id=comando</code> — es. <code>pytest=pytest -q</code>)</label>
+  <textarea name="test_commands" rows="2"></textarea>
+  <label>Piano statico JSON (F1-F2: obbligatorio finche' il Planner non esiste — F3)</label>
+  <textarea name="plan_json" rows="6" placeholder='{"plan": {...}, "subtasks": [...]}'></textarea>
+  <label>Budget token (0 = default {{ cfg.budget.max_total_tokens }})</label>
+  <input type="number" name="max_tokens" value="0">
+  <label><input type="checkbox" name="approve_writes" value="true"> richiedi la mia approvazione per ogni scrittura su file</label>
+  <button>Avvia</button>
+</form>
+{% endblock %}

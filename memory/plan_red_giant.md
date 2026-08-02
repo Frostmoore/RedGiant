@@ -4,7 +4,7 @@
 **Data:** 2026-08-01
 **Specsheet di riferimento:** [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) (v0.1)
 **Atlante della codebase:** [codebase_reference.md](codebase_reference.md) — aggiornato a ogni fine fase, mai dopo.
-**Stato:** 🟢 **F1 completata** (2026-08-01, `v2.0.0`, merged in `main`) — prossima azione: **Fase 2, sottofase 2.1** (GUI web minima; gate soddisfatto: walking skeleton dimostrato 4/6 sulla run ufficiale severino-sim)
+**Stato:** 🟢 **F3 completata** (2026-08-02, `v3.0.0`) — verdetto D11: **Planner default OFF, gated** (A/B: baseline 9/10 · 710K tok vs planner 2/10 · 815K tok — v. ESITO F3). ⏸️ **Sviluppo generale IN PAUSA (decisione utente):** prossima azione = estendere e implementare [`plan_planner_system.md`](plan_planner_system.md) (il Planner come autore, i Gate come giudici), poi si riprende da **F3-bis**.
 
 ---
 
@@ -518,6 +518,9 @@ max_wall_s = 7200
 
 [worker]
 max_steps = 20                       # passi ReAct per sottofase (D20)
+step_max_tokens = 768                # tetto di generazione per step (F2.5: 512 troncava
+                                     # gli edit_file lunghi; il troncamento in-loop e' un
+                                     # dato, non un abort del tentativo)
 
 [web]
 host = "127.0.0.1"
@@ -551,9 +554,12 @@ Ogni tool: modello Pydantic degli argomenti (omonimo, in `tools/*.py`), handler 
 | `write_file` | `write_file(path: str, content: str) -> ToolResult` | medium | **Aggiunto in F1.11 su evidenza empirica** (T006): edit_file non crea file nuovi e i diff puri-additivi sono fragili; la creazione robusta per un E2B è il contenuto completo. Scope-checked, scrittura atomica, evidenza con conteggio righe. |
 | `edit_file` | `edit_file(path: str, old_string: str, new_string: str, replace_all: bool = False) -> ToolResult` | medium | **Aggiunto in F1.11 su evidenza empirica**: i diff unificati sono ostili ai modelli piccoli (contesto sbagliato di una riga vuota = hunk respinto, osservato ripetutamente su fix logicamente corretti). Sostituzione esatta di stringa: `old_string` deve occorrere esattamente una volta (o `replace_all`); 0 occorrenze → `not_found_in_file`, >1 → `not_unique` con conteggio. Scrittura atomica. È lo strumento di editing PRIMARIO nella card del Worker; `write_patch` resta per edit multi-punto. |
 | `run_tests` | `run_tests(cmd_id: str) -> ToolResult` | medium | esegue il comando registrato sotto `cmd_id` nella whitelist del task (definita nell'onboarding del task / task.toml dell'Evaluator) — MAI una stringa libera dal modello. Cwd = root Scope; timeout dal ToolSpec; evidenza = `exit_code` + ultime 50 righe stdout+stderr (il tail, perché è lì che pytest riassume). |
+| `register_test_command` | `register_test_command(cmd_id: str, argv: list[str]) -> ToolResult` | medium | **Aggiunto in F2 su richiesta utente** ("i comandi di test li deve decidere l'AI, non io: io do solo istruzioni"): il Worker registra un comando di test scoperto leggendo il repo. Guardia invariata: `argv[0]` DEVE stare in `security.shell_whitelist` (il confine umano resta sugli eseguibili); persiste in `task_config.json` per le riprese. Complementare alla **scoperta deterministica** `discover_test_commands(root)` eseguita all'avvio di ogni job (test_*.py⇒pytest, test.php⇒php, composer.json scripts.test⇒composer): la config utente, se presente, vince; il pre-flight bloccante di F2.4-bis decade (una verifica non risolvibile a creazione può esserlo a runtime). |
 | `git_status` / `git_diff` | `git_status() -> ToolResult` / `git_diff(ref: str = "HEAD") -> ToolResult` | low | sul repo del target; output porcelain/unified troncato a 400 righe; servono al Verifier e al Supervisor come evidenza di "cosa è cambiato davvero". |
 | `web_search` (F7) | `web_search(query: str, max_results: int = 8) -> ToolResult` | low | motore deciso in F7.2 (SearXNG self-hosted vs API di sola-search — decisione 🧑); ritorna `{title, url, snippet}`; nessun contenuto di pagina (per quello c'è fetch_url). |
 | `fetch_url` (F7) | `fetch_url(url: str) -> ToolResult` | medium | GET con timeout e size-cap; estrazione testo (strip HTML); cache su disco in `data/tasks/<id>/fetch/` (hash URL → file) perché la verifica citazioni (F7.1) deve rileggere LA STESSA copia che il modello ha visto; URL non-http(s) → rifiutato. |
+
+**Syntax gate (aggiunto 2026-08-01 su richiesta dell'utente, pre-F2):** ogni tool di scrittura verifica la sintassi del **contenuto risultante** PRIMA della scrittura atomica — `.py` via `ast.parse` (in-process), `.php` via `php -l` (se il binario esiste, altrimenti skip dichiarato), `.json` via `json.loads`, `.toml` via `tomllib`; altre estensioni non verificate. Sintassi rotta ⇒ scrittura **rifiutata** con `error="syntax_error"` e dettaglio (riga + messaggio): il file su disco non entra mai in uno stato sintatticamente invalido, e il modello riceve il perché come dato immediato invece di scoprirlo due step dopo dai test. Motivazione: nel collaudo F1.11 i loop più costosi nascevano da file corrotti scoperti tardi; questo sposta l'oracolo al punto più economico.
 
 **Policy trasversali (ToolRouter):** tool di lettura → sempre ammessi nello Scope; scrittura → solo `writable_globs` del task; `requires_approval=true` → il dispatch crea una riga `approvals`, mette il task in `blocked` e NON esegue finché l'utente non approva (F2.3); ogni dispatch logga su `tool_calls` con evidenze e durata; un tool che lancia un'eccezione non prevista → `ok=false, error="internal:<classe>"` e il task NON muore (il fallimento del tool è un dato per il modello, non un crash del sistema).
 
@@ -568,6 +574,7 @@ Si esegue al completamento dell'ultima sottofase 🔎 di una fase. È una proced
 **Passo 2 — Aggiornare `memory/codebase_reference.md`.** Per ogni elemento nuovo o cambiato nella fase: classi con ogni metodo e firma completa, tabelle DB con ogni colonna, endpoint con input/output/errori, chiavi di config, test con cosa dimostra ciascuno. Aggiornare le sezioni: "Cosa NON esiste ancora" (rimuovere ciò che ora esiste), "Trappole già disinnescate" (aggiungere ogni problema incontrato, con la **causa tecnica**), "Debito tecnico aperto" (con il perché è rimandato e quando va affrontato), "Il perché delle scelte non ovvie".
 
 **Passo 2-bis — Rileggere e riscrivere `README.md`** (regola specifica di questo progetto, richiesta dall'utente il 2026-08-01). Il README è in inglese, pensato per essere trovato e capito da persone e agenti AI che fanno ricerca: a ogni fine fase va riletto per intero e aggiornato — stato, roadmap (checkbox), decisioni tecniche rilevanti aggiunte nella fase, findings empirici nuovi, comandi. Un README fermo a due fasi fa è un documento che mente.
+**Integrazione (richiesta utente, 2026-08-02):** la Roadmap del README porta, per OGNI fase, la **retrospettiva onesta**: com'è andata, cosa si è scoperto, cosa si è corretto, perché è stata fatta così, il debito, le prospettive. "Si deve capire di cosa stiamo parlando" — è lo stato dell'unione del progetto, e va tenuta aggiornata a ogni chiusura di fase.
 
 **Passo 3 — Verifica meccanica dell'atlante.** Eseguire:
 
@@ -601,6 +608,7 @@ Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i comm
 | Fine F1 | `v2.0.0` | grande |
 | Fine F2 | `v2.1.0` | media |
 | Fine F3 | `v3.0.0` | grande |
+| Fine F3-bis (micro-slice multi-dominio) | `v3.1.0` | media |
 | Fine F4 | `v4.0.0` | grande |
 | Fine F5 | `v5.0.0` | grande |
 | Fine F6 | `v5.1.0` | media |
@@ -1074,7 +1082,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F2.1 — App e JobQueue
 
-- [ ] 🤖 **Obiettivo:** processo unico FastAPI con la coda che garantisce "una inferenza alla volta" (D7).
+- [x] 🤖 **Obiettivo:** processo unico FastAPI con la coda che garantisce "una inferenza alla volta" (D7).
 - **Motivazione:** la serialità non è un limite da nascondere ma un contratto da esporre: l'utente vede la coda, capisce perché il suo task aspetta, e il box non muore mai per contesa.
 - **Implementazione:** `web/app.py`, `web/jobs.py`:
   ```python
@@ -1092,7 +1100,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F2.2 — Rotte
 
-- [ ] 🤖 **Obiettivo:** le pagine e i frammenti HTMX. Tutte HTML: nessuna API JSON pubblica (D12).
+- [x] 🤖 **Obiettivo:** le pagine e i frammenti HTMX. Tutte HTML: nessuna API JSON pubblica (D12).
 - **Implementazione:** `web/routes/tasks.py`, `approvals.py`, `metrics.py` — tabella contrattuale:
 
   | Metodo e path | Input | Output | Errori |
@@ -1112,7 +1120,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F2.3 — Protocollo umano (approvazioni e chiarimenti)
 
-- [ ] 🤖 **Obiettivo:** il canale formale con cui il sistema chiede all'umano (specsheet §6.7 "chiedere chiarimenti"; §19 approvazioni).
+- [x] 🤖 **Obiettivo:** il canale formale con cui il sistema chiede all'umano (specsheet §6.7 "chiedere chiarimenti"; §19 approvazioni).
 - **Motivazione:** un sistema batch (D7) non può fare domande a un terminale: deve *parcheggiarsi* bene. Il parcheggio è uno stato di prima classe (`blocked`), visibile, con ripartenza pulita — non un prompt bloccante sepolto in un log.
 - **Implementazione:** flusso completo: il componente che ha bisogno (ToolRouter per `requires_approval`; da F4 il Supervisor per `ask_user`) scrive in `approvals` (payload JSON: cosa chiede, perché, contesto minimo per decidere), mette il task `blocked` e ritorna; il worker thread del JobQueue vede `blocked` e passa oltre; `POST /approvals/{id}` scrive la risposta, rimette il task in coda; alla ripresa, la risposta viene consegnata: per un'approvazione → il ToolRouter ri-esegue il dispatch sospeso (idempotente: la richiesta originale è nel payload); per un chiarimento → il testo entra nel contesto S6 della sottofase corrente come blocco `[USER ANSWER]`. La risposta dell'utente si logga anche in `decisions` (actor `user`).
 - 🧑 **Decisione utente:** collegare ntfy del homelab per notificare i `blocked` (opzionale; se sì, è un POST HTTP alla creazione della riga — niente dipendenze nuove).
@@ -1121,15 +1129,24 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F2.4 — Template e albero
 
-- [ ] 🤖 **Obiettivo:** le viste Jinja2 + HTMX vendorizzato; l'albero di esecuzione stile specsheet §20.
+- [x] 🤖 **Obiettivo:** le viste Jinja2 + HTMX vendorizzato; l'albero di esecuzione stile specsheet §20.
 - **Implementazione:** `templates/base.html` (layout, niente CSS framework: un foglio nostro minimo), `index.html`, `task_new.html`, `task.html`, `tree.html` (frammento riusato dalla pagina e dal polling), `approvals.html`, `metrics.html`; `static/htmx.min.js` copiato nel repo con versione annotata nell'atlante (è l'unica eccezione JS, ed è vendorizzata per D14/D16: niente CDN, la CSP del futuro deploy ringrazia). Albero: fase → sottofasi con stato, tentativi, durata; i simboli seguono §20 (`completed` ✓, `failed` ✗, `running` ▶, `blocked` ⏸).
 - **Accettazione:** le pagine sono usabili da browser senza console errors; l'albero di un task reale è leggibile a colpo d'occhio.
 
+#### F2.4-bis — Post-mortem e ripartenza guidata (aggiunta su richiesta utente, 2026-08-01)
+
+- [x] 🤖 **Obiettivo:** un fallimento non è un vicolo cieco: la pagina di un task `failed`/`partial` mostra **perché** (check falliti con dettaglio, errore del task, link al log) e offre **"riparti con istruzioni aggiuntive"** — un form che clona il task (stessa config, stesso piano, stesso target) con la guida dell'utente appesa alla richiesta.
+- **Motivazione (parole dell'utente):** "i fallimenti non devono essere totalmente blocking… il sistema deve restituirmi le motivazioni del fail e la possibilità di farlo ripartire magari con istruzioni diverse". Questa è la versione leggera (nuovo task guidato); la ripresa *in place* con strategia è F4.2 (`retry_strategy`/`ask_user` del Supervisor), che eredita questo requisito come criterio di accettazione.
+- **Implementazione:** rotta `POST /tasks/{id}/relaunch` (form `guidance`); prompt del clone = richiesta originale + `[USER GUIDANCE] …`; config per-task copiata; pannello fallimento costruito dai `result` delle sottofasi (verdict → check non-ok) **+ `t.error` sempre mostrato; il Riparti c'è per OGNI failed/partial** (anche morte per budget senza check).
+- **Estensioni dal collaudo utente (2026-08-01):** (a) **consenso permanente per (tool, path) nel task** — approvare "scrivi su X" vale per tutto il task, il modello itera sul file concesso; un no è permanente uguale; (b) **override/revoca delle grant** dalla pagina approvazioni (no→sì riaccoda un task bloccato); (c) **budget esaurito = checkpoint di consenso, non ghigliottina**: il task si blocca e chiede l'estensione (+50% one-shot, ogni esaurimento ri-chiede; Nega = fallimento per decisione esplicita). Default `max_total_tokens` 32k→64k come tampone dichiarato; taratura seria in F6.
+
 #### F2.5 — 🔎 Verifica di fase
 
-- [ ] 🧑 L'utente, dalla GUI: lancia `T004`, chiude la pagina, torna, vede l'albero completato; lancia un task con approvazione, risponde, lo vede ripartire; consulta `/metrics`. **Ogni scomodità segnalata si sistema in questa fase**, non dopo: è il criterio di uscita, non un sondaggio.
+- [x] 🧑 L'utente, dalla GUI: lancia `T004`, chiude la pagina, torna, vede l'albero completato; lancia un task con approvazione, risponde, lo vede ripartire; consulta `/metrics`. **Ogni scomodità segnalata si sistema in questa fase**, non dopo: è il criterio di uscita, non un sondaggio.
 
 **Rituale di fine fase** → `v2.1.0`.
+
+> **ESITO F2 (2026-08-02, `v2.1.0`).** Fase completata dopo la campagna di collaudo più dura del progetto: 3 giri di collaudo manuale dell'utente + batteria automatizzata di 5 task + 4 retest mirati. **Esito finale: 4/5 task-tipo verificati** (incluso il refactoring 2-sottofasi T007, promosso a task permanente dell'Evaluator), 1 fallimento onesto (trappola di ragionamento cross-file → F4). **15 difetti trovati e corretti** (dettaglio nell'atlante §9, batch F2): i capitali sono la race submit/ripresa, il consenso a gettone → **grant permanenti per (famiglia-scrittura, file) con override/revoca**, il **derail da apice** (doppio apice non escapato chiude la stringa JSON → union discriminata: il ramo incoerente non è più generabile, probe 8/8), la contabilità budget rotta dalla cache, la **simmetria degli oracoli** (i check oggettivi verdi battono un worker che si crede blocked → `completed_with_warnings`). **Evoluzioni contrattuali su richiesta utente**: budget = checkpoint di consenso (+50% su Approva, mai ghigliottina; default 64k tampone), spegnimento server a 30' di idle, i comandi di test li trova il sistema (scoperta deterministica + `register_test_command`), ripresa **in-place** post-approvazione (contesto salvato, KV calda), post-mortem + ripartenza guidata su ogni failed/partial, diff-preview nelle approvazioni. **Nota metodologica**: le descrizioni originali di F1.5/F1.6 (coerenza come dato in-loop, verifica solo-claim) sono superate dalle evoluzioni di questa fase — fa fede l'atlante. **Debiti registrati con destinazione**: T002-ragionamento (F4.2), D-laborioso/41-chiamate (F4+F5), registro delle tolleranze modello-specifiche da A/B-are (F6/F8), task sintetico "sporco" pre-F8, varianza multi-seed nell'Evaluator (F6), task_config.json→DB (con la GUI di F4), protocollo umano come dialogo vero (F4).
 
 ---
 
@@ -1141,7 +1158,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F3.1 — Planner
 
-- [ ] 🤖 **Obiettivo:** genera la mappa del lavoro: goal, criteri, macrofasi con dipendenze (specsheet §6.3). Sintetico per contratto.
+- [x] 🤖 **Obiettivo:** genera la mappa del lavoro: goal, criteri, macrofasi con dipendenze (specsheet §6.3). Sintetico per contratto. *(fatto; in corso d'opera: `normalize_plan` per i sentinelli in `depends_on` — "none", auto-dipendenza — e richiamata correttiva che CITA le regole violate, non solo i sintomi)*
 - **Motivazione:** "pianificazione globale, esecuzione locale" (specsheet §1). Il piano è una *mappa*, non un romanzo: il limite di token è un vincolo di qualità (un piano corto si aggiorna; uno lungo si abbandona) oltre che di costo (D8).
 - **Implementazione:** `roles/planner.py` + `prompts/roles/planner.md`:
   ```python
@@ -1159,7 +1176,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F3.2 — ⚠️ Phase Designer
 
-- [ ] 🤖 **Obiettivo:** converte UNA macrofase in sottofasi operative eseguibili dal Worker (specsheet §6.4).
+- [x] 🤖 **Obiettivo:** converte UNA macrofase in sottofasi operative eseguibili dal Worker (specsheet §6.4). *(fatto, con la REVISIONE sotto; trappola pagata: la regola 2 della card riscritta perdendo "cmd id esatti" ha ucciso 6 task su 10 — prompt e validatore sono un artefatto solo)*
 - **Motivazione:** è il punto di massima leva della qualità: qui si decide la *forma* del lavoro. La marca ⚠️ sta nel criterio D10: **la decomposizione preferisce sottofasi meccanicamente verificabili** — è la scelta di design che rende tutto il resto del sistema onesto, e se il Phase Designer la ignora, il Debugger (F4) erediterà verifiche impossibili.
 - **Implementazione:** `roles/phase_designer.py` + card:
   ```python
@@ -1171,12 +1188,13 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
       def run(self, ctx: RoleContext) -> PhaseDesign
   ```
   Card: ogni sottofase deve stare in una sessione Worker (`worker.max_steps`); ogni sottofase DEVE avere almeno una voce di `verification` eseguibile (un `cmd_id` di test quando esiste); `tools` solo dal catalogo fornito in S3; vietato ridisegnare fasi già completate. Validazioni deterministiche: `phase_id` = fase corrente, id sottofasi `P<x>.S<n>` univoci, `verification` non vuota (il criterio D10 qui è *hard*: sottofase senza verifica = design respinto con richiamata singola, come F3.1).
+  **REVISIONE (2026-08-02, concordata con l'utente dopo lo smoke T009):** (a) la verifica è accettabile anche come `expected_outputs` non vuoto (l'esistenza è un oracolo) — serve per le sottofasi preparatorie; (b) **il perimetro e la verifica devono coincidere**: in una fase multi-sottofase, la verifica a suite intera (`cmd_id` di test) è ammessa SOLO sull'ultima sottofase — le intermedie si verificano su ciò che possiedono (49 riscritture di `util.py` nel churn T009: il Worker era punito da test rossi fuori dal suo confine, che gli era vietato toccare). Regola gemella nella card del Worker: test rossi fuori dal tuo perimetro → chiudi `done` con le evidenze dei TUOI criteri. (c) L'ancoraggio al contratto: Planner, replanning e Designer ricevono gli estratti dei file di test ("copia gli identificatori, non inventarli").
 - **Casi limite:** fase che non si riesce a decomporre (il modello produce 0 sottofasi) → escalation: in F3 = task `failed` esplicito; da F4 = decisione del Supervisor.
 - **Accettazione:** su un piano di T007, ogni sottofase generata ha verifica eseguibile e il Worker le esegue senza modifiche manuali.
 
 #### F3.3 — Orchestrator v1 (piano dinamico)
 
-- [ ] 🤖 **Obiettivo:** `run_task` guidato dal piano generato: fasi eleggibili per dipendenze, espansione lazy, stati §11 completi.
+- [x] 🤖 **Obiettivo:** `run_task` guidato dal piano generato: fasi eleggibili per dipendenze, espansione lazy, stati §11 completi. *(fatto; aggiunto post-verdetto: gate D11 — `planner.enabled=false` di default → `_naive_plan` deterministico, zero LLM)*
 - **Motivazione:** "solo la fase corrente viene dettagliata" (specsheet §25.5): l'espansione lazy non è un'ottimizzazione ma un principio — le fasi future cambieranno alla luce di quelle passate, dettagliarle ora sarebbe lavoro da buttare e contesto da pagare.
 - **Implementazione:** modifiche a `orchestrator.py`: `run_task` = [se manca il piano] Planner → save_plan; loop: prossima fase eleggibile (tutte le `depends_on` completate, ordine del piano) → [se non espansa] PhaseDesigner → upsert delle sottofasi → loop sottofasi come F1; fase completata quando tutte le sottofasi sono `completed`/`completed_with_warnings` — più il check dei `completion_criteria` di fase dove constatabili; `current_phase`/`current_subtask` sempre aggiornati (la GUI li mostra). Nuovo metodo: `def _eligible_phase(self, state: TaskState) -> PhaseSpec | None`.
 - **Casi limite:** dipendenze che diventano insoddisfacibili (fase `failed` a monte) → le fasi a valle diventano `skipped` con decisione loggata; il task chiude `partial` se qualcosa di utile è stato completato.
@@ -1184,23 +1202,58 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 
 #### F3.4 — Replanning minimale
 
-- [ ] 🤖 **Obiettivo:** richiamare il Planner quando il piano non è più vero (specsheet §10), senza replanning-mania.
+- [x] 🤖 **Obiettivo:** richiamare il Planner quando il piano non è più vero (specsheet §10), senza replanning-mania. *(fatto; max 2 replan, fasi completate immutabili; col gate D11 il replanning è rifiutato a Planner spento — fallimento esplicito)*
 - **Motivazione:** la specsheet è netta: "il replanning non deve avvenire per ogni piccolo errore locale". In F3 i trigger sono pochi e deterministici; il raffinamento decisionale è del Supervisor (F4).
 - **Implementazione:** trigger (tutti deterministici in F3): sottofase `failed` oltre i retry → la fase va in `failed` → replanning; budget totale sotto il 25% con >50% delle fasi pending → replanning "descope" (il Planner riceve l'istruzione di ridurre l'ambizione ai criteri minimi); `_eligible_phase` = None ma piano incompleto (incoerenza) → replanning. Meccanica: contesto al Planner = piano corrente + cosa è fallito e perché (dal Verdict) + cosa è già `completed` (IMMUTABILE: le fasi completate non si toccano — validazione deterministica sulla nuova versione); `save_plan` con `reason` esplicita; le sottofasi pending della vecchia versione → `skipped`.
 - **Accettazione:** T010 (piano-trappola: il `plan` iniziale porta a un vicolo cieco progettato) esegue almeno un replanning e completa; le fasi completate risultano intatte tra le versioni.
 
 #### F3.5 — 📌 A/B: il Planner si guadagna il posto
 
-- [ ] 🤖 **Obiettivo:** la sottofase che decide se F3 resta.
+- [x] 🤖 **Obiettivo:** la sottofase che decide se F3 resta. *(fatto: report committati, conclusione = ESCE dal default — v. ESITO F3)*
 - **Motivazione:** D11 applicato per la prima volta. Il confronto è contro una baseline *degradata ma onesta*: F1 non sa fare multi-step senza piano scritto a mano, quindi la baseline per i nuovi task è "piano statico ingenuo" = una sola fase con una sola sottofase "do everything", che rappresenta ciò che farebbe un agente naive.
 - **Implementazione:** nuovi task multi-step: **T007** refactoring 3-file con test · **T008** feature cross-module · **T009** fix con migrazione dati fittizia (ordine obbligato: prima lo script, poi il codice) · **T010** piano-trappola per il replanning. Eval su tutto il set (T001–T010) in due configurazioni: `--ab no-planner` (piano ingenuo) vs pipeline F3, stesso profilo, stesso commit. Report di confronto per le 5 metriche.
 - **Accettazione:** report A/B committato e nell'atlante con la conclusione scritta (resta / esce / resta con riserva su X).
 
+#### F3.5-nota — Decisioni utente sul verdetto (2026-08-02)
+
+Concordato prima dei numeri ufficiali: (1) il fix perimetro/verifica di F3.2-REVISIONE si applica comunque; (2) **quando usare il Planner è materia di F6** (routing) — in F3 conta solo che *funzioni*; (3) **il test vero del Planner è il chatbot Laravel (F8)**: il cassetto attuale non contiene task che superino una singola sessione Worker, quindi l'A/B locale misura bene il costo ma può sottostimare il valore — il verdetto D11 definitivo sul ruolo si firma in F8.
+
 #### F3.6 — 🔎 Verifica di fase
 
-- [ ] T007–T009 `verified` con piano generato; T010 replanning corretto; A/B documentato; nessun piano oltre budget; forbice completed/verified ancora zero.
+- [x] T007–T009 `verified` con piano generato; T010 replanning corretto; A/B documentato; nessun piano oltre budget; forbice completed/verified ancora zero. *(eseguita, esito NEGATIVO sui criteri originali: col piano generato solo 2/10 verified — il criterio vero di questa sottofase era il verdetto D11, ed è stato emesso: v. ESITO F3. Forbice = 0 in entrambe le run: il sistema non si è mai auto-illuso.)*
+
+#### ESITO F3 (2026-08-02) — il Planner perde l'A/B e esce dal default
+
+**Numeri ufficiali** (severino-sim, 10 task T001–T010, stesso profilo):
+
+| Run | Commit | Verified | Token totali | Tempo | Forbice |
+|---|---|---|---|---|---|
+| Baseline (piano statico ingenuo) | `32569a5` | **9/10** (unico caduto: T008) | 710.106 | ~27,5 min | 0 |
+| Planner (prima run) | `32569a5` + tree sporco | 0/10 — **INVALIDA** | 478.818 | ~34 min | 0 |
+| Planner (rerun, prompt fixato) | `611d894` | **2/10** (T001, T004) | 814.646 | ~44 min | 0 |
+
+**Verdetto D11 (deciso dall'utente): il Planner NON si guadagna il posto sui micro-task — default OFF, gated.** Implementazione: `planner.enabled = false` in `config/default.toml`; a Planner spento l'Orchestrator genera `_naive_plan` (il piano della baseline vincente, deterministico, zero LLM) e il replanning è rifiutato; riaccensione esplicita via `rg eval --planner` (l'harness fa `dataclasses.replace(cfg, planner_enabled=True)`).
+
+**Perché ha perso** (autopsia nei log e in atlante §9): (1) logica spazzatura residua del Planner (auto-dipendenze `P1→P1`, troncamenti) — 3 task morti in <3 chiamate; (2) **fasi ridondanti** che ripetono lavoro già fatto — il volto strutturale dell'overhead di governance, non un bug puntuale; (3) **sottofasi-analisi artificiali** indotte dalla revisione scoped (expected_outputs-compiti-in-classe che il Worker non produce); (4) retry fotocopia senza diagnosi; (5) interazione col guard `identical_repeat` appena introdotto (run_tests poi esentato). La prima run è stata invalidata da un mio errore di metodo: **A/B su working tree sporco con una frase cancellata dalla card del Designer** → 2 trappole permanenti: *prompt e validatore sono un artefatto solo*; *run ufficiali solo da codice committato*.
+
+**Limite dichiarato del verdetto:** vale su QUESTA batteria (micro-task 2–4 file, dove pianificare non serve per costruzione). L'ipotesi di valore su task larghi non è smentita: non è testabile col cassetto attuale (F3.5-nota, punto 3 — il giudizio definitivo resta F8).
+
+**Diagnosi condivisa con l'utente (2026-08-02): il thrashing era dei GATE, non del proponente** — retry identici, nessun gate d'ingresso fase, replan non diffati. Decisione utente: il rework della pianificazione è un **sistema a sé stante** con piano dedicato — [`plan_planner_system.md`](plan_planner_system.md) (il Planner come *autore* del piano-documento, plan-as-artifact, gate deterministici a zero token, ledger di task, Supervisor solo per diagnosi residua). **Lo sviluppo di questo piano generale è IN PAUSA finché quel sistema non è costruito e A/B-ato**; poi si riprende da F3-bis. Riferimenti: report in `bench/results/eval_severino-sim_{static,planner}_*.md`; trappole nuove in atlante §9 (batch A/B + batch rerun); fix di fase: scoped verification (F3.2-REVISIONE), contract anchoring, `normalize_plan`, richiamate correttive che citano le regole, `no_op_edit`, guard `identical_repeat` (run_tests esente), gate D11.
 
 **Rituale di fine fase** → `v3.0.0`.
+
+---
+
+## Fase 3-bis — Micro-slice multi-dominio → `v3.1.0` (aggiunta su richiesta utente, 2026-08-02)
+
+📎 **Specsheet:** §5 (pipeline per dominio), anticipo leggero di F7 · **Decisioni:** D16, D17
+🎯 **Scope:** una fetta verticale SOTTILE dei domini non-coding, prima di F4: analisi di documenti locali, una chiamata HTTP a un servizio esterno (**mai LLM** — snaturerebbe il progetto, parole dell'utente), verifica meccanica degli esiti. NON è F7 (che resta la fase completa con citazioni/triangolazione/web search): è lo smoke che dimostra che l'engine non è un coding assistant.
+🧭 **Perché qui:** (motivazione utente) "l'agentic engine deve lavorare anche negli altri domini di uso quotidiano". E perché *prima* di F4: Supervisor e Debugger vanno progettati conoscendo anche i modi di fallire non-coding, non solo pytest-rosso.
+
+- [ ] **F3b.1** 🤖 Tool `http_get(url) -> ToolResult` minimale (anticipo di F7.2): GET con timeout e size-cap, **whitelist di domini in config** (`security.http_allowed_domains`, default vuota = niente rete), cache su disco per task (la verifica rilegge LA copia vista dal modello), solo http(s). Niente web search (quella è F7).
+- [ ] **F3b.2** 🤖 Task sintetici multi-dominio, numerati **T030+** (serie dedicata: T011-T022 restano riservate a F4/F6/F7 come da piano): **T030** analisi documenti locali (cartella di .md/.txt con fatti sparsi; domanda con risposta verificabile scritta in `answer.txt`, giudice = script che controlla i fatti) · **T031** chiamata API esterna deterministica (servizio HTTP locale avviato dall'harness come "esterno" — determinismo prima di tutto; l'endpoint reale arriva in F7) · **T032** trasformazione documento (es. estrarre campi da un .md in un .csv verificato da script).
+- [ ] **F3b.3** 🤖 Plumbing di dominio: i task portano `domain` ∈ {research_local, api, docs}; card Worker invariata (le card per-dominio sono F7.4); verifica = giudici meccanici come nel coding.
+- [ ] **F3b.4** 🔎 **Verifica di fase:** i 3 task girano su severino-sim in modalità baseline con giudice esterno verde; nessuna chiamata di rete fuori whitelist (test); il report entra nell'Evaluator come le altre serie.
 
 ---
 

@@ -64,6 +64,18 @@ def test_upsert_is_idempotent(store, budget):
     assert len(store.list_subtasks(tid)) == 1
 
 
+def test_upsert_resurrects_skipped_subtasks(store, budget):
+    # F3 (bug designer-loop): il redesign post-replanning riusa gli id — una
+    # sottofase skipped ri-upsertata DEVE risorgere a pending (attempts azzerati)
+    tid = store.create_task("r", "/tmp/x", "p", budget)
+    store.upsert_subtask(tid, _spec(), actor="t")
+    store.set_subtask_status(tid, "P1.S1", "retry", actor="orch")
+    store.set_subtask_status(tid, "P1.S1", "skipped", actor="planner")
+    store.upsert_subtask(tid, _spec(), actor="phase_designer")
+    _, status, attempts = store.get_subtask(tid, "P1.S1")
+    assert status == "pending" and attempts == 0
+
+
 def test_budget_used_aggregates_from_db(store, budget):
     tid = store.create_task("r", "/tmp/x", "p", budget)
     for _ in range(2):
@@ -74,8 +86,14 @@ def test_budget_used_aggregates_from_db(store, budget):
     store.log_tool_call(tid, ToolCallRow(
         subtask_id="P1.S1", tool="read_file", args={"path": "a.py"}, ok=True,
         evidence=["read a.py:1-10"], duration_ms=5.0))
+    # riga con cache > prompt (il server conta template/BOS): clamp a 0, i gen contano
+    store.log_llm_call(tid, LlmCallRow(
+        role="worker", subtask_id="P1.S1", schema_name=None,
+        t_start="2026-08-01T00:00:00+00:00", prompt_tokens=100, cached_tokens=140,
+        gen_tokens=30, prefill_ms=1.0, gen_ms=1.0, outcome="ok"))
     used = store.budget_used(tid)
-    assert used.tokens == 300 and used.tool_calls == 1
+    # (100-90+50)*2 + (clamp 0 + 30) = 150
+    assert used.tokens == 150 and used.tool_calls == 1
 
 
 def test_plan_versioning_monotonic(store, budget):

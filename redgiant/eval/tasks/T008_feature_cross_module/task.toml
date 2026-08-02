@@ -1,0 +1,10 @@
+id = "T008"
+domain = "coding"
+prompt = "The withdraw feature is missing: tests fail. Implement withdraw(account, amount) in api.py AND the underlying Account.take(amount) in models.py (raising ValueError on insufficient funds), without changing the tests."
+success_cmd = "pytest -q"
+timeout_s = 1500
+tags = ["feature", "python", "cross-module", "multi-step"]
+writable_globs = ["api.py", "models.py"]
+
+[test_commands]
+pytest = ["pytest", "-q"]

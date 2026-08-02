@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "redgiant"
-version = "2.0.0"
+version = "2.1.0"
 description = "Red Giant — agentic system for tiny local models (Gemma 4 E2B) on non-prosumer hardware"
 license = {file = "LICENSE"}
 requires-python = ">=3.12"
@@ -16,6 +16,7 @@ dependencies = [
     "fastapi==0.141.1",
     "uvicorn==0.52.0",
     "jinja2==3.1.6",
+    "python-multipart==0.0.32",   # form parsing per la GUI (F2)
 ]
 
 [project.optional-dependencies]

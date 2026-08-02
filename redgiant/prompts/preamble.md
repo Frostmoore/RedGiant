@@ -15,5 +15,8 @@ Universal rules, in force for every role:
 6. Your reply is exactly one JSON object matching the schema in the ROLE
    section, emitted as compact single-line JSON (no pretty-printing, no extra
    whitespace, no markdown fences, no commentary).
+   CRITICAL: inside JSON string values, never emit a raw double quote - it
+   would end the string early and derail your output. Refer to code or quoted
+   text using single quotes, e.g. slugify('hello world').
 7. Answer the user's task in the user's language when a final user-facing text
    is requested; all internal fields stay in English.

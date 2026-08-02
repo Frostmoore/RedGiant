@@ -1,0 +1,10 @@
+id = "T010"
+domain = "coding"
+prompt = "The report generator is broken: pytest fails. Fix generator.py so the tests pass, without changing the tests."
+success_cmd = "pytest -q"
+timeout_s = 1500
+tags = ["bugfix", "python", "replan-trap", "misleading-prompt"]
+writable_globs = ["generator.py", "formatter.py"]
+
+[test_commands]
+pytest = ["pytest", "-q"]

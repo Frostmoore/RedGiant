@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Approvazioni e chiarimenti</h2>
+{% if not items %}<p class="muted">Nessuna richiesta in attesa.</p>{% endif %}
+{% for a in items %}
+<form class="card" method="post" action="/approvals/{{ a.id }}" style="margin-bottom:1rem">
+  <b>Task <a href="/tasks/{{ a.task_id }}">{{ a.task_id[-8:] }}</a> —
+     {% if a.kind == "irreversible_op" %}richiede approvazione{% else %}chiede un chiarimento{% endif %}</b>
+  {% if a.preview %}<label>Cosa verrebbe scritto</label><pre>{{ a.preview }}</pre>{% endif %}
+  <details><summary class="muted">dettagli tecnici</summary><pre>{{ a.payload_pretty }}</pre></details>
+  {% if a.kind == "irreversible_op" %}
+    <div>
+      <button name="answer" value="yes">Approva</button>
+      <button name="answer" value="no" class="secondary">Nega</button>
+    </div>
+  {% else %}
+    <label>La tua risposta</label>
+    <input type="text" name="answer" required>
+    <button>Rispondi</button>
+  {% endif %}
+</form>
+{% endfor %}
+
+{% if grants %}
+<h3>Concessioni attive</h3>
+<p class="muted">Valgono per tutto il task. Puoi ribaltarle o revocarle (alla prossima
+scrittura ti verrà richiesto di nuovo).</p>
+<table>
+  <tr><th>task</th><th>concessione</th><th>risposta</th><th></th></tr>
+  {% for g in grants %}
+  <tr>
+    <td><a href="/tasks/{{ g.task_id }}">{{ g.task_id[-8:] }}</a></td>
+    <td><code>{{ g.summary }}</code></td>
+    <td><span class="badge {{ 'b-completed' if g.answer == 'yes' else 'b-failed' }}">{{ g.answer }}</span></td>
+    <td>
+      <form method="post" action="/approvals/{{ g.id }}/override" style="display:inline">
+        {% if g.answer == "no" %}<button name="answer" value="yes">rendi sì</button>
+        {% else %}<button name="answer" value="no" class="secondary">rendi no</button>{% endif %}
+        <button name="answer" value="revoke" class="secondary">revoca</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

@@ -22,8 +22,25 @@ from redgiant.tools.base import Scope, ToolResult, ToolSpec
 
 
 def default_catalog(cfg: Config, scope: Scope,
-                    test_commands: dict[str, list[str]]) -> dict[str, ToolSpec]:
+                    test_commands: dict[str, list[str]],
+                    persist_test_commands=None) -> dict[str, ToolSpec]:
     rg_bin = None  # risolto lazy: non tutti i task usano search_code
+
+    def _register(cmd_id: str, argv: list[str]) -> ToolResult:
+        """F2 (richiesta utente): il modello scopre e registra i comandi di test.
+        Guardia: l'eseguibile DEVE stare nella shell_whitelist umana."""
+        cmd_id = cmd_id.strip()
+        if not cmd_id or not argv:
+            return ToolResult(ok=False, data={}, error="bad_args")
+        if argv[0] not in cfg.security.shell_whitelist:
+            return ToolResult(ok=False,
+                              data={"whitelist": list(cfg.security.shell_whitelist)},
+                              error=f"executable_not_whitelisted:{argv[0]}")
+        test_commands[cmd_id] = list(argv)  # stesso dict visto da run_tests e verify
+        if persist_test_commands is not None:
+            persist_test_commands(dict(test_commands))
+        return ToolResult(ok=True, data={"registered": {cmd_id: argv}},
+                          evidence=[f"registered test command '{cmd_id}' = {argv}"])
 
     def _search(pattern: str, glob: str | None = None, max_results: int = 50) -> ToolResult:
         nonlocal rg_bin
@@ -51,9 +68,13 @@ def default_catalog(cfg: Config, scope: Scope,
                  "medium", True, False, 10.0, fs.WriteFileArgs, partial(fs.write_file, scope)),
         ToolSpec("write_patch", "Apply a unified diff to one file (for multi-spot edits).",
                  "medium", True, False, 10.0, fs.WritePatchArgs, partial(fs.write_patch, scope)),
-        ToolSpec("run_tests", "Run a whitelisted test command by its cmd_id.",
+        ToolSpec("run_tests", "Run a registered test command by its cmd_id.",
                  "medium", True, False, 300.0, proc.RunTestsArgs,
                  partial(proc.run_tests, scope, test_commands, cfg.security.shell_whitelist)),
+        ToolSpec("register_test_command", "Register how tests are run in this repo "
+                 "(cmd_id + argv, e.g. ['pytest','-q']) after discovering it from the "
+                 "project files. The executable must be whitelisted.",
+                 "medium", True, False, 5.0, proc.RegisterTestCommandArgs, _register),
         ToolSpec("git_status", "Show changed paths in the task repo (porcelain).",
                  "low", True, False, 30.0, proc.GitStatusArgs, partial(proc.git_status, scope)),
         ToolSpec("git_diff", "Show the unified diff against a ref (default HEAD).",
@@ -96,13 +117,34 @@ class ToolRouter:
             return self._done(task_id, subtask_id, name, args, result, t0)
 
         if spec.requires_approval:
-            self.store.add_approval(task_id, kind="irreversible_op",
-                                    payload=json.dumps({"tool": name, "args": args,
-                                                        "subtask_id": subtask_id}))
-            self.store.set_task_status(task_id, "blocked", actor="tool_router",
-                                       error=f"awaiting approval for {name}")
-            result = ToolResult(ok=False, data={}, error="awaiting_approval")
-            return self._done(task_id, subtask_id, name, args, result, t0)
+            # F2.3: se l'utente ha GIA' risposto a questa identica richiesta, consumala
+            answer = self.store.consume_matching_approval(
+                task_id, name, json.dumps(args, sort_keys=True))
+            if answer == "no":
+                result = ToolResult(ok=False, data={"hint": "the user denied this "
+                                                            "operation; choose another way"},
+                                    error="approval_denied")
+                return self._done(task_id, subtask_id, name, args, result, t0)
+            if answer != "yes":
+                # F2 (chiusura): consenso INFORMATO — la richiesta porta una preview
+                # leggibile di cio' che verrebbe scritto, non solo il JSON grezzo.
+                preview = None
+                if name == "edit_file":
+                    preview = ("--- da sostituire\n" + str(args.get("old_string", ""))[:400]
+                               + "\n+++ con\n" + str(args.get("new_string", ""))[:400])
+                elif name == "write_file":
+                    preview = "contenuto completo:\n" + str(args.get("content", ""))[:600]
+                elif name == "write_patch":
+                    preview = str(args.get("unified_diff", ""))[:600]
+                self.store.add_approval(task_id, kind="irreversible_op",
+                                        payload=json.dumps({"tool": name, "args": args,
+                                                            "subtask_id": subtask_id,
+                                                            "preview": preview}))
+                self.store.set_task_status(task_id, "blocked", actor="tool_router",
+                                           error=f"awaiting approval for {name}")
+                result = ToolResult(ok=False, data={}, error="awaiting_approval")
+                return self._done(task_id, subtask_id, name, args, result, t0)
+            # answer == "yes": si prosegue con l'esecuzione normale qui sotto
 
         try:
             result = spec.handler(**parsed.model_dump())

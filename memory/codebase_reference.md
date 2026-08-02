@@ -1,6 +1,6 @@
 # Red Giant — Codebase Reference (atlante)
 
-**Aggiornato al:** 2026-08-01 · **Versione repo:** `v2.0.0` · **Fase completata:** F1 (nucleo deterministico + Worker)
+**Aggiornato al:** 2026-08-02 · **Versione repo:** `v2.1.0` · **Fase completata:** F2 (GUI web + campagna di collaudo)
 **Regola:** questo documento descrive **il codice che esiste**, non quello pianificato (per quello c'è [plan_red_giant.md](plan_red_giant.md)). Verifica meccanica: `python scripts/check_reference.py` — bloccante nel rituale di fine fase.
 
 ---
@@ -9,6 +9,8 @@
 
 | Cerchi… | Vai in… |
 |---|---|
+| GUI web (coda, approvazioni/grant, metriche) | `redgiant/web/` — avvio: `rg serve` o `scripts/start-gui.ps1` |
+| Collaudo end-to-end riproducibile della GUI | `scripts/collaudo-gui.py --task T007 [--approve]` |
 | Visione e requisiti | [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) |
 | Decisioni vincolanti (D1–D21) e piano | [plan_red_giant.md](plan_red_giant.md) |
 | Numeri di baseline F0 e decisioni derivate | §8-bis + `config/default.toml` + `bench/results/` |
@@ -103,6 +105,13 @@ class StateStore
     def set_subtask_status(self, task_id: str, subtask_id: str, status: SubtaskStatus, *, actor: str, result: dict | None = None) -> None
     def add_approval(self, task_id: str, *, kind: str, payload: str) -> int
     def pending_approvals(self, task_id: str | None = None) -> list[dict]
+    def answer_approval(self, approval_id: int, answer: str) -> str
+    def list_grants(self, task_id: str | None = None) -> list[dict]
+    def override_approval(self, approval_id: int, answer: str | None) -> str
+    def consume_matching_approval(self, task_id: str, tool: str, args_json: str) -> str | None
+    def latest_clarification_answer(self, task_id: str) -> str | None
+    def extend_budget(self, task_id: str, key: str, add: int) -> None
+    def take_budget_extension(self, task_id: str) -> tuple[str, str, int] | None
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str, target: str | None = None) -> None
     def log_llm_call(self, task_id: str, row: LlmCallRow) -> None
     def log_tool_call(self, task_id: str, row: ToolCallRow) -> None
@@ -159,7 +168,9 @@ class ToolSpec      # name, description, risk, reversible, requires_approval, ti
 
 ### `redgiant/tools/fs.py` — filesystem (F1.4 + F1.11)
 
-`edit_file` è lo strumento di editing PRIMARIO (i diff unificati sono ostili agli E2B — evidenza F1.11); normalizza i prefissi `N<TAB>` che i modelli copiano da `read_file`. `write_file` crea file nuovi. `write_patch` resta per edit multi-punto, con matching tollerante (prefissi numerici, whitespace, code `-` vuote spurie).
+`edit_file` è lo strumento di editing PRIMARIO (i diff unificati sono ostili agli E2B — evidenza F1.11); normalizza i prefissi `N<TAB>` che i modelli copiano da `read_file`; un edit con `old_string == new_string` (post-normalizzazione) è respinto con `no_op_edit` (A/B 2026-08-02: il no-op "riusciva" e il modello lo ripeteva fino a esaurire gli step). `write_file` crea file nuovi. `write_patch` resta per edit multi-punto, con matching tollerante (prefissi numerici, whitespace, code `-` vuote spurie).
+
+**Syntax gate (post-F1, richiesta utente):** ogni writer verifica la sintassi del contenuto risultante PRIMA della scrittura atomica (`.py` ast.parse, `.php` php -l se disponibile, `.json`, `.toml`); sintassi rotta = scrittura rifiutata con `syntax_error` + dettaglio riga — un file rotto non esiste mai su disco.
 
 ```python
 class ReadFileArgs
@@ -167,6 +178,7 @@ class ListFilesArgs
 class WritePatchArgs
 class EditFileArgs
 class WriteFileArgs
+def syntax_check(path: Path, content: str) -> str | None
 def read_file(scope: Scope, path: str, start_line: int = 1, end_line: int | None = None) -> ToolResult
 def list_files(scope: Scope, glob: str, max_results: int = 200) -> ToolResult
 def edit_file(scope: Scope, path: str, old_string: str, new_string: str, replace_all: bool = False) -> ToolResult
@@ -189,10 +201,14 @@ def search_code(scope: Scope, rg_bin: str, pattern: str, glob: str | None = None
 
 `run_tests` esegue SOLO `cmd_id` registrati; `pytest`/`python` risolti sull'interprete di Red Giant (l'ambiente dei tool == quello dell'harness).
 
+I comandi di test li trova il SISTEMA (richiesta utente, F2): `discover_test_commands` deterministica all'avvio di ogni job (test_*.py⇒pytest, test.php⇒php, composer scripts.test⇒composer; config utente vince) + tool `register_test_command` per il Worker (guardia: eseguibile in `shell_whitelist`, persistito in task_config.json).
+
 ```python
 class RunTestsArgs
 class GitStatusArgs
 class GitDiffArgs
+class RegisterTestCommandArgs
+def discover_test_commands(root, shell_whitelist: tuple[str, ...]) -> dict[str, list[str]]
 def run_tests(scope: Scope, test_commands: dict[str, list[str]], shell_whitelist: tuple[str, ...], cmd_id: str, timeout_s: float = 300.0) -> ToolResult
 def git_status(scope: Scope) -> ToolResult
 def git_diff(scope: Scope, ref: str = "HEAD") -> ToolResult
@@ -203,7 +219,7 @@ def git_diff(scope: Scope, ref: str = "HEAD") -> ToolResult
 `dispatch`: unknown/bad_args/awaiting_approval/eccezioni = tutti DATI per il modello, mai crash; tutto loggato su tool_calls. Tollera l'echo `"tool"` negli args. `requires_approval` → riga approvals + task blocked.
 
 ```python
-def default_catalog(cfg: Config, scope: Scope, test_commands: dict[str, list[str]]) -> dict[str, ToolSpec]
+def default_catalog(cfg: Config, scope: Scope, test_commands: dict[str, list[str]], persist_test_commands=None) -> dict[str, ToolSpec]
 class ToolRouter
     def __init__(self, catalog: dict[str, ToolSpec], scope: Scope, store: StateStore) -> None
     def allowed_for(self, role: str, domain: str) -> list[ToolSpec]
@@ -213,7 +229,7 @@ class ToolRouter
 
 ### `redgiant/roles/base.py` + `redgiant/roles/worker.py` — Worker (F1.5, D20)
 
-ReAct a passo singolo vincolato: un `WorkerStep` per step, contesto in append puro (KV cache riusata). L'incoerenza action↔payload NON è un validator (la grammatica non può esprimerla): è un dato gestito nel loop. Il `finish` non chiude la sottofase: la chiude la verifica.
+ReAct a passo singolo vincolato: un `WorkerStep` per step, contesto in append puro (KV cache riusata). L'incoerenza action↔payload NON è un validator (la grammatica non può esprimerla): è un dato gestito nel loop. Il `finish` non chiude la sottofase: la chiude la verifica. Guard cumulativo per (tool, errore) nel tentativo: advice a 3/5, aborto a 8; esclusi i `run_tests`→`tests_failed` (l'oracolo che parla non è un tool rotto); le chiamate identiche consecutive contano come fallimento `identical_repeat` anche se "riuscite" (A/B 2026-08-02: 15 edit no-op di fila), con `run_tests` ESENTATO (rerun stesso giorno: rieseguire l'oracolo è lecito — il guard abortiva le sottofasi di sola analisi a 8 pytest identici).
 
 ```python
 class RoleContext   # task, subtask, volatile
@@ -221,11 +237,36 @@ class Role
     def __init__(self, llm: LlamaClient, assembler: PromptAssembler, router: ToolRouter) -> None
 class ToolCallSpec  # tool, args
 class FinishReport  # status done|blocked, summary<=600, evidence, verification_requested
-class WorkerStep    # thought<=300, action tool|finish, tool_call?, finish?
-    def incoherence(self) -> str | None
+class WorkerToolStep    # thought<=300, action="tool", tool_call OBBLIGATORIO
+class WorkerFinishStep  # thought<=300, action="finish", finish OBBLIGATORIO
+class WorkerStep    # RootModel: union DISCRIMINATA dei due — il ramo incompleto
+                    # (finish:null) non e' generabile ne' validabile (fix F2.5:
+                    # il derail da apice non escapato non ha piu' un'uscita incoerente)
 class Worker
-    def run(self, ctx: RoleContext, *, max_steps: int, step_max_tokens: int = 512, step_log=None) -> FinishReport
+    def run(self, ctx: RoleContext, *, max_steps: int, step_max_tokens: int = 512, step_log=None, resume_file=None) -> FinishReport
 ```
+
+### `redgiant/roles/planner.py` + `redgiant/roles/phase_designer.py` — pianificazione (F3)
+
+Planner: mappa sintetica (≤7 fasi), la LOGICA validata deterministicamente (id univoci, dipendenze acicliche, root presente, fasi completate conservate al replanning) con UNA richiamata correttiva (che CITA le regole violate, non solo i sintomi — A/B 2026-08-02) poi `PlanRejected`. `normalize_plan` ripara i sentinelli inequivoci in `depends_on` ("none"/"null"/"n/a"/"-"/"" e l'auto-dipendenza `dep == p.id` → rimossi) prima di ogni validazione; le allucinazioni vere (es. nomi di file) restano al validatore. PhaseDesigner: espande solo la fase corrente (≤6 sottofasi, id `P<x>.S<n>`); D10: ogni sottofase deve avere verifica eseguibile O expected_outputs (l'esistenza è un oracolo); i cmd di verifica devono essere registrati.
+
+```python
+class PlannerOutput      # goal<=300, success_criteria<=6, phases<=7
+def normalize_plan(out: PlannerOutput) -> PlannerOutput
+def validate_plan_logic(out: PlannerOutput, required_phase_ids: list[str] | None = None) -> list[str]
+class Planner
+    def run(self, ctx: RoleContext, *, max_tokens: int = 1536, required_phase_ids: list[str] | None = None) -> PlannerOutput
+class PlanRejected
+    def __init__(self, problems: list[str]) -> None
+class PhaseDesign        # phase_id, subtasks<=6
+def validate_design_logic(out: PhaseDesign, current_phase_id: str, known_cmd_ids: set[str]) -> list[str]
+class PhaseDesigner
+    def run(self, ctx: RoleContext, *, current_phase_id: str, known_cmd_ids: set[str], max_tokens: int = 2048) -> PhaseDesign
+class DesignRejected
+    def __init__(self, problems: list[str]) -> None
+```
+
+Orchestrator v1 (F3.3/F3.4): piano generato se assente, espansione lazy della sola fase eleggibile, sottofase fallita oltre i retry → **replanning** (max 2; fasi completate immutabili, sottofasi orfane → skipped) → poi `failed` esplicito.
 
 ### `redgiant/core/verify.py` — verifica deterministica (F1.6, D10)
 
@@ -250,7 +291,7 @@ class BudgetTracker
 
 ### `redgiant/core/orchestrator.py` — Orchestrator v0 (F1.7) + TaskLog (F1.8)
 
-Loop sequenziale su piano statico; pass→next, fail→retry entro budget→failed (la sofisticazione è F4, D11). Ripresa: sottofasi `running` orfane → pending. Stop budget = partial/failed spiegato.
+Loop sequenziale su piano statico; pass→next, fail→retry entro budget→failed (la sofisticazione è F4, D11). Ripresa: sottofasi `running` orfane → pending. Stop budget = partial/failed spiegato. **Gate D11 (F3, post-A/B):** se `cfg.planner_enabled` è False (default), piano mancante → `_naive_plan` (1 fase / 1 sottofase do-everything, verification = primo cmd di test noto, zero LLM) e `_replan` ritorna False (fallimento esplicito, niente replanning).
 
 ```python
 class TaskLog
@@ -259,6 +300,7 @@ class TaskLog
 class Orchestrator
     def __init__(self, cfg: Config, store: StateStore, llm: LlamaClient, router: ToolRouter, assembler: PromptAssembler) -> None
     def run_task(self, task_id: str) -> TaskState
+    def _naive_plan(self, task_id: str, log: TaskLog) -> None
 def load_static_plan(store: StateStore, task_id: str, plan_file: Path) -> None
 ```
 
@@ -272,8 +314,26 @@ class EvalTask      # id, domain, prompt, repo_dir, plan_file, success_cmd, time
 class EvalResult    # task_id, completed, verified, skipped, total_tokens, useful_tokens,
                     # wall_s, llm_calls, tool_calls, retries
 def discover_tasks(tasks_dir: Path) -> list[EvalTask]
-def run_eval(profile: str, only: list[str] | None, out_dir: Path) -> Path
-def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path) -> Path
+def run_eval(profile: str, only: list[str] | None, out_dir: Path, use_planner: bool = False) -> Path
+def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path, use_planner: bool = False) -> Path
+# F3.5: use_planner=True ignora plan.json (genera il Planner); False = statico o
+# piano "ingenuo" _naive_plan (baseline D11)
+```
+
+### `redgiant/web/jobs.py` + `redgiant/web/app.py` — GUI (F2)
+
+JobQueue: UN worker thread (D7), ciclo di vita del server legato al job (container severino-sim su/giù), config per-task su disco (`data/tasks/<id>/task_config.json`: writable_globs, test_commands, plan, approve_writes), riaccodamento automatico dei task queued/running al riavvio. `cancel` cooperativo. `create_app`: rotte HTML/HTMX (tabella F2.2 del piano — inline in app.py: 10 rotte non giustificano un package), template Jinja2 in `web/templates/`, htmx 2.0.4 vendorizzato in `web/static/`. Avvio: `rg serve` o `scripts/start-gui.ps1` (doppio click).
+
+```python
+def write_task_config(tasks_dir: Path, task_id: str, *, writable_globs: list[str], test_commands: dict[str, list[str]], plan: dict | None = None) -> None
+def read_task_config(tasks_dir: Path, task_id: str) -> dict
+class JobQueue
+    def __init__(self, cfg: Config, store: StateStore) -> None
+    def submit(self, task_id: str) -> None
+    def cancel(self, task_id: str) -> bool
+    def current(self) -> str | None
+    def queue_snapshot(self) -> list[str]
+def create_app(cfg: Config) -> FastAPI
 ```
 
 ## 4. Database (SQLite, `data/redgiant.db` — DDL in `store.py::_DDL`)
@@ -286,11 +346,11 @@ Nessuna rotta nostra (GUI = F2). Endpoint llama-server usati: `POST /completion`
 
 ## 6. Configurazione
 
-V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
+V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 31 test, nessuno tocca il modello:
+`tests/unit/` — 55 test, nessuno tocca il modello (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
 | File | Dimostra |
 |---|---|
@@ -314,6 +374,7 @@ D1–D21 (piano §0) + rituale con Passo 2-bis (README) e regola main (merge a o
 
 F0 (invariati): prefill 6.8/30.7/69.6/173.6s @ 1/4/8/16K · gen 35.8 tok/s · riuso 65 vs 7971 · grammatica 0.4–9.8%.
 F1 (run ufficiale severino-sim, 2 core): **4/6 verified** (T001/T003/T004/T005: 100% useful, 0 retry, 5-8 chiamate, 45-65s); T002/T006 falliti onesti (debiti F4); forbice completed≠verified = 0; 184k token totali per la run. Report: `bench/results/eval_severino-sim_*.md`.
+F3 (A/B ufficiale severino-sim, T001–T010): baseline statica **9/10 verified** (710.106 token, ~27,5 min, unico caduto T008) vs planner **2/10** (814.646 token, ~44 min; T001, T004) → **verdetto D11: Planner default OFF**. Prima run planner (0/10) INVALIDA: working tree sporco. Forbice = 0 in tutte le run. Report: `bench/results/eval_severino-sim_{static,planner}_2026080*.md`.
 
 ## 9. Trappole già disinnescate
 
@@ -328,6 +389,37 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **Senza seed, llama-server usa un seed casuale per richiesta**: run non confrontabili (T003/T005 passavano o fallivano a lotteria). Seed fisso 42 nel client.
 - **Il modello dichiara azioni mai eseguite** ("answer written") — la verifica lo becca (expected_outputs), e la card ora dice esplicitamente "i pensieri non cambiano il mondo"; `write_file` dà il primitivo di creazione che mancava.
 
+**Batch F2 (campagna di collaudo 2026-08-01/02 — 3 giri utente + batteria + 4 retest):**
+
+- **⭐ Il derail da apice** (causa radice dei "loop caotici" 60+ chiamate): un `"` non escapato dentro un valore stringa chiude legalmente la stringa JSON; il modello deraglia e l'unica uscita grammaticale era `finish:null`. Fix STRUTTURALE: `WorkerStep` = union discriminata (il ramo incompleto non è generabile — probe live 8/8) + regola anti-apici nel preambolo.
+- **Race submit/ripresa**: la ripresa post-approvazione arrivava mentre il worker rilasciava il task appena bloccato → scartata come duplicato → `queued` eterno. Fix: guard rimosso + sweep DB post-job.
+- **CRLF dei checkout git Windows**: read_file mostra LF, il file è CRLF → `old_string` mai trovato (loop 12 step). Fix: edit_file lavora e scrive in LF.
+- **Consenso a gettone → grant permanenti** per (famiglia-scrittura, path) nel task, con override/revoca dell'utente; il `no` è permanente uguale; `no→sì` riaccoda un task bloccato.
+- **Contabilità budget rotta dalla cache**: il server riporta più cache del conteggio prompt client → righe negative che azzeravano il consumo e DISATTIVAVANO il budget. Fix: clamp per riga `MAX(prompt−cached,0)+gen` (il budget misura il lavoro).
+- **Budget check su task finito**: chiedeva l'estensione dopo il PASS finale. Fix: prima si guarda se c'è lavoro, poi il budget.
+- **Guard anti-loop aggirabile**: contava i fallimenti consecutivi, il modello li spezzava alternando letture ok. Fix: conteggio CUMULATIVO per (tool, errore) nel tentativo (consiglio a 3 e 5, stop a 8).
+- **`not_found_in_file` non insegnava niente**: ora edit_file restituisce la regione più simile del file (`closest_match`) — il tool corregge l'old_string del giro dopo (mismatch tipico: righe vuote PEP8).
+- **Simmetria degli oracoli** (dal retest D3: lavoro fatto, test verdi, worker "blocked" → bocciato): check oggettivi tutti verdi con test eseguiti = pass; i soggettivi (worker_done, evidence) diventano warning → `completed_with_warnings`.
+- **Riavvio container a ogni ciclo di consenso** (~1 min di ricarica pesi a click): vivo con task attivi, spegnimento dopo `idle_shutdown_s`=30' (decisione utente, reaper thread).
+- **Ripresa da zero post-approvazione**: ora IN-PLACE — il contesto volatile è salvato al blocco (`resume_<subtask>.ctx`) e si riparte dallo step esatto con la KV calda.
+- **Troncamento che bruciava il tentativo**: gestito in-loop come dato; `worker.step_max_tokens` 512→768.
+- **Doppio submit dal form, task queued muti, unreachable da processo morto**: anti doppio-submit, banner coda/avvio-server/ripresa con pulse e ultima attività dal log, `start-gui.ps1`, riaccodamento automatico al riavvio.
+
+**Batch A/B ufficiale (2026-08-02 — run Planner 0/10, autopsia):**
+
+- **⭐ Prompt e validatore devono muoversi INSIEME**: la revisione scoped-verification ha riscritto la regola 2 del Designer cancellando l'istruzione "i valori di `verification` sono ESATTAMENTE i cmd id noti". Il validatore (rimasto giusto) respingeva tutto; il modello non può indovinare una regola che nessuno gli dice: 6 task su 10 morti senza una tool call. Corollario: ogni regola del validatore deve avere la sua frase nel prompt del ruolo, e viceversa.
+- **⭐ Le run ufficiali si lanciano SOLO da working tree pulito**: l'A/B è partito con modifiche non committate — la run 2 ha misurato uno stato intermedio mai collaudato e l'hash git nel report mentiva. Prima si committa, poi si misura.
+- **`depends_on` spazzatura dal Planner** (`["none"]`, `["geometry.py"]`): i sentinelli inequivoci sono riparati da `normalize_plan`; la richiamata correttiva ora cita la regola (`depends_on` solo id di fasi del piano, root = `[]`), non solo i sintomi.
+- **Loop di edit no-op**: `edit_file` con old==new "riusciva" senza cambiare nulla → 15 ripetizioni identiche fino a esaurire gli step, invisibili al guard (ogni chiamata era un successo). Fix doppio: `no_op_edit` è un errore, e la chiamata identica consecutiva conta nel guard cumulativo come `identical_repeat` anche se ok.
+
+**Rerun A/B ufficiale (2026-08-02, @611d894 — Planner 2/10 vs baseline 9/10: verdetto D11):**
+
+- **Auto-dipendenza del Planner** (`P1 depends on P1`): altro sentinello dopo "none" — 2 task morti in 2 chiamate. Riparato in `normalize_plan` (dep == id → rimossa).
+- **Il guard `identical_repeat` mordeva l'oracolo**: contava anche i `run_tests` identici e abortiva le sottofasi di sola analisi ("esegui pytest e registra i fallimenti") a 8 esecuzioni. Esentato, coerente con l'esclusione esistente di `tests_failed`.
+- **Fasi ridondanti**: su task banali il Planner genera 3-4 fasi che ripetono lo stesso lavoro (P2 che ricerca ciò che P1 ha già trovato) — costo puro, nessun guadagno. È il volto strutturale dell'overhead di governance, non un bug puntuale.
+- **Sottofasi-analisi artificiali**: la revisione scoped spinge il Designer a creare sottofasi "analizza e produci report.txt" con output che il Worker non produce naturalmente → 3 tentativi bloccati → replan. Il perimetro giusto non basta: gli expected_outputs devono essere artefatti del lavoro vero, non compiti in classe.
+- **La verifica scoped sposta l'errore in avanti**: T009 rerun — P1.S1 "passa" sugli expected_outputs ma contiene `slugify` invece di `slug`; il falso positivo intermedio esplode solo sull'ultima sottofase. Trade-off accettato consapevolmente (F3.2-REVISIONE), ora con la sua prima evidenza di costo.
+
 ## 10. Debito tecnico aperto
 
 | Cosa | Perché rimandato | Quando |
@@ -338,6 +430,13 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 | T002 fallisce (il modello non capovolge "lib off-limits ⇒ bug nel chiamante") | è un limite di *ragionamento*, non d'ambiente: serve il retry con strategia del Supervisor | F4.2 (`retry_strategy`) |
 | T006 fragile (pattern di ricerca sbagliati al retry) | idem: strategia di retry | F4 |
 | `BudgetTracker.charge_*` no-op (i log li scrivono client/router) | API tenuta per il BudgetManager F4.5 | F4.5 |
+| T007 verde ma laborioso (41 chiamate: giri di lettura ridondanti) | serve contesto selettivo e strategia | F4 + F5 |
+| Registro delle tolleranze modello-specifiche (N-TAB, CRLF, code vuote, closest_match, soglie): euristiche overfittate su E2B QAT b10200 | vanno A/B-ate come sistema al cambio di modello/build | F6/F8 |
+| Nessun task sintetico "sporco" (repo grande, rumore, test lenti) | il micro-mondo non prepara a F8 | pre-F8 |
+| Evaluator senza varianza multi-seed (1 run = 1 traiettoria) | costa CPU; serve per distinguere "funziona" da "è passato" | F6 |
+| `task_config.json` su file = seconda fonte di stato oltre al DB | uso single-writer, fallimento benigno e visibile | con l'evoluzione GUI di F4 |
+| Protocollo umano = segreteria (solo ultima risposta, niente cronologia) | il dialogo vero è il protocollo F4 | F4.2/F4 GUI |
+| Overhead di governance (utente, post-A/B): ~10× chiamate in modalità planner sui micro-task, 710K token per la batteria baseline — accettato come overhead sperimentale by design, ma va affrontato | serve la policy when-to-plan (pianificare solo quando paga) e la riduzione dei giri (sessioni multiple per sottofase, replan) | F6 (routing/Assessor) + dati F8 |
 
 ## 11. Il perché delle scelte non ovvie
 
@@ -350,4 +449,4 @@ Ereditate da F0 (QAT, digest-pin, 2 core, ctx 16K nel sim, niente framework, JSO
 
 ## 12. Cosa NON esiste ancora
 
-GUI web (F2) · Planner/PhaseDesigner e piano dinamico (F3) · Debugger/Supervisor/LoopGuard/Checkpoint/BudgetManager (F4) · ContextBuilder/CacheProbe/SlotManager/Compressor (F5) · routing/Classifier/Assessor (F6) · tool web e verifica citazioni (F7) · deploy (F8). Il chatbot Laravel 13 vive in un altro scenario (F8). Esclusi per design: multi-modalità, multi-modello, parallelismo tra agenti, API JSON pubblica.
+Il sistema "Planner come autore + Gate" (`plan_planner_system.md` — seed, da estendere e implementare: plan-as-artifact/renderer, gate d'ingresso fase, retry/replan-deve-differire, ledger di task) · Debugger/Supervisor/LoopGuard/Checkpoint/BudgetManager (F4) · ContextBuilder/CacheProbe/SlotManager/Compressor (F5) · routing/Classifier/Assessor (F6) · tool web e verifica citazioni (F7, salvo `http_get` previsto in F3-bis) · deploy (F8). Il chatbot Laravel 13 vive in un altro scenario (F8). **Esiste ma è SPENTO di default:** Planner/PhaseDesigner/replanning (gate D11, `planner.enabled=false` — si riaccende con `rg eval --planner`). Esclusi per design: multi-modalità, multi-modello, parallelismo tra agenti, API JSON pubblica.

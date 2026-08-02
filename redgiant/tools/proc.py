@@ -73,6 +73,34 @@ def run_tests(scope: Scope, test_commands: dict[str, list[str]],
                       error=None if code == 0 else "tests_failed")
 
 
+def discover_test_commands(root, shell_whitelist: tuple[str, ...]) -> dict[str, list[str]]:
+    """Scoperta deterministica (F2, richiesta utente): il repo DICE come si testa.
+    Zero modello coinvolto; la config esplicita dell'utente, se c'e', vince sul merge."""
+    import json as _json
+    found: dict[str, list[str]] = {}
+    root = root if hasattr(root, "glob") else __import__("pathlib").Path(root)
+    has_pytest = any(root.rglob("test_*.py")) or any(root.rglob("*_test.py"))
+    if has_pytest and "pytest" in shell_whitelist:
+        found["pytest"] = ["pytest", "-q"]
+    if (root / "test.php").is_file() and "php" in shell_whitelist:
+        found["phptest"] = ["php", "test.php"]
+    composer = root / "composer.json"
+    if composer.is_file() and "composer" in shell_whitelist:
+        try:
+            data = _json.loads(composer.read_text(encoding="utf-8"))
+            if "test" in (data.get("scripts") or {}):
+                found["composer-test"] = ["composer", "test"]
+        except (ValueError, OSError):
+            pass
+    return found
+
+
+class RegisterTestCommandArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cmd_id: str
+    argv: list[str]
+
+
 def git_status(scope: Scope) -> ToolResult:
     code, tail = _run(["git", "status", "--porcelain"], scope.root, 30.0)
     if code != 0:
