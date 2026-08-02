@@ -4,7 +4,7 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
-**Stato:** 🟢 **PS5 completata** (2026-08-02, `v3.6.0`) — pilota PS5.5 VERDE su severino-sim (3 fasi, coverage totale, giudice esterno pytest exit=0, 7.845 token, 569s). Prossima azione: **PS6** (Evaluator: T040+ e A/B con ablation).
+**Stato:** 🟢 **PS6 completata** (2026-08-02, `v3.7.0`) — A/B ufficiale eseguito (report: `bench/results/ab_ps6_plansys_official_20260802.md`). **Verdetto D11: il plansys NON si accende di default** (2/13 vs 6/13 baseline; sui 3 task larghi 0/3 entrambi) — ma fallisce a metà del costo (636K vs 1.143K token) e le ablazioni dimostrano che ogni componente contiene il costo (+50%…+76% senza). Verdetto riapribile dopo i 5 fix identificati (ESITO PS6) + esperimento thinking T-SM. Prossima azione: **PS7** (integrazione, gated OFF).
 
 **Nota di condizione sperimentale (2026-08-02, decisione utente):** TUTTE le misure del progetto —
 F0→PS6 incluso — girano col thinking mode di Gemma 4 E2B **strutturalmente disattivato** (template
@@ -656,17 +656,21 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
   - **T042_brownfield_extend** — repo fixture di ~15 file con convenzioni sue: estendere rispettandole; misura il ledger/projection (senza, il modello ri-esplora; con, consulta). Giudice = suite fornita + check convenzioni via script.
   Formato: `task.toml` standard (`expected_outcome="verified"`, `success_cmd` esterno); i repo sono nel repo di Red Giant, versionati (D18: si estendono, non si ammorbidiscono).
 - **Accettazione:** i 3 task girano nell'harness in modalità baseline (naive) e producono il loro (prevedibile) fallimento o successo parziale — QUESTO è il punto: se la baseline li chiude, sono troppo piccoli e vanno rifatti.
+- [x] **ESITO PS6.1 (2026-08-02):** T040 e T042 falliscono in baseline come previsto. T041 v1 (1 modulo) veniva CHIUSO dalla baseline (99.8K tok) → esteso a 3 moduli interdipendenti con formato esatto (stats/hist/summary), giudice provato soddisfacibile con implementazione di riferimento, ricontrollato: baseline KO in 1.062s/190K tok. Metro tarato.
 
 #### PS6.2 — 📌 A/B + ablation
 
 - [ ] 🤖 **Obiettivo:** run ufficiali (severino-sim, codice committato, regola F3): (A) baseline naive su T001–T010 + T040–T042; (B) plansys completo, stesso set; ablation su T040–T042: (B1) senza oracle qualification (gate bypass, flag di test); (B2) senza ledger/projection (proiezione = listato repo grezzo); (B3) senza phase entry gate. *(meccanica ablation decisa in implementazione: env var `RG_PLANSYS_ABLATE` ∈ {oracle, ledger, entry}, helper `plansys.ablated()` — leva di solo-A/B, mai in produzione: non tocca il contratto config)* Report con le 5 metriche cardine + le metriche PS-D9 (token di governance, test deboli respinti, retry fotocopia bloccati, criteri coperti, lavoro duplicato).
 - **Accettazione:** report committato in `bench/results/` con conclusione scritta per componente (resta / esce / resta con riserva); atlante §8-bis aggiornato; **README aggiornato** (finding F8 riscritta coi numeri nuovi, qualunque essi siano).
+- [x] **ESITO PS6.2 (2026-08-02):** eseguito con 2 dry-run GPU preliminari (4 fix di control plane pre-misurazione). Report: `bench/results/ab_ps6_plansys_official_20260802.md`. Componenti: oracle gate RESTA (+51% costo senza), ledger RESTA (+76% senza), entry gate RESTA CON RISERVA (+50% senza, ma lo scenario fasi-ridondanti non si è materializzato su questo set). README F8/F18 aggiornate.
 
 #### PS6.3 — 🔎 Verifica di fase
 
-- [ ] Verdetto D11 scritto nell'ESITO PS6 di questo file: il sistema si è guadagnato l'accensione di default sui task larghi? (Le opzioni oneste: sì sui multi-fase con routing per taglia; no e si documenta perché; dati insufficienti e si dice cosa manca.) Forbice = 0 su tutte le run.
+- [x] Verdetto D11 scritto nell'ESITO PS6 di questo file: il sistema si è guadagnato l'accensione di default sui task larghi? (Le opzioni oneste: sì sui multi-fase con routing per taglia; no e si documenta perché; dati insufficienti e si dice cosa manca.) Forbice = 0 su tutte le run.
 
-**Rituale** → `v3.7.0`.
+**ESITO PS6 (VERDETTO D11, 2026-08-02):** **NO, il plansys non si accende di default — e si documenta perché.** Baseline 6/13, plansys 2/13 (micro-task: la governance non si ripaga sul 2B); task larghi 0/3 per entrambi. Forbice = 0 ovunque TRANNE T041 (1): under-scoping del Senior — criteri che coprono un terzo della richiesta, coverage interno verde, giudice esterno rosso. Il gap dell'onestà si è spostato a monte, ed è chiudibile deterministicamente. Cosa il sistema HA comprato: fallimenti a metà costo (636K vs 1.143K token, wall pari), token utili +9pt, diagnosi per stadio di ogni morte, ~50 regole permanenti. **5 fix identificati dalla corsa** (dettagli nel report): (1) gate copertura-richiesta su S (file nominati nella richiesta ⇒ negli artifacts di qualche fase); (2) synthesis gate SCOPED (mai i test di fasi future: `synthesis_cmds=pytest` su suite fornita multi-fase = morte inevitabile a P1 — difetto strutturale, causa di 3 morti su 13); (3) eccezione nomi canonici solo per `test_*.py`; (4) `test_author_max_tokens` 4096 (p95=cap, audit dal DB) + regola cap ≥ 1,5×p95 dopo ogni run ufficiale; (5) bisection regressione baseline 9/10→6/10 (superfici condivise cambiate: card regola 12, `_repo_listing`, `syntax_hint`). **Il verdetto si riapre** dopo i fix + l'esperimento thinking T-SM (`plan_thinking_ab.md`), che i dati motivano direttamente (le morti di testa: under-scoping S, characterization sbagliate di M).
+
+**Rituale** → `v3.7.0`. ✅ Eseguito il 2026-08-02.
 
 ---
 
