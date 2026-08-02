@@ -69,9 +69,9 @@ If you are trying to make a small local model do real, verified work on hardware
 
 ## 🔬 Discoveries — field notes with standalone value
 
-Even in the worst case — the thesis failing its real-codebase exam — this section holds its value. Every entry is stated as a **general claim** about building agents on small language models, usable outside this project; underneath it, the **measured evidence** from this repository (real numbers, not anecdotes) and the countermeasure that now lives in the code. Where the evidence is tied to this exact stack (Gemma 4 E2B QAT Q4 · llama.cpp pinned build), the entry carries a ⚠️: *the lesson transfers, the numbers need re-measuring on yours*. Technical causes live in the [codebase atlas §9](memory/codebase_reference.md), raw reports in [`bench/results/`](bench/results/). The [index table](#-discovery-index) at the end details all of them.
+If you are building an agent engine around a **small language model** — a 1–4B model served locally (llama.cpp or similar), tool calling through structured JSON, modest CPU-only hardware — the notes below are the answers this project paid for in measurements: how to design edit tools an SLM can actually use, what grammar-constrained decoding does and does not guarantee, which failure modes are systematic rather than anecdotal, and where the real costs sit on CPU inference. Each entry is a **general claim**, stated so it can be applied to any SLM agent stack; the evidence is this repository's own measured data, and every countermeasure is implemented here in working code. Entries marked ⚠️ carry evidence tied to this exact stack (Gemma 4 E2B QAT Q4 · pinned llama.cpp build): *the lesson transfers, the numbers need re-measuring on yours.*
 
-### 🔧 Tool design for small models
+### 🔧 Tool design: how a small model edits files reliably
 
 - **D1 — Exact-string replacement beats diffs.** For sub-4B models, unified diffs are an actively hostile edit format: a single line of context mismatch (a blank line, PEP 8 spacing) rejects a logically correct fix and starts a retry loop. An `old_string → new_string` tool with a uniqueness requirement is strictly better. *Evidence: the same fix tasks went from 20+ failing calls to 5–6 clean calls after the switch.*
 - **D2 — Absorb representation artifacts; don't legislate against them.** Small models copy what they see: line-number prefixes shown by the read tool get pasted into edits, diffs and whole-file writes — prompt rules against it change nothing (⚠️ observed systematically on Gemma E2B) — and CRLF files displayed as LF make every `old_string` unmatchable. The tool layer must normalize both directions; the environment adapts to the model, not vice versa.
@@ -79,80 +79,50 @@ Even in the worst case — the thesis failing its real-codebase exam — this se
 - **D4 — Error messages must teach the next call.** A bare "not found" teaches nothing and reproduces itself; returning the *closest matching region* of the file makes the model's next `old_string` correct. One-line errors turned multi-call loops into one-round recoveries.
 - **D5 — Never let a broken file exist.** Syntax-check the resulting content *before* the atomic write (AST parse, linter, JSON/TOML load): a syntactically broken file never reaches disk, and the rejection — with the error line — is data the model can act on.
 
-### 🔒 Constrained decoding
+### 🔒 Constrained decoding: the grammar gives you shape, not meaning
 
 - **D6 — The grammar constrains, but does not inform.** With guided decoding active but the schema absent from the prompt, the model produces structurally valid JSON filled with literal placeholders (`"..."`, `"$id"`). *Evidence: 0/60 → 60/60 semantically filled outputs once the schema was shown in the prompt; grammar overhead stays at 0.4–9.8%.* The grammar guarantees shape; only the prompt provides meaning.
 - **D7 — The grammar guarantees shape only within the generation budget.** Output truncated at the token limit is broken JSON *despite* the grammar: stop reason `limit` must be an explicit error, per-role budgets sized with headroom, and compact JSON (no pretty-printing) buys back 20–30% of output tokens.
 - **D8 — Make incoherent output unrepresentable, don't validate it away.** A raw `"` emitted inside a JSON string *legally* closes it; if the schema then offers an escape branch (a nullable required object), a derailed model takes it, and one bad character becomes a 60-call chaos loop. Discriminated unions remove the branch from the grammar itself: after a derail the model is *forced* back into a coherent step. *Evidence: 8/8 derail probes recovered structurally.*
 - **D9 — Instruction-tuned models need their chat template even for raw structured completions** (⚠️ measured on Gemma): without the turn markers, output quality degenerates — grammar or no grammar.
 
-### 🧨 Failure modes of small models
+### 🧨 Failure modes of small models in agent loops
 
 - **D10 — Small models invent identifiers under pressure.** Asked to plan around code it hasn't seen, the model names things by association (`slugify` where the tests import `slug`) and the invention propagates plan → code → failure. Countermeasure: **contract anchoring** — planning roles receive verbatim excerpts of the tests they must satisfy, and objectives are phrased by outcome, never by imagined API.
 - **D11 — The model executes exactly what it is told: prompt and validator are one artifact.** Deleting one sentence from a role prompt (*"verification entries must be exactly the known command ids"*) while the validator kept enforcing it killed 6 tasks out of 10 before a single tool call. Every rule a validator enforces needs its sentence in the prompt; a small model cannot infer the missing half of a contract.
 - **D12 — Models claim actions they never performed.** "Answer written to file" — with no write call in the session. Only tool calls change the world; claims are hypotheses for verification, in both directions (see D22).
 - **D13 — Determinism is per-backend, and without a fixed seed it doesn't exist at all.** The server draws a random seed per request unless pinned (pass/fail became a lottery across runs); with a fixed seed, CUDA and CPU builds still produce *different* trajectories. Reproducibility requires seed + backend + build pinned together — a GPU dev pass is a hint, never a result.
 
-### 🪙 Token economy
+### 🪙 Token economy on CPU-only inference
 
 - **D14 — Compact JSON is free money.** No pretty-printing in either direction: 20–30% of output tokens saved, at zero quality cost.
 - **D15 — Budget accounting must clamp against cache reporting.** The runtime can report more cached tokens than the client counted in the prompt; naive `prompt − cached` goes negative and a summed budget silently *disables itself*. Charge `max(prompt − cached, 0) + generated` per call: the budget measures work, not accounting artifacts.
 - **D16 — Governance overhead is real, measurable, and must earn its keep.** On micro-tasks, planner-mode multiplies LLM calls ~10× over a naive static plan (88 vs 8 on the same task; 710K tokens for a 10-task baseline battery). The bet that this overhead pays off on wide tasks is treated as a *hypothesis under A/B evaluation*, never an assumption — and when planning doesn't pay, the honest output is "don't plan". Open problem, tracked as such.
 
-### ♻️ KV-cache reuse
+### ♻️ KV-cache reuse and prefill engineering
 
 - **D17 — On CPU, prefill is the cost model; context length is physics.** Cold prefill on target-equivalent cores: 6.8s @ 1K → 30.7s @ 4K → 69.6s @ 8K → **173.6s @ 16K**; generation is memory-bound at 35.8 tok/s (24 threads only reach 42). Small contexts are a design constraint, not a preference.
 - **D18 — Call count is not the cost; prefix instability is.** With a stable prompt layout and an append-only agent loop, an 88-call session cost ~82s of *total* prefill (KV reuse near 100%). One byte changed mid-prompt reprocesses ~120× more tokens (measured: 65 vs 7,971). Prompt layout is not style — it is the performance model.
 - **D19 — Measure persistence claims; don't trust the API surface** (⚠️ llama.cpp pinned build): KV-slot `save`/`restore` round-trips cleanly but does *not* restore cache-reuse state — the same prompt reprocesses 100% of its tokens after a restore, while ordinary `cache_prompt` reuse works perfectly. A feature that returns `ok` can still be useless for its purpose; only the reuse counters tell the truth.
 
-### 🎛️ Orchestration
+### 🎛️ Orchestration: running an unreliable proposer safely
 
 - **D20 — The model proposes; deterministic code decides.** Plan/design *logic* (unique ids, acyclic dependencies, known commands, scoped verification) is validated in plain code, with exactly **one** corrective re-call — which must *cite the violated rule*, not just list symptoms (a small model cannot fix what it cannot infer) — then explicit failure. No model-driven validation loops.
 - **D21 — Every model-driven loop needs a deterministic exit the model cannot veto.** Design rounds, replans, per-error counts, step budgets: each cap in this codebase exists because its absence produced a real infinite loop (a designer redesigning the same phase forever; 49 rewrites of one file; 15 identical no-ops). Caps are not pessimism — they are the price of running an unreliable proposer safely.
 
-### ✅ Verifiability
+### ✅ Verification design: trusting an agent you cannot trust
 
 - **D22 — Verification must be symmetric: oracles beat claims in both directions.** A worker that reports success without evidence fails; a worker that believes it is *blocked* while the tests are green has succeeded — objective checks (files exist, tests pass) override self-reports both ways, with subjective mismatches downgraded to warnings.
 - **D23 — Silence is not success: an unknown check is a failure, not a skip.** A verification step naming a command the system doesn't know must FAIL the subtask; skipping it converts a typo into a false pass.
 - **D24 — Scope and verification must coincide.** A subtask judged by tests it is forbidden to fix rewrites the one file it *can* touch, forever (*evidence: 49 rewrites of a 5-line file*). The full suite belongs only to the subtask that owns the final state; intermediate subtasks are verified on what they own (their outputs' existence).
 
-### 🤝 Consent UX
+### 🤝 Consent UX: humans in the loop without losing the cache
 
 - **D25 — Per-call approval is consent theater; consent must have memory.** Approving every write individually produced real user revolt ("1000 approvals... like filing taxes"). Approval of one write grants a standing, revocable permission for that (action-family, file) pair within the task — fewer questions, each one meaningful, `no` remembered exactly as long as `yes`.
 - **D26 — Failure must be a dialogue, not a dead end.** Budget exhaustion *asks* for an extension (+50%) instead of killing the task; failed tasks surface their reasons and offer a guided relaunch with amended instructions. An agent system for humans needs an "and now what?" path from every terminal state.
 - **D27 — Approvals must not cost prefill.** Naively, every human pause meant a cold restart of the work (re-reads, re-edits, full re-prefill on CPU). Saving the volatile context at the block and resuming *in-place* — same step, warm KV cache — makes human consent nearly free in compute terms.
 
-### 📋 Discovery index
-
-| ID | General claim | Measured evidence (this project) | Countermeasure → where it lives |
-|---|---|---|---|
-| D1 | Exact-string replacement beats diffs for small models | 20+ failing calls → 5–6 clean calls on identical tasks | `edit_file` primary tool → `tools/fs.py` |
-| D2 | Absorb representation artifacts (⚠️) | `N<TAB>` prefixes copied into 100% of write forms; CRLF made edits unmatchable | Normalization in every writer, LF everywhere → `tools/fs.py` |
-| D3 | No-op "success" generates loops | 15 identical no-op edits to step-budget death | `no_op_edit` error + repeats counted as failures → `tools/fs.py`, `roles/worker.py` |
-| D4 | Errors must teach the next call | not-found loops → one-round recovery | `closest_match` region in error payload → `tools/fs.py` |
-| D5 | A broken file must never exist | broken writes rejected pre-disk, with error line | syntax gate before atomic write → `tools/fs.py::syntax_check` |
-| D6 | Grammar constrains, doesn't inform | 0/60 → 60/60 semantically filled; overhead 0.4–9.8% | schema rendered in-prompt (S2) → `prompts/assemble.py` |
-| D7 | Shape guaranteed only within token budget | stop `limit` = broken JSON despite GBNF; compact JSON −20–30% | `LlmTruncated` explicit error; sized budgets → `llm/client.py` |
-| D8 | Make incoherence unrepresentable | 1 raw `"` → 60-call loop via escape branch; 8/8 probes recovered | discriminated unions → `roles/worker.py` |
-| D9 | Chat template even for raw completions (⚠️) | degenerate output without turn markers | template always applied → `llm/client.py` |
-| D10 | Models invent identifiers under pressure | `slugify` planned, `slug` required → task death | contract anchoring (test excerpts) → `core/orchestrator.py` |
-| D11 | Prompt and validator are one artifact | 1 deleted sentence → 6/10 tasks dead at 0 tool calls | rule restored; runs only from committed code → atlas §9 |
-| D12 | Claimed actions ≠ actions | "answer written", no write call in session | only tool calls count; oracles check → `core/verify.py` |
-| D13 | Determinism is per-backend, seed mandatory | unseeded = pass/fail lottery; same seed ≠ same CUDA/CPU trajectory | seed pinned; official metrics CPU-capped only → `llm/client.py`, policy |
-| D14 | Compact JSON is free money | −20–30% output tokens, zero quality cost | no pretty-printing anywhere → prompts + client |
-| D15 | Budget accounting must clamp vs cache | cached > prompt → negative rows silently disabled the budget | `max(prompt−cached,0)+gen` per call → `state/store.py` |
-| D16 | Governance must earn its keep | ~10× calls on micro-tasks; 710K tokens / 10-task battery | built-in A/B evaluator; when-to-plan → `eval/harness.py`, plan §F6 |
-| D17 | Prefill is the CPU cost model | 6.8s @ 1K → 173.6s @ 16K cold; gen 35.8 tok/s memory-bound | minimal per-role contexts (~4–8K) → architecture |
-| D18 | Prefix instability is the real cost | 88 calls ≈ 82s total prefill; 65 vs 7,971 tokens on 1-byte change | S1→S7 stable layout, append-only loop → `prompts/assemble.py` |
-| D19 | Measure persistence claims (⚠️) | slot restore returns ok, then 100% reprocess | feature shelved pending re-test → plan §F5.4 |
-| D20 | Model proposes, code decides | prose "corrections" failed; rule-citing re-call works | deterministic validators + 1 corrective call → `roles/planner.py`, `roles/phase_designer.py` |
-| D21 | Every loop needs an exit the model can't veto | designer infinite redesign; 49 rewrites; 15 no-ops | caps at every level (rounds, replans, fails, steps) → orchestrator, worker |
-| D22 | Oracle symmetry | worker "blocked" + green tests = real success | objective checks override self-reports → `core/verify.py` |
-| D23 | Unknown check = FAIL, not skip | typo'd check would have silently passed | unknown verification fails the subtask → `core/verify.py` |
-| D24 | Scope = verification | 49 rewrites of a 5-line file under out-of-scope tests | full suite only on the phase's last subtask → `roles/phase_designer.py` |
-| D25 | Consent must have memory | live user revolt at per-call approvals | standing revocable grants per (action-family, file) → `state/store.py` |
-| D26 | Failure is a dialogue | budget death & dead-end failures in live testing | extension consent (+50%), guided relaunch → orchestrator, web GUI |
-| D27 | Approvals must not cost prefill | every pause = cold restart on CPU | in-place resume with saved volatile context → `roles/worker.py` |
+Every countermeasure above ships as working code in this repository. The [codebase atlas §9](memory/codebase_reference.md) maps each discovery to its exact file, signature and technical cause; [`bench/results/`](bench/results/) holds the raw measurement reports behind every number.
 
 **Measured baselines** on the capped reference profile (2 workstation cores ≈ 4 target cores, [full report](bench/results/f0_baseline_severino-sim.md)):
 
