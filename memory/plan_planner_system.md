@@ -4,7 +4,7 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
-**Stato:** 🔴 **Non iniziato** — prossima azione: **PS0** (artefatti e contratto concettuale).
+**Stato:** 🟢 **PS0 completata** (2026-08-03, `v3.1.0`) — prossima azione: **PS1** (Ledger Builder + proiezioni).
 
 > **La regola che comanda questo documento:**
 > *The Senior defines what must be achieved. The Mid decides how to decompose it and how
@@ -363,19 +363,19 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS0.1 — Schemi degli artefatti
 
-- [ ] 🤖 **Obiettivo:** `redgiant/plansys/artifacts.py` esattamente come PS-A2.
+- [x] 🤖 **Obiettivo:** `redgiant/plansys/artifacts.py` esattamente come PS-A2.
 - **Implementazione:** copiare le firme di PS-A2 (sono normative); `CheckResult` importato da `redgiant.core.verify`. Ogni classe con docstring di una riga: chi la produce, chi la modifica.
 - **Accettazione:** unit `test_plansys_artifacts.py`: round-trip JSON di ogni artefatto; `extra="forbid"` respinge campi ignoti; i tetti (`max_length`/`min_length`) mordono; `BlueprintPatch` con op `remove` e payload vuoto valida.
 
 #### PS0.2 — Persistenza
 
-- [ ] 🤖 **Obiettivo:** tabelle `ps_artifacts`/`ps_gates` + i 5 metodi di `StateStore` (PS-A3).
+- [x] 🤖 **Obiettivo:** tabelle `ps_artifacts`/`ps_gates` + i 5 metodi di `StateStore` (PS-A3).
 - **Implementazione:** DDL additivo in `_DDL`; `save_ps_artifact` calcola `version = MAX(version)+1` per (task, kind, ref) in transazione; `load_ps_artifact` senza version → l'ultima.
 - **Accettazione:** unit: versioni monotone; UNIQUE violata impossibile per costruzione; `load` di artefatto assente → `KeyError` col riferimento.
 
 #### PS0.3 — Renderer deterministico
 
-- [ ] 🤖 **Obiettivo:** `redgiant/plansys/render.py` — DB → Markdown greppabile, struttura FISSA.
+- [x] 🤖 **Obiettivo:** `redgiant/plansys/render.py` — DB → Markdown greppabile, struttura FISSA.
 - **Implementazione:**
   ```python
   def render_macro_plan(plan: MacroPlan) -> str
@@ -389,12 +389,12 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS0.4 — Config
 
-- [ ] 🤖 **Obiettivo:** sezione `[plansys]` (PS-A4) in `config.py` (+`_KNOWN_KEYS`) e `default.toml`.
+- [x] 🤖 **Obiettivo:** sezione `[plansys]` (PS-A4) in `config.py` (+`_KNOWN_KEYS`) e `default.toml`.
 - **Accettazione:** `Config.load("dev-fast")` espone `plansys.enabled is False` e i default; chiave ignota in `[plansys]` → ValueError.
 
 #### PS0.5 — 🔎 Verifica di fase
 
-- [ ] Unit di PS0 tutti verdi; `check_reference.py` verde con le firme nuove documentate nell'atlante (sezione plansys creata); nessun modulo di plansys importa `llm` (la fase è a zero intelligenza per costruzione — un import di `LlamaClient` qui è una violazione di PS-D1).
+- [x] Unit di PS0 tutti verdi; `check_reference.py` verde con le firme nuove documentate nell'atlante (sezione plansys creata); nessun modulo di plansys importa `llm` (la fase è a zero intelligenza per costruzione — un import di `LlamaClient` qui è una violazione di PS-D1). *(fatto: 60/60 unit, atlante verde, plansys senza import llm)*
 
 **Rituale** → `v3.1.0`.
 

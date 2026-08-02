@@ -52,6 +52,15 @@ enabled = false                      # verdetto D11 (A/B 2026-08-02: baseline 9/
                                      # piano ingenuo 1-fase; redesign in
                                      # memory/plan_planner_system.md; riaccensione = F6
 
+[plansys]                            # plan_planner_system.md §PS-A4
+enabled = false                      # PS-D9: si accende solo per A/B espliciti finche' non vince
+max_phases = 6
+max_micro_per_phase = 6
+projection_max_tokens = 2500         # budget della Phase Context Projection (dentro D8)
+m_pass_max_tokens = 1024             # M1/M2/M3 (schemi piccoli)
+test_author_max_tokens = 2048        # M4 scrive file interi
+mutation_probe = false               # PS-D5: probe assert-flip opzionale (costa run extra)
+
 [web]
 host = "127.0.0.1"
 port = 8090

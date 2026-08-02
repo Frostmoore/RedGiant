@@ -112,6 +112,11 @@ class StateStore
     def latest_clarification_answer(self, task_id: str) -> str | None
     def extend_budget(self, task_id: str, key: str, add: int) -> None
     def take_budget_extension(self, task_id: str) -> tuple[str, str, int] | None
+    def save_ps_artifact(self, task_id: str, *, kind: str, ref: str, payload_json: str, actor: str) -> int
+    def load_ps_artifact(self, task_id: str, kind: str, ref: str = "", version: int | None = None) -> dict
+    def list_ps_artifacts(self, task_id: str, kind: str | None = None) -> list[dict]
+    def log_ps_gate(self, task_id: str, *, gate: str, target: str, ok: bool, checks_json: str) -> None
+    def ps_gate_history(self, task_id: str, gate: str | None = None) -> list[dict]
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str, target: str | None = None) -> None
     def log_llm_call(self, task_id: str, row: LlmCallRow) -> None
     def log_tool_call(self, task_id: str, row: ToolCallRow) -> None
@@ -268,6 +273,33 @@ class DesignRejected
 
 Orchestrator v1 (F3.3/F3.4): piano generato se assente, espansione lazy della sola fase eleggibile, sottofase fallita oltre i retry → **replanning** (max 2; fasi completate immutabili, sottofasi orfane → skipped) → poi `failed` esplicito.
 
+### `redgiant/plansys/` — il sistema di pianificazione S/M/J (piano: `plan_planner_system.md`)
+
+Sistema a sé stante (PS-D1: LLM solo in roles.py/compiler.py, il resto deterministico). PS0: artefatti tipizzati (versionati in `ps_artifacts`), renderer DB→Markdown greppabile (`data/tasks/<id>/plan/`, byte-deterministico, scrittura atomica LF), config `[plansys]` (default OFF, PS-D9). Tabelle: `ps_artifacts` (task_id, kind∈{macro_plan, phase_analysis, phase_blueprint, verification_blueprint, test_bundle, ledger_snapshot}, ref, version UNIQUE auto-incrementata per (task,kind,ref), actor, json, created_at) e `ps_gates` (gate, target, ok, checks JSON).
+
+```python
+class Criterion       # id C1.., text<=200 — prodotto da S, immutabile
+class MacroPhase      # id P1.., intent (mai operazioni), depends_on<=5, covers>=1
+class MacroPlan       # goal, criteria 1..8, phases 1..6
+class DesignDecision  # id, decision, alternatives<=3, constraint (PS-D8: esplicita)
+class ChoicePoint     # question, options 2..3, recommended, reason
+class PhaseAnalysis   # phase_id, objective, involved<=10, artifacts<=10, decisions<=4, risks<=4, decision_required?
+class WorkContract    # goal, boundary, files_owned 1..4 (ownership esclusiva), signatures<=6, inputs, outputs
+class MicroPhase      # id P<k>.S<n>, title, work, proves<=4
+class PhaseBlueprint  # phase_id, micro 1..6
+class ProofObligation # id, micro_id, kind new_behavior|characterization, behavior, test_file, test_name, cmd_id
+class VerificationBlueprint  # phase_id, obligations 1..12, synthesis_cmds 1..3
+class TestArtifact    # path, content — materializzato dal control plane, MAI da J
+class TestBundle      # phase_id, artifacts 1..8
+class PatchOp         # op replace|add|remove, target, payload_json<=4000
+class BlueprintPatch  # phase_id, ops 1..6 (PS-D6: correzione=patch)
+class GateReport      # gate enum a 7 valori, target, ok, checks (riusa CheckResult)
+class PlansysCfg      # (in config.py) max_phases, max_micro_per_phase, projection_max_tokens, m_pass_max_tokens, test_author_max_tokens, mutation_probe
+def render_macro_plan(plan: MacroPlan) -> str
+def render_blueprint(bp: PhaseBlueprint, vbp: VerificationBlueprint | None, analysis: PhaseAnalysis | None) -> str
+def write_plan_doc(tasks_dir: Path, task_id: str, name: str, content: str) -> Path
+```
+
 ### `redgiant/core/verify.py` — verifica deterministica (F1.6, D10)
 
 Il trust boundary: tutti i check girano sempre; un check di `verification` sconosciuto è un FAIL (silenzio ≠ successo).
@@ -346,11 +378,11 @@ Nessuna rotta nostra (GUI = F2). Endpoint llama-server usati: `POST /completion`
 
 ## 6. Configurazione
 
-V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
+V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità PS0:** sezione `[plansys]` (`enabled=false` PS-D9, `max_phases`, `max_micro_per_phase`, `projection_max_tokens`, `m_pass_max_tokens`, `test_author_max_tokens`, `mutation_probe`) → `Config.plansys_enabled: bool` + `Config.plansys: PlansysCfg`. **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 55 test, nessuno tocca il modello (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
+`tests/unit/` — 60 test, nessuno tocca il modello (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
 | File | Dimostra |
 |---|---|

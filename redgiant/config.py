@@ -24,6 +24,8 @@ _KNOWN_KEYS: dict[str, set[str]] = {
     "budget": {"max_total_tokens", "max_tool_calls", "max_retries_per_subtask", "max_wall_s"},
     "worker": {"max_steps", "step_max_tokens"},
     "planner": {"enabled"},
+    "plansys": {"enabled", "max_phases", "max_micro_per_phase", "projection_max_tokens",
+                "m_pass_max_tokens", "test_author_max_tokens", "mutation_probe"},
     "web": {"host", "port"},
     "security": {"writable_globs", "shell_whitelist"},
     "eval": {"tasks_dir"},
@@ -70,6 +72,16 @@ class SecurityCfg:
 
 
 @dataclass(frozen=True)
+class PlansysCfg:
+    max_phases: int
+    max_micro_per_phase: int
+    projection_max_tokens: int
+    m_pass_max_tokens: int
+    test_author_max_tokens: int
+    mutation_probe: bool
+
+
+@dataclass(frozen=True)
 class Config:
     profile_name: str
     llm: LlmProfileCfg
@@ -80,6 +92,8 @@ class Config:
     worker_max_steps: int
     worker_step_max_tokens: int
     planner_enabled: bool
+    plansys_enabled: bool
+    plansys: PlansysCfg
     eval_tasks_dir: Path
 
     @classmethod
@@ -137,6 +151,21 @@ class Config:
             # Verdetto D11 (A/B 2026-08-02, baseline 9/10 vs planner 2/10):
             # il Planner e' OFF di default, si riaccende solo esplicitamente.
             planner_enabled=bool(merged.get("planner", {}).get("enabled", False)),
+            # plansys (PS-D9): idem — OFF finche' non vince il suo A/B
+            plansys_enabled=bool(merged.get("plansys", {}).get("enabled", False)),
+            plansys=PlansysCfg(
+                max_phases=int(merged.get("plansys", {}).get("max_phases", 6)),
+                max_micro_per_phase=int(
+                    merged.get("plansys", {}).get("max_micro_per_phase", 6)),
+                projection_max_tokens=int(
+                    merged.get("plansys", {}).get("projection_max_tokens", 2500)),
+                m_pass_max_tokens=int(
+                    merged.get("plansys", {}).get("m_pass_max_tokens", 1024)),
+                test_author_max_tokens=int(
+                    merged.get("plansys", {}).get("test_author_max_tokens", 2048)),
+                mutation_probe=bool(
+                    merged.get("plansys", {}).get("mutation_probe", False)),
+            ),
             eval_tasks_dir=Path(eval_["tasks_dir"]),
         )
 

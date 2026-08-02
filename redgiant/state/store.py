@@ -133,6 +133,30 @@ CREATE INDEX IF NOT EXISTS idx_subtasks_status ON subtasks(task_id, status);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_task  ON llm_calls(task_id);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_st   ON tool_calls(task_id, subtask_id);
 CREATE INDEX IF NOT EXISTS idx_approvals_pend  ON approvals(status);
+-- (plansys, PS0.2 — piano plan_planner_system.md §PS-A3)
+CREATE TABLE IF NOT EXISTS ps_artifacts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id    TEXT NOT NULL,
+  kind       TEXT NOT NULL CHECK (kind IN ('macro_plan','phase_analysis','phase_blueprint',
+                                           'verification_blueprint','test_bundle','ledger_snapshot')),
+  ref        TEXT NOT NULL,
+  version    INTEGER NOT NULL,
+  actor      TEXT NOT NULL,
+  json       TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (task_id, kind, ref, version)
+);
+CREATE TABLE IF NOT EXISTS ps_gates (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id    TEXT NOT NULL,
+  gate       TEXT NOT NULL,
+  target     TEXT NOT NULL,
+  ok         INTEGER NOT NULL,
+  checks     TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ps_artifacts ON ps_artifacts(task_id, kind, ref);
+CREATE INDEX IF NOT EXISTS idx_ps_gates     ON ps_gates(task_id, gate);
 """
 
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -422,6 +446,58 @@ class StateStore:
                 " duration_ms) VALUES (?,?,?,?,?,?,?)",
                 (task_id, row.subtask_id, row.tool, json.dumps(row.args), int(row.ok),
                  json.dumps(row.evidence), row.duration_ms))
+
+    # ── plansys (PS0.2, piano plan_planner_system.md §PS-A3) ─────────────────
+
+    def save_ps_artifact(self, task_id: str, *, kind: str, ref: str,
+                         payload_json: str, actor: str) -> int:
+        """Versione = MAX+1 per (task, kind, ref), in transazione. Ritorna la version."""
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT COALESCE(MAX(version), 0) AS v FROM ps_artifacts"
+                " WHERE task_id=? AND kind=? AND ref=?",
+                (task_id, kind, ref)).fetchone()
+            version = int(row["v"]) + 1
+            c.execute(
+                "INSERT INTO ps_artifacts (task_id, kind, ref, version, actor, json,"
+                " created_at) VALUES (?,?,?,?,?,?,?)",
+                (task_id, kind, ref, version, actor, payload_json, _now()))
+            return version
+
+    def load_ps_artifact(self, task_id: str, kind: str, ref: str = "",
+                         version: int | None = None) -> dict:
+        """Ultima versione se version=None; KeyError esplicito se assente."""
+        q = ("SELECT * FROM ps_artifacts WHERE task_id=? AND kind=? AND ref=?"
+             + ("" if version is None else " AND version=?")
+             + " ORDER BY version DESC LIMIT 1")
+        args = (task_id, kind, ref) if version is None else (task_id, kind, ref, version)
+        with self._conn() as c:
+            row = c.execute(q, args).fetchone()
+        if row is None:
+            raise KeyError(f"ps_artifact not found: {task_id}/{kind}/{ref}/v{version}")
+        return dict(row)
+
+    def list_ps_artifacts(self, task_id: str, kind: str | None = None) -> list[dict]:
+        q = "SELECT * FROM ps_artifacts WHERE task_id=?" + \
+            ("" if kind is None else " AND kind=?") + " ORDER BY id"
+        args = (task_id,) if kind is None else (task_id, kind)
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(q, args).fetchall()]
+
+    def log_ps_gate(self, task_id: str, *, gate: str, target: str, ok: bool,
+                    checks_json: str) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO ps_gates (task_id, gate, target, ok, checks, created_at)"
+                " VALUES (?,?,?,?,?,?)",
+                (task_id, gate, target, int(ok), checks_json, _now()))
+
+    def ps_gate_history(self, task_id: str, gate: str | None = None) -> list[dict]:
+        q = "SELECT * FROM ps_gates WHERE task_id=?" + \
+            ("" if gate is None else " AND gate=?") + " ORDER BY id"
+        args = (task_id,) if gate is None else (task_id, gate)
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(q, args).fetchall()]
 
     def extend_budget(self, task_id: str, key: str, add: int) -> None:
         """F2.5 (richiesta utente): il budget si estende su consenso, non e' una ghigliottina."""
