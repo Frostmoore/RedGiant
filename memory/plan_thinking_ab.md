@@ -24,10 +24,16 @@ salvo verdetto contrario): su Severino la generazione corre a 35,8 tok/s — una
 da N token costa N/35,8 secondi PER CHIAMATA; la specsheet §3 impone "la verbosità non è
 ragionamento" (il `thought` di J è cappato a 300 caratteri per questo).
 
-**Perché comunque va misurato**: il muro F18 (J che non riproduce i formati esatti richiesti dai
-proof, ~metà delle morti residue) è esattamente la classe di problema in cui il reasoning esplicito
-potrebbe pagare. Crederci o non crederci è vietato dal metodo: si misura (D-metodo di F3: "le run
-ufficiali solo da codice committato", "ogni ruolo si guadagna il posto con un A/B").
+**Perché comunque va misurato**: due classi di fallimento candidate, in ordine di priorità:
+1. **S e M sbagliano le decisioni di testa** (ipotesi PRIMARIA, decisione utente 2026-08-02 dopo il
+   blocco B ufficiale di PS6: 5 micro-task morti a zero tool call in compilazione, più la forbice
+   T041 da under-scoping del Senior — criteri che coprivano un terzo della richiesta). S e M fanno
+   decisioni compresse single-shot: è il caso d'uso classico del reasoning esplicito, e il costo è
+   limitato (S parla 1 volta per task, M 4 per fase — mai dentro il loop di J).
+2. **Il muro F18 di J** (ipotesi secondaria): J non riproduce i formati esatti dei proof (~metà
+   delle morti residue quando la compilazione regge).
+Crederci o non crederci è vietato dal metodo: si misura (D-metodo di F3: "le run ufficiali solo da
+codice committato", "ogni ruolo si guadagna il posto con un A/B").
 
 ---
 
@@ -147,7 +153,8 @@ e `SeniorPlanner.run`) passando `think=budget if role in thinking_roles() else N
 ## TH1 — Compliance GPU (famiglie, non numeri)
 
 Protocollo BATCH20 identico ai batch n.1–8 (stesso `pilot_ps5_batch20.py`, stesso task, codice
-committato, snapshot): **20 run con `RG_THINKING_ROLES=worker`, budget 256**. Confronto di
+committato, snapshot): **20 run con l'`RG_THINKING_ROLES` del braccio primario T-SM
+(senior + i 4 passi M), budget 256**. Confronto di
 FAMIGLIE contro i batch storici (la GPU non dà numeri, dà tassonomie — F17):
 - Le morti J sui proof (photocopy/retries) calano, crescono o cambiano forma?
 - Compaiono famiglie nuove (pensiero che avvelena il contesto della chiamata 2, derive S7)?
@@ -160,11 +167,16 @@ Bracci, in quest'ordine (il controllo esiste già):
 - **T-0 (controllo)**: il run B di PS6.2 — plansys no-thinking sui 13 task. NON si riesegue: si
   riusa il report committato (stesso commit-range, stessa condizione — se nel frattempo il codice
   plansys è cambiato, si riesegue T-0 sul commit nuovo: comparabilità > risparmio).
-- **T-J**: plansys + `RG_THINKING_ROLES=worker`, 13 task. (L'ipotesi F18: il thinking serve a J.)
-- **T-M**: plansys + `RG_THINKING_ROLES=phase_analyst,work_decomposer,verification_designer,test_author`,
-  SOLO T040–T042 (l'ipotesi secondaria: il thinking serve alle decisioni di M; sui micro-task
-  M quasi non sbaglia già).
-- **T-JM** (solo se T-J e T-M migliorano entrambi): tutti i ruoli, T040–T042.
+- **T-SM (PRIMARIO, decisione utente)**: plansys +
+  `RG_THINKING_ROLES=senior,phase_analyst,work_decomposer,verification_designer,test_author`,
+  TUTTI i 13 task. Il thinking è attivo per il Senior quando scrive il piano e per i passi M
+  quando compilano la fase — i due punti di fallimento più rilevanti osservati nel run ufficiale
+  PS6 (morti a zero tool call + under-scoping T041). Mai per J: il costo resterebbe fuori dal
+  loop di esecuzione.
+- **T-J (secondario)**: plansys + `RG_THINKING_ROLES=worker`, SOLO T040–T042. (L'ipotesi F18:
+  il thinking serve a J sui formati esatti. Costa a ogni step: si misura sul set piccolo.)
+- **T-SMJ** (solo se T-SM e T-J migliorano entrambi): tutti i ruoli, T040–T042.
+TH1 (compliance GPU) usa di conseguenza `RG_THINKING_ROLES` di T-SM, non piu' solo worker.
 Budget: 256 di default; se TH1 mostra troncamenti sistematici del pensiero, UNA sola variante di
 budget (512) su T-J, dichiarata nel report.
 
