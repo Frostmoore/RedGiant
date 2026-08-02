@@ -292,7 +292,7 @@ class ProofObligation # id, micro_id, kind new_behavior|characterization, behavi
 class VerificationBlueprint  # phase_id, obligations 1..12, synthesis_cmds 1..3
 class TestArtifact    # path, content — materializzato dal control plane, MAI da J
 class TestBundle      # phase_id, artifacts 1..8
-class PatchOp         # op replace|add|remove, target, payload_json<=4000
+class PatchOp         # op replace|add|remove, target, payload_json SENZA tetto (maxLength→GBNF {0,N} = 400 dal server, trappola PS4.3)
 class BlueprintPatch  # phase_id, ops 1..6 (PS-D6: correzione=patch)
 class GateReport      # gate enum a 7 valori, target, ok, checks (riusa CheckResult)
 class PlansysCfg      # (in config.py) max_phases, max_micro_per_phase, projection_max_tokens, m_pass_max_tokens, test_author_max_tokens, mutation_probe
@@ -321,6 +321,11 @@ class PhaseAnalyst    # M1 — single-shot, output PhaseAnalysis
 class WorkDecomposer  # M2 — single-shot, output PhaseBlueprint
 def validate_analysis(analysis: PhaseAnalysis, projection: str, phase_id: str) -> list[str]
 def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis, covers: list[str]) -> list[str]
+class VerificationDesigner  # M3 — single-shot, output VerificationBlueprint
+class TestAuthor            # M4 — single-shot, output TestBundle (budget dedicato 3072)
+def validate_verification(vbp: VerificationBlueprint, bp: PhaseBlueprint, known_cmd_ids: set[str]) -> list[str]
+def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint) -> list[str]
+def oracle_qualification_gate(vbp: VerificationBlueprint, bundle: TestBundle, bp: PhaseBlueprint, scope: Scope, router, task_id: str, *, mutation_probe: bool = False) -> GateReport
 class CompileFailed
     def __init__(self, step: str, problems: list[str]) -> None
 class NeedsDecision
@@ -330,7 +335,13 @@ class PhaseCompiler
     def projection(self, task_id: str, plan: MacroPlan, phase: MacroPhase) -> str
     def analyze(self, task_id: str, plan: MacroPlan, phase: MacroPhase, projection: str, log) -> PhaseAnalysis
     def decompose(self, task_id: str, phase: MacroPhase, analysis: PhaseAnalysis, projection: str, log) -> PhaseBlueprint
+    def design_verification(self, task_id: str, phase: MacroPhase, bp: PhaseBlueprint, projection: str, log) -> VerificationBlueprint
+    def author_tests(self, task_id: str, phase: MacroPhase, bp: PhaseBlueprint, vbp: VerificationBlueprint, projection: str, log) -> TestBundle
+    def materialize_tests(self, bundle: TestBundle, log) -> None
+    def compile_phase(self, task_id: str, plan: MacroPlan, phase: MacroPhase, log) -> tuple[PhaseBlueprint, VerificationBlueprint, TestBundle]
 ```
+
+**PS4 (M3–M4 + Oracle Qualification):** `oracle_qualification_gate` (PS-D5) qualifica L'ORACOLO prima che J esista — check: esistenza statica via AST, asserzioni reali (niente `assert True`), aggancio al contratto (CORPO+import, mai il nome del test: un `test_subtract` vuoto si aggancerebbe da solo), scope, **red-baseline** (un `new_behavior` che passa ORA non prova niente; import error su modulo mancante = rosso legittimo), green-baseline sui characterization, copertura criteri, mutation probe assert-flip opzionale. `materialize_tests` = control plane (mai J), Scope dedicato ai path del bundle + syntax gate, **guardia anti-perdita**: sovrascrivere un test file esistente non può far sparire test (i nomi vecchi devono sopravvivere) e M4 riceve `[EXISTING TEST FILE]` col sorgente per fonderli. `compile_phase` = M1→M4 + loop qualificazione (max 2 round; violazioni instradate: contenuto→M4, disegno→M3; patch invalida = round fallito loggato, mai crash). `_SingleShot` gestisce il TRONCAMENTO come dato: un retry con istruzione di produrre meno, poi l'errore sale. Smoke live PS4.3: compile_phase completa in 134s con qualificazione verde al primo colpo; nei run precedenti il ciclo patch/rigenerazione è scattato live su M2 e M4.
 
 **PS3 (M1–M2):** M1/M2 sono SINGLE-SHOT (base `_SingleShot`: una chiamata, un parse — le correzioni vivono nel compiler come patch, PS-D6). `validate_analysis` fa l'anti-invenzione MECCANICA (`involved` deve apparire testualmente nella proiezione); `validate_blueprint` impone ownership ESCLUSIVA dei file e perimetri dal ledger. `PhaseCompiler._repair_loop`: max 2 patch (`_request_patch` → schema `BlueprintPatch`, `_apply_patch` deterministico sulle liste patchabili micro/obligations/decisions/artifacts per id/path) + 1 rigenerazione citando le violazioni + `CompileFailed`. `decision_required` → `NeedsDecision` (analisi comunque persistita). Il ledger ora include il **listato repo come fact (max 40)**: a task fresco è l'unico ancoraggio possibile per gli `involved`. Card: `phase_analyst.md`, `work_decomposer.md`. Smoke live PS3.4 (severino-sim, brownfield csv_tools): M1 25s (involved ancorati, 2 decisioni), M2 20s (ownership esclusiva), blueprint renderizzato.
 
@@ -481,6 +492,14 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **⭐ Le run ufficiali si lanciano SOLO da working tree pulito**: l'A/B è partito con modifiche non committate — la run 2 ha misurato uno stato intermedio mai collaudato e l'hash git nel report mentiva. Prima si committa, poi si misura.
 - **`depends_on` spazzatura dal Planner** (`["none"]`, `["geometry.py"]`): i sentinelli inequivoci sono riparati da `normalize_plan`; la richiamata correttiva ora cita la regola (`depends_on` solo id di fasi del piano, root = `[]`), non solo i sintomi.
 - **Loop di edit no-op**: `edit_file` con old==new "riusciva" senza cambiare nulla → 15 ripetizioni identiche fino a esaurire gli step, invisibili al guard (ogni chiamata era un successo). Fix doppio: `no_op_edit` è un errore, e la chiamata identica consecutiva conta nel guard cumulativo come `identical_repeat` anche se ok.
+
+**Batch plansys PS4 (smoke live 2026-08-03 — 5 trappole pagate sul campo):**
+
+- **`maxLength` grande = grammatica che uccide il server**: `Field(max_length=4000)` su una stringa diventa una ripetizione GBNF `{0,4000}` che llama-server rifiuta con **400 Bad Request**. I tetti stretti (≤300) reggono; i tetti larghi si tolgono (il limite vero è il budget di generazione).
+- **M2 inventa criteri** (`proves: [C3, C4]` su un piano C1–C2): sentinello inequivoco → strip deterministico prima della validazione (come "none" in depends_on), non un giro di patch.
+- **M4 sovrascrive i test esistenti**: scrivendo il "file completo" perdeva i test già presenti. Guardia deterministica in materializzazione (i nomi vecchi devono sopravvivere) + `[EXISTING TEST FILE]` nel contesto di M4.
+- **Il troncamento nei passi M** va trattato come in F2: un retry con "produce a SMALLER object", poi errore esplicito — alzare il budget all'infinito non è una strategia (2048→3072 per M4 e 1024→1536 per M1-M3 sono i valori misurati).
+- **La patch è una stringa libera dentro uno schema**: `payload_json` non è vincolato dalla grammatica → può essere deforme. La rivalidazione post-patch va SEMPRE try-ata: patch invalida = round fallito loggato, mai crash del compile.
 
 **Rerun A/B ufficiale (2026-08-02, @611d894 — Planner 2/10 vs baseline 9/10: verdetto D11):**
 

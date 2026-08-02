@@ -135,7 +135,10 @@ class TestBundle(_Strict):
 class PatchOp(_Strict):
     op: Literal["replace", "add", "remove"]
     target: str
-    payload_json: str = Field(max_length=4000)
+    # NIENTE max_length: maxLength=4000 diventa una ripetizione GBNF {0,4000}
+    # che llama-server rifiuta con 400 (smoke PS4.3). Il tetto vero e' il
+    # budget di generazione della chiamata.
+    payload_json: str
 
 
 class BlueprintPatch(_Strict):

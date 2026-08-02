@@ -4,7 +4,7 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
-**Stato:** 🟢 **PS3 completata** (2026-08-03, `v3.4.0`) — prossima azione: **PS4** (Verification Compiler M3–M4 + Oracle Qualification).
+**Stato:** 🟢 **PS4 completata** (2026-08-03, `v3.5.0`) — prossima azione: **PS5** (Engine: J + gate di esecuzione).
 
 > **La regola che comanda questo documento:**
 > *The Senior defines what must be achieved. The Mid decides how to decompose it and how
@@ -212,7 +212,10 @@ class TestBundle(BaseModel):
 class PatchOp(BaseModel):
     op: Literal["replace", "add", "remove"]
     target: str                              # id dell'elemento (micro, obligation, decision)
-    payload_json: str = Field(max_length=4000)   # il NUOVO elemento serializzato (vuoto per remove)
+    payload_json: str                        # il NUOVO elemento serializzato (vuoto per remove).
+                                             # REVISIONE PS4.3: niente max_length — maxLength=4000
+                                             # produce una ripetizione GBNF {0,4000} che llama-server
+                                             # rifiuta con 400; il tetto vero e' il budget di generazione
 class BlueprintPatch(BaseModel):
     phase_id: str
     ops: list[PatchOp] = Field(min_length=1, max_length=6)
@@ -274,8 +277,11 @@ enabled = false                  # PS-D9: si accende solo per A/B espliciti finc
 max_phases = 6
 max_micro_per_phase = 6
 projection_max_tokens = 2500     # budget della Phase Context Projection (dentro D8)
-m_pass_max_tokens = 1024         # M1/M2/M3 (schemi piccoli)
-test_author_max_tokens = 2048    # M4 scrive file interi
+m_pass_max_tokens = 1536         # M1/M2/M3 (schemi piccoli; 1024 troncava M2 con
+                                 # piu' microfasi — smoke PS4.3)
+test_author_max_tokens = 3072    # M4 scrive file interi (2048 troncava al primo
+                                 # smoke PS4.3: il JSON con newline escapati gonfia;
+                                 # ~86s di gen a 35.8 tok/s, accettabile una volta a fase)
 mutation_probe = false           # PS-D5: probe leggero opzionale (costa run di test extra)
 ```
 
@@ -521,7 +527,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS4.1 — M3 Verification Designer + M4 Test Author
 
-- [ ] 🤖 **Obiettivo:** card `verification_designer.md` (+`VerificationDesigner(Role)`, output `VerificationBlueprint`) e `test_author.md` (+`TestAuthor(Role)`, output `TestBundle`).
+- [x] 🤖 **Obiettivo:** card `verification_designer.md` (+`VerificationDesigner(Role)`, output `VerificationBlueprint`) e `test_author.md` (+`TestAuthor(Role)`, output `TestBundle`). *(in corso d'opera: guardia anti-perdita test in materializzazione + `[EXISTING TEST FILE]` a M4; troncamento gestito come dato in `_SingleShot`)*
   Card M3: every micro gets ≥1 proof obligation; `new_behavior` = will FAIL before implementation; `characterization` = passes NOW and must keep passing; obligations name real test files/names; synthesis_cmds = the phase-wide commands. Card M4: write COMPLETE test files for the obligations, nothing else; use ONLY symbols from the blueprint contracts; tests must be meaningful (assert observable behaviour, not tautologies) — sapendo che un gate meccanico li BOCCERÀ se non lo sono.
   **Materializzazione (control plane, non J):** i `TestArtifact` sono scritti via `Scope.check_write` + syntax gate + LF, path sotto i `files_owned`... NO: i test vivono in file PROPRI (`test_*`), dichiarati negli obblighi; lo Scope del task deve includerli nei writable_globs (il control plane li aggiunge esplicitamente, loggandolo).
 - **Validazione M3** (`validate_verification(vbp, bp, known_cmd_ids) -> list[str]`): ogni micro ha ≥1 obbligo; `cmd_id` ∈ known (la regola che ha ucciso F3, qui e nella card); `test_file` coerente col naming del runner; kind ∈ {new_behavior, characterization}.
@@ -529,7 +535,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS4.2 — ⚠️ Oracle Qualification Gate
 
-- [ ] 🤖 **Obiettivo:** `gates.py::oracle_qualification_gate` — il gate che qualifica le PROVE prima che J esista:
+- [x] 🤖 **Obiettivo:** `gates.py::oracle_qualification_gate` — il gate che qualifica le PROVE prima che J esista:
   ```python
   def oracle_qualification_gate(vbp: VerificationBlueprint, bundle: TestBundle,
                                 bp: PhaseBlueprint, scope: Scope, router: ToolRouter,
@@ -542,7 +548,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS4.3 — 🔎 Verifica di fase
 
-- [ ] Su una macrofase fixture completa: M1→M4 → qualificazione VERDE con almeno una bocciatura intermedia corretta via patch (dimostrare il ciclo, non solo il caso felice); tutti gli artefatti versionati in `ps_artifacts`; blueprint.md finale include il Verification blueprint.
+- [x] Su una macrofase fixture completa: M1→M4 → qualificazione VERDE con almeno una bocciatura intermedia corretta via patch (dimostrare il ciclo, non solo il caso felice); tutti gli artefatti versionati in `ps_artifacts`; blueprint.md finale include il Verification blueprint. *(smoke finale: compile_phase 134s, qualificazione verde; il ciclo patch/rigenerazione è scattato LIVE nei run precedenti su M2 e M4 — 5 trappole nuove pagate e registrate in atlante §9, batch PS4; 77/77 unit)*
 
 **Rituale** → `v3.5.0`.
 

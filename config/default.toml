@@ -57,8 +57,8 @@ enabled = false                      # PS-D9: si accende solo per A/B espliciti 
 max_phases = 6
 max_micro_per_phase = 6
 projection_max_tokens = 2500         # budget della Phase Context Projection (dentro D8)
-m_pass_max_tokens = 1024             # M1/M2/M3 (schemi piccoli)
-test_author_max_tokens = 2048        # M4 scrive file interi
+m_pass_max_tokens = 1536             # M1/M2/M3 (1024 troncava M2, smoke PS4.3)
+test_author_max_tokens = 3072        # M4 scrive file interi (2048 troncava, smoke PS4.3)
 mutation_probe = false               # PS-D5: probe assert-flip opzionale (costa run extra)
 
 [web]

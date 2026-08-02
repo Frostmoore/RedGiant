@@ -16,5 +16,6 @@ Rules:
 5. "signatures" copies real signatures from CONTEXT where they exist; for
    new code, propose complete typed signatures.
 6. Micro phase ids: <phase_id>.S1, <phase_id>.S2, ... in execution order.
-7. "proves" lists the criterion ids (C1..) this micro phase contributes to;
-   use ONLY criteria covered by this phase.
+7. "proves" lists criterion ids this micro phase contributes to. The ONLY
+   valid values are the ids in the [CRITERION] lines of CONTEXT: any other
+   id will be silently dropped.

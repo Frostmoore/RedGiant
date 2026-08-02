@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from redgiant.plansys.artifacts import MacroPlan, PhaseAnalysis, PhaseBlueprint
+from redgiant.plansys.artifacts import (MacroPlan, PhaseAnalysis, PhaseBlueprint,
+                                        TestBundle, VerificationBlueprint)
 from redgiant.plansys.gates import macro_validation_gate, normalize_macro
 from redgiant.roles.base import Role, RoleContext
 
@@ -62,17 +63,31 @@ def parse_artifact(model: type[BaseModel], payload_json: str) -> BaseModel:
 
 class _SingleShot(Role):
     """M1..M4 sono passi di compilazione SINGLE-SHOT: una chiamata, un parse.
-    Le correzioni non vivono qui ma nel PhaseCompiler come patch (PS-D6)."""
+    Le correzioni non vivono qui ma nel PhaseCompiler come patch (PS-D6).
+    Eccezione (lezione F0/F2): il TRONCAMENTO e' un dato — un solo retry con
+    l'istruzione esplicita di produrre MENO, poi l'errore sale."""
 
     def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> BaseModel:
-        parts = self.assembler.build(
-            self.name, task=ctx.task, subtask=None, tools=[],
-            volatile=ctx.volatile,
-            output_schema=self.output_model.model_json_schema(),
-            schema_name=self.output_model.__name__)
-        return self.llm.complete(
-            parts, role=self.name, schema=self.output_model,
-            max_tokens=max_tokens, task_id=ctx.task.id).parsed
+        from redgiant.llm.client import LlmTruncated
+        volatile = ctx.volatile
+        for attempt in (1, 2):
+            parts = self.assembler.build(
+                self.name, task=ctx.task, subtask=None, tools=[],
+                volatile=volatile,
+                output_schema=self.output_model.model_json_schema(),
+                schema_name=self.output_model.__name__)
+            try:
+                return self.llm.complete(
+                    parts, role=self.name, schema=self.output_model,
+                    max_tokens=max_tokens, task_id=ctx.task.id).parsed
+            except LlmTruncated:
+                if attempt == 2:
+                    raise
+                volatile += (f"\n[TRUNCATED] your previous output exceeded "
+                             f"{max_tokens} tokens and was discarded. Produce "
+                             f"a SMALLER object: fewer items (1-3), terse "
+                             f"strings, no prose beyond the required fields.")
+        raise AssertionError("unreachable")
 
 
 class PhaseAnalyst(_SingleShot):
@@ -85,3 +100,16 @@ class WorkDecomposer(_SingleShot):
     """M2: decomposizione in microfasi con ownership esclusiva."""
     name = "work_decomposer"
     output_model = PhaseBlueprint
+
+
+class VerificationDesigner(_SingleShot):
+    """M3: gli obblighi di prova (cosa dimostrare, con quale oracolo)."""
+    name = "verification_designer"
+    output_model = VerificationBlueprint
+
+
+class TestAuthor(_SingleShot):
+    """M4: i file di test COMPLETI per gli obblighi (materializza il control
+    plane, mai J; qualifica il gate, mai la fiducia)."""
+    name = "test_author"
+    output_model = TestBundle
