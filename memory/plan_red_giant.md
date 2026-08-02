@@ -4,7 +4,7 @@
 **Data:** 2026-08-01
 **Specsheet di riferimento:** [small-model-powerhouse-specsheet.md](small-model-powerhouse-specsheet.md) (v0.1)
 **Atlante della codebase:** [codebase_reference.md](codebase_reference.md) — aggiornato a ogni fine fase, mai dopo.
-**Stato:** 🟢 **F3 completata** (2026-08-02, `v3.0.0`) — verdetto D11: **Planner default OFF, gated** (A/B: baseline 9/10 · 710K tok vs planner 2/10 · 815K tok — v. ESITO F3). ⏸️ **Sviluppo generale IN PAUSA (decisione utente):** prossima azione = estendere e implementare [`plan_planner_system.md`](plan_planner_system.md) (il Planner come autore, i Gate come giudici), poi si riprende da **F3-bis**.
+**Stato:** 🟢 **Interludio planner-system CONCLUSO** (2026-08-03, `v4.0.0`, PS0–PS7 di [`plan_planner_system.md`](plan_planner_system.md)) — il sistema S/M/J + Control Plane è **integrato ma gated OFF** (`[plansys] enabled=false`): l'A/B ufficiale PS6 l'ha bocciato per l'accensione di default (2/13 vs 6-8/13 baseline; 0/3 entrambi sui task larghi) ma promosso su onestà (forbice ~0) e costo dei fallimenti (−44% token; ablazioni: ogni gate contiene +50-76%). Verdetto riapribile: campagna thinking TH0–TH3 ([`plan_thinking_ab.md`](plan_thinking_ab.md)) → poi F6 (routing per taglia). **Scoperta di metodo dell'interludio**: varianza run-to-run anche su CPU (banda ±2/13, stato cache del server) → i verdetti futuri usano run multiple mediate. Prossima azione della roadmap: **F3-bis** (a `v4.1.0` — v. nota di riconciliazione versioni). Prima ancora, per decisione utente: campagna thinking. Il vecchio Planner in-loop di F3 resta OFF e deprecato (verdetto D11 originale: 2/10 vs 9/10).
 
 ---
 
@@ -608,12 +608,19 @@ Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i comm
 | Fine F1 | `v2.0.0` | grande |
 | Fine F2 | `v2.1.0` | media |
 | Fine F3 | `v3.0.0` | grande |
-| Fine F3-bis (micro-slice multi-dominio) | `v3.1.0` | media |
-| Fine F4 | `v4.0.0` | grande |
-| Fine F5 | `v5.0.0` | grande |
-| Fine F6 | `v5.1.0` | media |
-| Fine F7 | `v6.0.0` | grande |
-| Fine F8 | `v7.0.0` | grande |
+| *Interludio planner-system (PS0–PS7, 2026-08-02/03)* | `v3.1.0` → `v4.0.0` | v. `plan_planner_system.md` |
+| Fine F3-bis (micro-slice multi-dominio) | `v4.1.0` | media |
+| Fine F4 | `v5.0.0` | grande |
+| Fine F5 | `v6.0.0` | grande |
+| Fine F6 | `v6.1.0` | media |
+| Fine F7 | `v7.0.0` | grande |
+| Fine F8 | `v8.0.0` | grande |
+
+**Nota di riconciliazione (PS7.3, 2026-08-03):** l'interludio planner-system ha occupato la
+serie `v3.1.0`–`v4.0.0` (tabella versioni propria in `plan_planner_system.md`); le fasi della
+roadmap principale slittano di conseguenza (F3-bis: `v3.1.0`→`v4.1.0`, e a cascata). Il
+routing di **F6** userà i dati di PS6 come input (quando pianificare: i micro-task NON si
+pianificano — misurato due volte; i task larghi solo se il plansys converte post-thinking).
 
 ---
 

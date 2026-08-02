@@ -6,6 +6,23 @@
 <p class="muted">target: <code>{{ t.target_dir }}</code> · dominio {{ t.domain }}</p>
 {% if t.error %}<p class="error">{{ t.error }}</p>{% endif %}
 {% include "tree.html" %}
+{% if gates %}
+<h3>Gate (plansys)</h3>
+<table>
+  <tr><th>gate</th><th>target</th><th>esito</th></tr>
+  {% for g in gates %}
+  <tr><td><code>{{ g.gate }}</code></td><td>{{ g.target }}</td>
+      <td>{{ "✓" if g.ok else "✗" }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% if plan_docs %}
+<p>documenti di piano:
+  {% for d in plan_docs %}
+  <a href="/tasks/{{ t.id }}/plan/{{ d }}">{{ d }}</a>{{ " · " if not loop.last }}
+  {% endfor %}
+</p>
+{% endif %}
 {% if approvals %}
 <p>⏸ <a href="/approvals">{{ approvals | length }} richieste in attesa della tua risposta</a></p>
 {% endif %}

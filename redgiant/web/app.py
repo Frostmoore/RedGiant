@@ -8,6 +8,7 @@ Avvio:  rg serve  [--profile severino-sim]
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
@@ -114,10 +115,16 @@ def create_app(cfg: Config) -> FastAPI:
         except KeyError:
             return HTMLResponse("task sconosciuto", status_code=404)
         failures = _failure_detail(task_id) if st.status in ("failed", "partial") else []
+        # PS7.2: documenti di piano del plansys (se esistono) + esiti gate
+        plan_dir = cfg.paths.tasks_dir / task_id / "plan"
+        plan_docs = sorted(p.stem for p in plan_dir.glob("*.md")) \
+            if plan_dir.is_dir() else []
+        gates = [dict(g) for g in store.ps_gate_history(task_id)]
         return page(request, "task.html", t=st, subtasks=store.list_subtasks(task_id),
                     used=store.budget_used(task_id),
                     approvals=store.pending_approvals(task_id),
-                    failures=failures, last_activity=_last_activity(task_id))
+                    failures=failures, last_activity=_last_activity(task_id),
+                    plan_docs=plan_docs, gates=gates)
 
     @app.post("/tasks/{task_id}/relaunch")
     def task_relaunch(task_id: str, guidance: str = Form("")):
@@ -172,6 +179,20 @@ def create_app(cfg: Config) -> FastAPI:
         p = cfg.paths.tasks_dir / task_id / "task.log"
         if not p.is_file():
             return HTMLResponse("nessun log", status_code=404)
+        lines = p.read_text(encoding="utf-8").splitlines()[-tail:]
+        return page(request, "log.html", task_id=task_id, lines=lines)
+
+    @app.get("/tasks/{task_id}/plan/{name}", response_class=HTMLResponse)
+    def task_plan_doc(request: Request, task_id: str, name: str,
+                      tail: int = 400):
+        # PS7.2: i documenti di piano del plansys (macro_plan, blueprint,
+        # ledger) come pagine read-only — sono file renderizzati dal control
+        # plane, stesso pattern del log. Il nome e' vincolato: niente path.
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+            return HTMLResponse("nome non valido", status_code=400)
+        p = cfg.paths.tasks_dir / task_id / "plan" / f"{name}.md"
+        if not p.is_file():
+            return HTMLResponse("nessun documento di piano", status_code=404)
         lines = p.read_text(encoding="utf-8").splitlines()[-tail:]
         return page(request, "log.html", task_id=task_id, lines=lines)
 

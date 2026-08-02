@@ -9,6 +9,13 @@ Questo documento è il registro di quella campagna: cosa vuol dire "battere", co
 quali regole, un gradino alla volta. Si aggiorna a ogni gradino salito (o fallito: un gradino
 fallito onestamente resta nel registro).
 
+**⏸️ QUANDO si comincia (utente, 2026-08-03): NON ORA.** La campagna parte solo quando il
+sistema è completo e ottimizzato — oggi sarebbe un confronto impari a nostro sfavore (nessuna
+ottimizzazione fatta: niente thinking, niente routing, fix appena atterrati). Prerequisiti
+minimi prima di G0: PS7 chiusa (v4.0.0), campagna thinking TH0–TH3 completata, routing per
+taglia (F6) o motivazione per farne a meno. Fino ad allora questo file resta un registro di
+intenzioni, non di misure.
+
 ---
 
 ## 1. Cosa significa "battere la ricerca" (perché il confronto sia VALIDO)

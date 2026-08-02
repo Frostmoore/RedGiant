@@ -424,7 +424,7 @@ def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir:
 
 ### `redgiant/web/jobs.py` + `redgiant/web/app.py` — GUI (F2)
 
-JobQueue: UN worker thread (D7), ciclo di vita del server legato al job (container severino-sim su/giù), config per-task su disco (`data/tasks/<id>/task_config.json`: writable_globs, test_commands, plan, approve_writes), riaccodamento automatico dei task queued/running al riavvio. `cancel` cooperativo. `create_app`: rotte HTML/HTMX (tabella F2.2 del piano — inline in app.py: 10 rotte non giustificano un package), template Jinja2 in `web/templates/`, htmx 2.0.4 vendorizzato in `web/static/`. Avvio: `rg serve` o `scripts/start-gui.ps1` (doppio click).
+JobQueue: UN worker thread (D7), ciclo di vita del server legato al job (container severino-sim su/giù), config per-task su disco (`data/tasks/<id>/task_config.json`: writable_globs, test_commands, plan, approve_writes), riaccodamento automatico dei task queued/running al riavvio. `cancel` cooperativo. `create_app`: rotte HTML/HTMX (tabella F2.2 del piano — inline in app.py: 10 rotte non giustificano un package), template Jinja2 in `web/templates/`, htmx 2.0.4 vendorizzato in `web/static/`. Avvio: `rg serve` o `scripts/start-gui.ps1` (doppio click). **PS7.1**: `_run_one` seleziona il driver — `cfg.plansys_enabled` E nessun piano statico (`state.plan is None and not tc.get("plan")`) → `PlanSysEngine`, altrimenti `Orchestrator` (default: `[plansys] enabled=false`). **PS7.2**: rotta `GET /tasks/{task_id}/plan/{name}` (read-only, nome vincolato `[A-Za-z0-9._-]+` — mai path traversal, riuso template log.html, `?tail=`); la pagina task riceve `plan_docs` (stem dei .md in `tasks/<id>/plan/`) e `gates` (righe `ps_gate_history` ✓/✗) — sezioni visibili solo se non vuote, zero impatto sui task naive.
 
 ```python
 def write_task_config(tasks_dir: Path, task_id: str, *, writable_globs: list[str], test_commands: dict[str, list[str]], plan: dict | None = None) -> None
@@ -444,7 +444,7 @@ Tutte le tabelle del piano §A5 esistono da F1 (le CREATE sono idempotenti): `ta
 
 ## 5. Endpoint / rotte
 
-Nessuna rotta nostra (GUI = F2). Endpoint llama-server usati: `POST /completion` (json_schema, cache_prompt, seed), `POST /tokenize`, `GET /props`, `POST /slots/0?action=save|restore` (bench).
+Rotte GUI: tabella F2.2 del piano (inline in `web/app.py`) + **PS7.2**: `GET /tasks/{task_id}/plan/{name}?tail=` (documenti di piano plansys, read-only). Endpoint llama-server usati: `POST /completion` (json_schema, cache_prompt, seed), `POST /tokenize`, `GET /props`, `POST /slots/0?action=save|restore` (bench).
 
 ## 6. Configurazione
 
@@ -549,6 +549,7 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **⭐ Il synthesis gate su suite fornita multi-fase è morte certa a P1** (A/B ufficiale: 3 morti su 13 — T007, T010, T040): `synthesis_cmds=pytest` esegue TUTTA la suite alla chiusura della fase, ma i test delle fasi future sono rossi per definizione. Fix a piano (ESITO PS6): sintesi SCOPED (proof della fase + test delle fasi già chiuse), suite piena solo al coverage finale.
 - **⭐ Il Senior sottodimensiona la richiesta e nessun gate se ne accorge** (T041 ufficiale, l'unica forbice completed≠verified): criteri = un terzo della richiesta, coverage interno verde, giudice esterno `No module named 'hist'`. Fix a piano: i file NOMINATI nella richiesta devono comparire negli artifacts di qualche fase (gate deterministico su S).
 - **L'eccezione "test_file esistente" dei nomi canonici tiene anche file non-py** (T003 ufficiale: M3 punta a `test.php` esistente → non canonicalizzato → morte in repair). Fix a piano: eccezione solo per `test_*.py` esistenti.
+- **⭐ Varianza run-to-run ANCHE su severino-sim** (ri-misura PS6-bis: baseline 6/13→8/13 a codice IDENTICO, 4 task flippati): lo stato della cache del server cambia i numeri (llama.cpp #2838: prompt valutato a freddo ≠ con cache, numericamente) — banda **±2/13**. Regola permanente: verdetti ufficiali SOLO su run multiple mediate; le diagnosi "è il codice, non il rumore" su run singola sono vietate (già costata una diagnosi troppo sicura sulla regressione 9/10→6/10, da rifare come bisection multi-run).
 - **Residuo NON risolto (il muro, F18)**: ~metà delle morti residue è J che non riproduce i formati esatti chiesti dai proof (report/storage) pur vedendo sorgente dei test e assertion diff; gli f-string annidati restano una debolezza riconosciuta ma non attuata dal modello (hint + regola 12 della card). Leva proposta e in attesa di decisione: emendamento PS-D6 (un tentativo informato in più prima del blocco fotocopia).
 
 ## 10. Debito tecnico aperto

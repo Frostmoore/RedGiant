@@ -164,8 +164,17 @@ class JobQueue:
                 if name in catalog:
                     catalog[name] = replace(catalog[name], requires_approval=True)
         router = ToolRouter(catalog, scope, self.store)
-        orch = Orchestrator(self.cfg, self.store, llm, router,
-                            PromptAssembler(_PROMPTS_DIR))
+        # PS7.1 (gate D11 esteso): [plansys] enabled=true + nessun piano statico
+        # -> PlanSysEngine; in ogni altro caso tutto come oggi. Il vecchio
+        # Planner in-loop resta OFF e deprecato dietro il suo gate.
+        if (self.cfg.plansys_enabled and state.plan is None
+                and not tc.get("plan")):
+            from redgiant.plansys.engine import PlanSysEngine
+            orch = PlanSysEngine(self.cfg, self.store, llm, router,
+                                 PromptAssembler(_PROMPTS_DIR))
+        else:
+            orch = Orchestrator(self.cfg, self.store, llm, router,
+                                PromptAssembler(_PROMPTS_DIR))
         if state.plan is None and tc.get("plan"):
             plan_path = self.cfg.paths.tasks_dir / task_id / "plan.json"
             plan_path.write_text(json.dumps(tc["plan"]), encoding="utf-8")

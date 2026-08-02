@@ -4,7 +4,7 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
-**Stato:** 🟢 **PS6 completata** (2026-08-02, `v3.7.0`) — A/B ufficiale eseguito (report: `bench/results/ab_ps6_plansys_official_20260802.md`). **Verdetto D11: il plansys NON si accende di default** (2/13 vs 6/13 baseline; sui 3 task larghi 0/3 entrambi) — ma fallisce a metà del costo (636K vs 1.143K token) e le ablazioni dimostrano che ogni componente contiene il costo (+50%…+76% senza). Verdetto riapribile dopo i 5 fix identificati (ESITO PS6) + esperimento thinking T-SM. Prossima azione: **PS7** (integrazione, gated OFF).
+**Stato:** 🏁 **PIANO CONCLUSO — PS7 completata** (2026-08-03, `v4.0.0`, merge in `main`). Il sistema S/M/J è integrato nel prodotto, **gated OFF** (`[plansys] enabled=false`). Verdetto PS6 confermato dalla ri-misura post-fix (v. ESITO PS6, appendice). La storia continua in: `plan_thinking_ab.md` (campagna TH, prossima) e F6 del piano padre (routing). Trappole e regole: atlante §9; ambizioni: `ambition.md` (in pausa fino a sistema ottimizzato).
 
 **Nota di condizione sperimentale (2026-08-02, decisione utente):** TUTTE le misure del progetto —
 F0→PS6 incluso — girano col thinking mode di Gemma 4 E2B **strutturalmente disattivato** (template
@@ -678,9 +678,11 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 🎯 **Scope:** il sistema smette di essere un esperimento parallelo.
 
-- [ ] **PS7.1** 🤖 Selezione del driver in config: `[plansys] enabled=true` → i task GUI/CLI senza piano statico usano `PlanSysEngine` (il gate D11 del vecchio Planner resta com'è: quel Planner rimane OFF e deprecato, la rimozione fisica si decide con l'utente); `enabled=false` → tutto come oggi. Routing per taglia (quando pianificare) = resta materia di F6 del padre, con i dati di PS6 come input.
-- [ ] **PS7.2** 🤖 GUI: la pagina task mostra i documenti di piano (`macro_plan.md`, blueprint, ledger) come tab read-only (sono file: `GET /tasks/{id}/plan/{name}` con tail, riuso del pattern log); i gate compaiono nell'albero come righe (✓/✗ con link ai check).
-- [ ] **PS7.3** 🤖 Piano padre: aggiornare Stato + tabella versioni (nota di riconciliazione) + riga in F6 (routing usa PS6) + ESITO di questo interludio; memoria di progetto aggiornata.
+- [x] **PS7.1** 🤖 Selezione del driver in config: `[plansys] enabled=true` → i task GUI/CLI senza piano statico usano `PlanSysEngine` (il gate D11 del vecchio Planner resta com'è: quel Planner rimane OFF e deprecato, la rimozione fisica si decide con l'utente); `enabled=false` → tutto come oggi. Routing per taglia (quando pianificare) = resta materia di F6 del padre, con i dati di PS6 come input. **FATTO**: `web/jobs.py::_run_one` seleziona `PlanSysEngine` quando `cfg.plansys_enabled` e nessun piano statico; CLI già pronta (`rg run --plansys`).
+- [x] **PS7.2** 🤖 GUI: la pagina task mostra i documenti di piano (`macro_plan.md`, blueprint, ledger) come tab read-only (sono file: `GET /tasks/{id}/plan/{name}` con tail, riuso del pattern log); i gate compaiono nell'albero come righe (✓/✗ con link ai check). **FATTO**: rotta `task_plan_doc` (nome vincolato `[A-Za-z0-9._-]+`, mai path), tabella Gate + link ai documenti in `task.html` (visibili solo se esistono: zero impatto sui task naive).
+- [x] **PS7.3** 🤖 Piano padre: aggiornare Stato + tabella versioni (nota di riconciliazione) + riga in F6 (routing usa PS6) + ESITO di questo interludio; memoria di progetto aggiornata. **FATTO** (2026-08-03).
+
+**APPENDICE ESITO PS6 — ri-misura post-fix (2026-08-03, @`80fe6fe`, severino-sim):** baseline 8/13 (1.178K tok) · plansys 2/13 (857K tok) · **forbice 0** (fix copertura-richiesta verificato sul campo). I 4 fix spostano le morti in profondità (5 micro-task che morivano a 0 tool call ora eseguono 20–38 tool call con useful% 80–93% anche nei fallimenti) ma la conversione resta bloccata dalle famiglie di capacità (J sui proof, characterization di M4). **Scoperta di metodo: varianza run-to-run ANCHE su CPU** (baseline 6/13→8/13 a codice identico; causa probabile: stato della cache del server, llama.cpp #2838) → banda ±2/13, verdetti solo su run multiple d'ora in poi. Verdetto D11 invariato: gated OFF; prossima leva: thinking T-SM.
 - [ ] **PS7.4** 🔎 Un task reale dalla GUI con plansys attivo completa end-to-end; `check_reference` verde; 55+ unit verdi; il piano padre riprende da F3-bis.
 
 **Rituale** → `v4.0.0` + merge `main` su entrambe le remote.
