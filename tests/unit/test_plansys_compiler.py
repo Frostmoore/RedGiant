@@ -62,6 +62,23 @@ def test_validate_blueprint_exclusive_ownership():
     assert any("does not cover" in p for p in validate_blueprint(wrong_c, an, ["C1"]))
 
 
+def test_validate_blueprint_prose_outside_perimeter():
+    # PS5.5 tentativo 4: goal che ordina di creare file di un'altra micro
+    an = _analysis(artifacts=["mod.py", "helper.py", "storage.py"])
+    m = _micro()
+    m.work.goal = "Create both storage.py and mod.py with the functions"
+    bp = PhaseBlueprint(phase_id="P1", micro=[m])
+    probs = validate_blueprint(bp, an, ["C1"], existing=set())
+    assert any("chase files" in p and "storage.py" in p for p in probs)
+    # citare un file esistente o nei propri inputs resta legittimo
+    m2 = _micro()
+    m2.work.goal = "Extend helper.py reading mod.py"
+    m2.work.inputs = ["helper.py"]
+    bp2 = PhaseBlueprint(phase_id="P1", micro=[m2])
+    assert validate_blueprint(bp2, an, ["C1"],
+                              existing={"helper.py"}) == []
+
+
 def test_enum_schema_injection():
     # batch20, strategia n.1: enum dinamici nei punti giusti dello schema
     from redgiant.plansys.artifacts import (PhaseAnalysis as PA,

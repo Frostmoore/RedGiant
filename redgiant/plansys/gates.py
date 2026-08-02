@@ -177,6 +177,25 @@ def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis,
                 problems.append(f"{m.id} creates {len(new_files)} new files "
                                 f"{new_files}: too big for one junior session "
                                 f"— split into one micro phase per new file")
+    # PS5.5 tentativo 4: il goal di P3.S1 ordinava "create both storage.py and
+    # report.py" ma la micro possedeva solo report.py — J insegue la prosa
+    # contro lo scope. La prosa puo' citare SOLO file del proprio perimetro.
+    for m in (bp.micro if existing is not None else []):
+        reach = set(m.work.files_owned) | set(m.work.inputs) | existing
+        reach_names = {f.rsplit("/", 1)[-1] for f in reach}
+        for field_name, txt in (("goal", m.work.goal),
+                                ("boundary", m.work.boundary)):
+            refs = {r.replace("\\", "/").lstrip("./")
+                    for r in re.findall(r"[\w./\\-]+\.py\b", txt)}
+            bad = sorted(r for r in refs if r not in reach
+                         and r.rsplit("/", 1)[-1] not in reach_names)
+            if bad:
+                problems.append(
+                    f"{m.id} {field_name} mentions {bad} which are neither "
+                    f"owned by this micro nor in its inputs — the junior "
+                    f"will chase files it cannot write; mention ONLY "
+                    f"files_owned/inputs, or move that work to the micro "
+                    f"that owns those files")
     # fast #3: la CATENA di copertura deve chiudersi — ogni criterio coperto
     # dalla fase deve essere PROVATO da almeno una micro, o restera' orfano
     # fino al coverage gate finale (fallimento tardivo = fallimento caro)
