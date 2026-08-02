@@ -4,7 +4,7 @@
 
 **A verification-first agentic system that makes *tiny* local language models<br>reliably useful on non-prosumer hardware.**
 
-[![Status](https://img.shields.io/badge/status-F2_done_·_web_GUI_battle--tested-brightgreen)](memory/plan_red_giant.md)
+[![Status](https://img.shields.io/badge/status-F3_in_progress_·_planning_%2B_A%2FB_evaluation-blue)](memory/plan_red_giant.md)
 [![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Model](https://img.shields.io/badge/model-Gemma_4_E2B_·_Q4_QAT_·_GGUF-8A2BE2)](https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF)
 [![Runtime](https://img.shields.io/badge/runtime-llama.cpp_(pinned)-555555)](docker/severino-sim/compose.yml)
@@ -24,7 +24,7 @@ Red Giant wraps a **~2B-effective-parameter model** — Gemma 4 E2B, Q4 QAT, GGU
 
 > Most agentic projects chase the biggest model they can reach. Red Giant goes the opposite way: the smallest usable model, on the kind of machine a non-prosumer actually owns — a 15W mini-PC with 4 CPU cores and no usable GPU. Anyone can build agents on a workstation-class GPU box; the interesting problem is closing the gap between local inference on consumer hardware and the inevitable scarcity of that scenario.
 
-**Status:** early development — **Phase 2 complete**: a single-process web GUI (async job queue, live execution tree, consent-based approvals with standing per-file grants, budget-extension prompts, guided relaunch of failed tasks) battle-tested through 3 rounds of live user testing plus an automated 5-task battery: **15 defects found and fixed**, 4/5 task types externally verified, zero false claims in either direction. Next: Phase 3, the planner. This README is refreshed at the end of every development phase.
+**Status:** early development — **Phase 3 (planning) in progress**: plan generation, deterministic logic validation, lazy phase expansion and replanning are operational; the A/B evaluation currently running measures whether planning earns its substantial overhead over the Phase 1 worker baseline. Behind it, the Phase 2 single-process web GUI (async job queue, live execution tree, consent-based approvals with standing per-file grants, budget-extension prompts, guided relaunch of failed tasks) was live-tested through 3 rounds of user testing plus an automated 5-task battery: **15 defects found and fixed**, zero false claims in either direction. This README is refreshed at the end of every development phase.
 
 ## 🧠 The thesis
 
@@ -69,12 +69,12 @@ If you are trying to make a small local model do real, verified work on hardware
 
 ## 🔬 Discoveries — field notes with standalone value
 
-If you are building an agent engine around a **small language model** — a 1–4B model served locally (llama.cpp or similar), tool calling through structured JSON, modest CPU-only hardware — the notes below are the answers this project paid for in measurements: how to design edit tools an SLM can actually use, what grammar-constrained decoding does and does not guarantee, which failure modes are systematic rather than anecdotal, and where the real costs sit on CPU inference. Each entry is a **general claim**, stated so it can be applied to any SLM agent stack; the evidence is this repository's own measured data, and every countermeasure is implemented here in working code. Entries marked ⚠️ carry evidence tied to this exact stack (Gemma 4 E2B QAT Q4 · pinned llama.cpp build): *the lesson transfers, the numbers need re-measuring on yours.*
+If you are building an agent engine around a **small language model** — a 1–4B model served locally (llama.cpp or similar), tool calling through structured JSON, modest CPU-only hardware — the notes below are the answers this project paid for in measurements: how to design edit tools an SLM can actually use, what grammar-constrained decoding does and does not guarantee, which failure modes are systematic rather than anecdotal, and where the real costs sit on CPU inference. Each entry is phrased as a **transferable engineering hypothesis** for SLM agent stacks, supported by this repository's measured evidence — open to revision as other models get tested — and every countermeasure is implemented here in working code. Entries marked ⚠️ carry evidence tied to this exact stack (Gemma 4 E2B QAT Q4 · pinned llama.cpp build): *the lesson transfers, the numbers need re-measuring on yours.*
 
 ### 🔧 Tool design: how a small model edits files reliably
 
-- **D1 — Exact-string replacement beats diffs.** For sub-4B models, unified diffs are an actively hostile edit format: a single line of context mismatch (a blank line, PEP 8 spacing) rejects a logically correct fix and starts a retry loop. An `old_string → new_string` tool with a uniqueness requirement is strictly better. *Evidence: the same fix tasks went from 20+ failing calls to 5–6 clean calls after the switch.*
-- **D2 — Absorb representation artifacts; don't legislate against them.** Small models copy what they see: line-number prefixes shown by the read tool get pasted into edits, diffs and whole-file writes — prompt rules against it change nothing (⚠️ observed systematically on Gemma E2B) — and CRLF files displayed as LF make every `old_string` unmatchable. The tool layer must normalize both directions; the environment adapts to the model, not vice versa.
+- **D1 — Exact-string replacement beats diffs for localized edits.** For very small models, exact-string replacement is a safer default than unified diffs: for the tested 2B worker, a single line of context mismatch (a blank line, PEP 8 spacing) rejected logically correct fixes and started retry loops, while an `old_string → new_string` tool with a uniqueness requirement proved substantially more reliable. *Evidence: the same fix tasks went from 20+ failing calls to 5–6 clean calls after the switch.*
+- **D2 — Absorb representation artifacts; don't legislate against them.** Small models copy what they see: line-number prefixes shown by the read tool get pasted into edits, diffs and whole-file writes — prompt rules alone did not eliminate it (⚠️ observed systematically on Gemma E2B) — and CRLF files displayed as LF make every `old_string` unmatchable. The tool layer must normalize both directions; the environment adapts to the model, not vice versa.
 - **D3 — A tool call that "succeeds" without changing state is a loop generator.** An edit whose old and new strings are identical returns ok, changes nothing, and gets repeated verbatim until the step budget dies. *Evidence: 15 consecutive no-op edits in one session.* No-ops must be explicit errors, and identical consecutive calls must count as failures even when they return ok.
 - **D4 — Error messages must teach the next call.** A bare "not found" teaches nothing and reproduces itself; returning the *closest matching region* of the file makes the model's next `old_string` correct. One-line errors turned multi-call loops into one-round recoveries.
 - **D5 — Never let a broken file exist.** Syntax-check the resulting content *before* the atomic write (AST parse, linter, JSON/TOML load): a syntactically broken file never reaches disk, and the rejection — with the error line — is data the model can act on.
@@ -95,7 +95,7 @@ If you are building an agent engine around a **small language model** — a 1–
 
 ### 🪙 Token economy on CPU-only inference
 
-- **D14 — Compact JSON is free money.** No pretty-printing in either direction: 20–30% of output tokens saved, at zero quality cost.
+- **D14 — Compact JSON is free money.** No pretty-printing in either direction: 20–30% of output tokens saved, with no measured quality loss.
 - **D15 — Budget accounting must clamp against cache reporting.** The runtime can report more cached tokens than the client counted in the prompt; naive `prompt − cached` goes negative and a summed budget silently *disables itself*. Charge `max(prompt − cached, 0) + generated` per call: the budget measures work, not accounting artifacts.
 - **D16 — Governance overhead is real, measurable, and must earn its keep.** On micro-tasks, planner-mode multiplies LLM calls ~10× over a naive static plan (88 vs 8 on the same task; 710K tokens for a 10-task baseline battery). The bet that this overhead pays off on wide tasks is treated as a *hypothesis under A/B evaluation*, never an assumption — and when planning doesn't pay, the honest output is "don't plan". Open problem, tracked as such.
 
@@ -120,7 +120,7 @@ If you are building an agent engine around a **small language model** — a 1–
 
 - **D25 — Per-call approval is consent theater; consent must have memory.** Approving every write individually produced real user revolt ("1000 approvals... like filing taxes"). Approval of one write grants a standing, revocable permission for that (action-family, file) pair within the task — fewer questions, each one meaningful, `no` remembered exactly as long as `yes`.
 - **D26 — Failure must be a dialogue, not a dead end.** Budget exhaustion *asks* for an extension (+50%) instead of killing the task; failed tasks surface their reasons and offer a guided relaunch with amended instructions. An agent system for humans needs an "and now what?" path from every terminal state.
-- **D27 — Approvals must not cost prefill.** Naively, every human pause meant a cold restart of the work (re-reads, re-edits, full re-prefill on CPU). Saving the volatile context at the block and resuming *in-place* — same step, warm KV cache — makes human consent nearly free in compute terms.
+- **D27 — Approvals must not cost prefill.** Naively, every human pause meant a cold restart of the work (re-reads, re-edits, full re-prefill on CPU). Saving the volatile context at the block and resuming *in-place* — same step, warm KV cache — removes most of the avoidable prefill cost of human consent.
 
 Every countermeasure above ships as working code in this repository. The [codebase atlas §9](memory/codebase_reference.md) maps each discovery to its exact file, signature and technical cause; [`bench/results/`](bench/results/) holds the raw measurement reports behind every number.
 
