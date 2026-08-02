@@ -4,7 +4,7 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
-**Stato:** 🟢 **PS4 completata** (2026-08-03, `v3.5.0`) — prossima azione: **PS5** (Engine: J + gate di esecuzione).
+**Stato:** 🟢 **PS5 completata** (2026-08-02, `v3.6.0`) — pilota PS5.5 VERDE su severino-sim (3 fasi, coverage totale, giudice esterno pytest exit=0, 7.845 token, 569s). Prossima azione: **PS6** (Evaluator: T040+ e A/B con ablation).
 
 > **La regola che comanda questo documento:**
 > *The Senior defines what must be achieved. The Mid decides how to decompose it and how
@@ -617,9 +617,24 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS5.5 — 🔎 Verifica di fase
 
-- [ ] **Il task pilota:** una richiesta larga su repo fixture (bozza di T040) completa end-to-end su severino-sim: MacroPlan → ≥2 macrofasi → test qualificati → micro implementate da J → sintesi verde → coverage verde; `data/tasks/<id>/plan/` contiene macro_plan.md, blueprint per fase, ledger.md coerenti con il DB; forbice completed≠verified = 0.
+- [x] **Il task pilota:** una richiesta larga su repo fixture (bozza di T040) completa end-to-end su severino-sim: MacroPlan → ≥2 macrofasi → test qualificati → micro implementate da J → sintesi verde → coverage verde; `data/tasks/<id>/plan/` contiene macro_plan.md, blueprint per fase, ledger.md coerenti con il DB; forbice completed≠verified = 0.
+  **ESITO (2026-08-02, tentativo 5 di 5):** VERDE — 3 macrofasi complete, plan coverage verde, giudice esterno `pytest` exit=0 (3 passed), 7.845 token, 20 tool call, 569s. I tentativi 1–4 hanno ciascuno scovato un difetto di riferimento nuovo, tutti chiusi con regole deterministiche (v. revisione sotto).
 
-**Rituale** → `v3.6.0`.
+**REVISIONE PS5 (in corso d'opera, dai piloti severino-sim e dai batch GPU n.6–8 — regole permanenti nel control plane):**
+1. *Determinismo dei prompt* (batch n.5): la `tasks_dir` (artefatti runtime con ULID per-run) è esclusa da `_existing_files`, dal listato fatti di `build_ledger` e da `_repo_listing` — inquinava i prompt e vanificava il seed. Corollario misurato: su GPU il seed fisso NON basta comunque (batching CUDA); i batch GPU classificano famiglie, i numeri comparabili sono solo severino-sim.
+2. *Dedup dei covers* in `normalize_macro` + guardia `len(proves) < 8` nell'auto-assegnazione (crash del batch n.5 reso irrappresentabile).
+3. *Budget delle patch = budget del chiamante* in `_request_patch` (una patch M4 porta file interi: con budget m_pass troncava).
+4. *Retry informato di J*: `_run_micro` accoda `[PREVIOUS ATTEMPT FAILED]` con la coda (500 char) dell'output dei proof falliti — l'assertion diff è informazione deterministica, non strategia (coerente con la semantica PS5.2).
+5. *Import top-level obbligatorio nei test new_behavior* (`validate_bundle`): senza, il file resta verde a modulo assente e la red baseline non può fallire (batch n.7: famiglia 5/20 → 0/20 al batch n.8).
+6. *Sort topologico delle micro* (inputs → owner, in `_norm`): l'ordine di deposito è struttura, quindi identità (pilota n.1: storage prima di models, J chiuso fuori scope).
+7. *Lista dei moduli importabili nel work order* (`work_order(..., importable=)`): l'esistenza dei moduli locali è un fatto del control plane, non una deduzione di J (pilota n.2: `import storage` prematuro).
+8. *Ghost imports respinti in M4* (`validate_bundle(..., existing=)`): gli import top-level di ogni proof devono essere risolvibili (stdlib+pytest+esistenti+micro precedenti) quando il proof girerà (pilota n.3: proof che importava un modulo che nessuna micro possiede = sessione J invincibile by design).
+9. *Prosa nel perimetro* (`validate_blueprint`): goal/boundary possono citare solo file `.py` del perimetro della micro (posseduti ∪ inputs ∪ esistenti) — J insegue la prosa contro lo scope (pilota n.4).
+10. *ValidationError delle patch gestita nell'engine* (mai più CRASH: sempre `failed` esplicito).
+
+**PROPOSTA APERTA (aspetta decisione utente):** emendamento PS-D6 — ora che ogni retry porta informazione nuova (regola 4), concedere un tentativo informato in più prima del blocco fotocopia.
+
+**Rituale** → `v3.6.0`. ✅ Eseguito il 2026-08-02.
 
 ---
 
