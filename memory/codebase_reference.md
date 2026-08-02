@@ -315,6 +315,8 @@ class MacroRejected
 class SeniorPlanner
     def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> MacroPlan
 def parse_artifact(model: type[BaseModel], payload_json: str) -> BaseModel
+class _SingleShot     # base di M1..M4: una chiamata, un parse (correzioni = patch nel compiler)
+    def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> BaseModel
 class PhaseAnalyst    # M1 — single-shot, output PhaseAnalysis
 class WorkDecomposer  # M2 — single-shot, output PhaseBlueprint
 def validate_analysis(analysis: PhaseAnalysis, projection: str, phase_id: str) -> list[str]
