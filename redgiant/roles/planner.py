@@ -43,39 +43,17 @@ def normalize_plan(out: PlannerOutput) -> PlannerOutput:
 
 def validate_plan_logic(out: PlannerOutput,
                         required_phase_ids: list[str] | None = None) -> list[str]:
-    """Check deterministici sulla LOGICA del piano. Ritorna i problemi (vuoto = ok)."""
+    """Check deterministici sulla LOGICA del piano. Ritorna i problemi (vuoto = ok).
+    PS2.2: i check sul grafo (duplicati, dipendenze, cicli, root) sono condivisi
+    con plansys.gates.dag_problems — un solo validatore di dipendenze nel repo."""
+    from redgiant.plansys.gates import dag_problems  # lazy: evita il ciclo di import
     problems: list[str] = []
     ids = [p.id for p in out.phases]
     if not ids:
         problems.append("plan has no phases")
-    if len(ids) != len(set(ids)):
-        problems.append(f"duplicate phase ids: {ids}")
-    known = set(ids)
-    for p in out.phases:
-        for dep in p.depends_on:
-            if dep not in known:
-                problems.append(f"phase {p.id} depends on unknown phase '{dep}'")
-            if dep == p.id:
-                problems.append(f"phase {p.id} depends on itself")
-    # aciclicità (DFS)
-    graph = {p.id: [d for d in p.depends_on if d in known] for p in out.phases}
-    WHITE, GREY, BLACK = 0, 1, 2
-    color = dict.fromkeys(graph, WHITE)
-
-    def dfs(node: str) -> bool:
-        color[node] = GREY
-        for nxt in graph[node]:
-            if color[nxt] == GREY or (color[nxt] == WHITE and dfs(nxt)):
-                return True
-        color[node] = BLACK
-        return False
-
-    if any(dfs(n) for n in graph if color[n] == WHITE):
-        problems.append("dependency cycle detected")
-    if ids and not any(not p.depends_on for p in out.phases):
-        problems.append("no root phase (every phase has dependencies)")
+    problems += dag_problems([(p.id, p.depends_on) for p in out.phases])
     for rid in required_phase_ids or []:
-        if rid not in known:
+        if rid not in set(ids):
             problems.append(f"COMPLETED phase '{rid}' was dropped: it must be kept")
     return problems
 

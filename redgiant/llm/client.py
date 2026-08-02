@@ -69,7 +69,11 @@ class LlamaClient:
                  schema: type[BaseModel] | None = None,
                  max_tokens: int, temperature: float | None = None,
                  task_id: str | None = None, subtask_id: str | None = None,
-                 cache_prompt: bool = True) -> LlmResult:
+                 cache_prompt: bool = True,
+                 grammar_schema: dict | None = None) -> LlmResult:
+        """grammar_schema (plansys, batch20): JSON Schema SPECIALIZZATO per la
+        grammatica del server (es. enum dinamici sui riferimenti) — deve essere
+        un SOTTOINSIEME dello schema di `schema`, che resta il validatore."""
         prompt = parts.render()
         n_prompt = self.count_tokens(prompt)
         if n_prompt + max_tokens > self.cfg.ctx_size:
@@ -85,7 +89,9 @@ class LlamaClient:
             # richiesta -> pipeline non riproducibile, eval non confrontabili.
             "seed": 42,
         }
-        if schema is not None:
+        if grammar_schema is not None:
+            payload["json_schema"] = grammar_schema
+        elif schema is not None:
             payload["json_schema"] = to_llama_schema(schema)
 
         t_start = datetime.now(timezone.utc).isoformat(timespec="seconds")

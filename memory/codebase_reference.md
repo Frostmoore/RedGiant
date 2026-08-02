@@ -112,6 +112,12 @@ class StateStore
     def latest_clarification_answer(self, task_id: str) -> str | None
     def extend_budget(self, task_id: str, key: str, add: int) -> None
     def take_budget_extension(self, task_id: str) -> tuple[str, str, int] | None
+    def list_decisions(self, task_id: str) -> list[dict]
+    def save_ps_artifact(self, task_id: str, *, kind: str, ref: str, payload_json: str, actor: str) -> int
+    def load_ps_artifact(self, task_id: str, kind: str, ref: str = "", version: int | None = None) -> dict
+    def list_ps_artifacts(self, task_id: str, kind: str | None = None) -> list[dict]
+    def log_ps_gate(self, task_id: str, *, gate: str, target: str, ok: bool, checks_json: str) -> None
+    def ps_gate_history(self, task_id: str, gate: str | None = None) -> list[dict]
     def add_decision(self, task_id: str, *, actor: str, decision: str, reason: str, target: str | None = None) -> None
     def log_llm_call(self, task_id: str, row: LlmCallRow) -> None
     def log_tool_call(self, task_id: str, row: ToolCallRow) -> None
@@ -133,7 +139,7 @@ class ContextOverflow
 class LlmResult     # text, parsed, prompt_tokens, cached_tokens, gen_tokens, prefill_ms, gen_ms, raw_timings
 class LlamaClient
     def __init__(self, cfg: LlmProfileCfg, store: StateStore | None = None) -> None
-    def complete(self, parts: PromptParts, *, role: str, schema: type[BaseModel] | None = None, max_tokens: int, temperature: float | None = None, task_id: str | None = None, subtask_id: str | None = None, cache_prompt: bool = True) -> LlmResult
+    def complete(self, parts: PromptParts, *, role: str, schema: type[BaseModel] | None = None, max_tokens: int, temperature: float | None = None, task_id: str | None = None, subtask_id: str | None = None, cache_prompt: bool = True, grammar_schema: dict | None = None) -> LlmResult  # grammar_schema: schema SPECIALIZZATO (enum dinamici) per la grammatica server; la rivalidazione resta su schema
     def count_tokens(self, text: str) -> int
     def health(self) -> bool
     def props(self) -> dict
@@ -179,6 +185,7 @@ class WritePatchArgs
 class EditFileArgs
 class WriteFileArgs
 def syntax_check(path: Path, content: str) -> str | None
+def syntax_hint(detail: str) -> str  # hint mirato accodato ai syntax_error (f-string annidati → .format/concat, pilota PS5)
 def read_file(scope: Scope, path: str, start_line: int = 1, end_line: int | None = None) -> ToolResult
 def list_files(scope: Scope, glob: str, max_results: int = 200) -> ToolResult
 def edit_file(scope: Scope, path: str, old_string: str, new_string: str, replace_all: bool = False) -> ToolResult
@@ -268,6 +275,101 @@ class DesignRejected
 
 Orchestrator v1 (F3.3/F3.4): piano generato se assente, espansione lazy della sola fase eleggibile, sottofase fallita oltre i retry → **replanning** (max 2; fasi completate immutabili, sottofasi orfane → skipped) → poi `failed` esplicito.
 
+### `redgiant/plansys/` — il sistema di pianificazione S/M/J (piano: `plan_planner_system.md`)
+
+Sistema a sé stante (PS-D1: LLM solo in roles.py/compiler.py, il resto deterministico). PS0: artefatti tipizzati (versionati in `ps_artifacts`), renderer DB→Markdown greppabile (`data/tasks/<id>/plan/`, byte-deterministico, scrittura atomica LF), config `[plansys]` (default OFF, PS-D9). Tabelle: `ps_artifacts` (task_id, kind∈{macro_plan, phase_analysis, phase_blueprint, verification_blueprint, test_bundle, ledger_snapshot}, ref, version UNIQUE auto-incrementata per (task,kind,ref), actor, json, created_at) e `ps_gates` (gate, target, ok, checks JSON).
+
+```python
+class Criterion       # id C1.., text<=200 — prodotto da S, immutabile
+class MacroPhase      # id P1.., intent (mai operazioni), depends_on<=5, covers>=1
+class MacroPlan       # goal, criteria 1..8, phases 1..6
+class DesignDecision  # id, decision, alternatives<=3, constraint (PS-D8: esplicita)
+class ChoicePoint     # question, options 2..3, recommended, reason
+class PhaseAnalysis   # phase_id, objective, involved<=10, artifacts<=10, decisions<=4, risks<=4, decision_required?
+class WorkContract    # goal, boundary, files_owned 1..4 (ownership esclusiva), signatures<=6, inputs, outputs
+class MicroPhase      # id P<k>.S<n>, title, work, proves<=4
+class PhaseBlueprint  # phase_id, micro 1..6
+class ProofObligation # id, micro_id, kind new_behavior|characterization, behavior, test_file, test_name, cmd_id
+class VerificationBlueprint  # phase_id, obligations 1..12, synthesis_cmds 1..3
+class TestArtifact    # path, content — materializzato dal control plane, MAI da J
+class TestBundle      # phase_id, artifacts 1..8
+class PatchOp         # op replace|add|remove, target, payload_json SENZA tetto (maxLength→GBNF {0,N} = 400 dal server, trappola PS4.3)
+class BlueprintPatch  # phase_id, ops 1..6 (PS-D6: correzione=patch)
+class GateReport      # gate enum a 7 valori, target, ok, checks (riusa CheckResult)
+class PlansysCfg      # (in config.py) max_phases, max_micro_per_phase, projection_max_tokens, m_pass_max_tokens, test_author_max_tokens, mutation_probe
+def render_macro_plan(plan: MacroPlan) -> str
+def render_blueprint(bp: PhaseBlueprint, vbp: VerificationBlueprint | None, analysis: PhaseAnalysis | None) -> str
+def write_plan_doc(tasks_dir: Path, task_id: str, name: str, content: str) -> Path
+def normalize_signature(sig: str) -> str
+def file_signatures(path: Path) -> list[str]
+def extract_signatures(pkg_dir: Path) -> dict[str, list[str]]
+class LedgerEntry   # kind signature|test|artifact|decision|failure|fact, ref, text<=300
+class TaskLedger    # task_id, entries
+def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger
+def render_ledger(ledger: TaskLedger) -> str
+def project_for_phase(ledger: TaskLedger, plan: MacroPlan, phase_id: str, max_tokens: int, count: Callable[[str], int]) -> str
+def ablated(component: str) -> bool   # PS6.2: RG_PLANSYS_ABLATE="oracle,ledger,entry" (solo A/B)
+def dag_problems(pairs: list[tuple[str, list[str]]]) -> list[str]
+def normalize_macro(plan: MacroPlan) -> MacroPlan
+def macro_validation_gate(plan: MacroPlan, request: str | None = None) -> GateReport  # request: check copertura-richiesta (file .py nominati => criteri/intent, forbice T041)
+class MacroRejected
+    def __init__(self, problems: list[str]) -> None
+class SeniorPlanner
+    def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> MacroPlan
+def parse_artifact(model: type[BaseModel], payload_json: str) -> BaseModel
+class _SingleShot     # base di M1..M4: una chiamata, un parse (correzioni = patch nel compiler) + 1 retry su troncamento
+    def run(self, ctx: RoleContext, *, max_tokens: int = 1024, grammar_schema: dict | None = None) -> BaseModel
+class PhaseAnalyst    # M1 — single-shot, output PhaseAnalysis
+class WorkDecomposer  # M2 — single-shot, output PhaseBlueprint
+def validate_analysis(analysis: PhaseAnalysis, projection: str, phase_id: str) -> list[str]
+def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis, covers: list[str], existing: set[str] | None = None) -> list[str]  # + prosa nel perimetro, 1 file nuovo/micro, coverage chain
+class VerificationDesigner  # M3 — single-shot, output VerificationBlueprint
+class TestAuthor            # M4 — single-shot, output TestBundle (budget dedicato 3072)
+def validate_verification(vbp: VerificationBlueprint, bp: PhaseBlueprint, known_cmd_ids: set[str]) -> list[str]
+def _top_imports(imports_src: str) -> set[str]  # primo segmento dei moduli importati top-level
+def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint, bp: PhaseBlueprint | None = None, existing: set[str] | None = None) -> list[str]  # + aggancio al bersaglio, import top-level nei new_behavior, ghost imports
+def oracle_qualification_gate(vbp: VerificationBlueprint, bundle: TestBundle, bp: PhaseBlueprint, scope: Scope, router, task_id: str, *, mutation_probe: bool = False) -> GateReport
+class CompileFailed
+    def __init__(self, step: str, problems: list[str]) -> None
+class NeedsDecision
+    def __init__(self, phase_id: str, choice: ChoicePoint) -> None
+class PhaseAlreadySatisfied  # entry-check in compile_phase: proofs verdi E files_owned esistenti → fase chiusa a zero J
+    def __init__(self, phase_id: str) -> None
+class PhaseCompiler
+    def __init__(self, cfg: Config, store: StateStore, llm: LlamaClient, assembler: PromptAssembler, router: ToolRouter, scope: Scope) -> None
+    def projection(self, task_id: str, plan: MacroPlan, phase: MacroPhase) -> str
+    def analyze(self, task_id: str, plan: MacroPlan, phase: MacroPhase, projection: str, log) -> PhaseAnalysis
+    def decompose(self, task_id: str, phase: MacroPhase, analysis: PhaseAnalysis, projection: str, log) -> PhaseBlueprint
+    def design_verification(self, task_id: str, phase: MacroPhase, bp: PhaseBlueprint, projection: str, log) -> VerificationBlueprint
+    def author_tests(self, task_id: str, phase: MacroPhase, bp: PhaseBlueprint, vbp: VerificationBlueprint, projection: str, log) -> TestBundle
+    def materialize_tests(self, bundle: TestBundle, log) -> None
+    def compile_phase(self, task_id: str, plan: MacroPlan, phase: MacroPhase, log) -> tuple[PhaseBlueprint, VerificationBlueprint, TestBundle]
+def micro_gate(verdict_ok: bool, target: str, checks: list[CheckResult]) -> GateReport
+def failure_signature(failed_checks: list[str], summary: str) -> str
+def retry_gate(prev_sig: str | None, new_sig: str) -> GateReport
+def work_order(micro: MicroPhase, vbp: VerificationBlueprint, importable: list[str] | None = None) -> SubtaskSpec  # importable = moduli locali esistenti al momento della micro (fatto del control plane)
+class PlanSysEngine
+    def run_task(self, task_id: str) -> TaskState
+    def _load_or_create_macro_plan(self, task_id: str, log: TaskLog) -> MacroPlan | TaskState
+    def _eligible_macro_phase(self, task_id: str, plan: MacroPlan) -> MacroPhase | None
+    def _phase_entry_gate(self, task_id: str, plan: MacroPlan, phase: MacroPhase) -> GateReport
+    def _phase_synthesis_gate(self, task_id: str, phase: MacroPhase, vbp: VerificationBlueprint, plan: MacroPlan | None = None) -> GateReport  # SCOPED: suite piena solo all'ultima fase; regression = proof delle fasi chiuse
+    def _register_proof_commands(self, vbp: VerificationBlueprint) -> None
+    def _run_micro(self, task_id: str, micro: MicroPhase, vbp: VerificationBlueprint, worker: Worker, tracker: BudgetTracker, log: TaskLog) -> TaskState | None
+```
+
+**PS5 (Engine):** `PlanSysEngine` EREDITA dall'Orchestrator il collaudato di F1/F2 (`_reclaim_orphans`, `_execute_subtask` con resume in-place, `_handle_budget_exhaustion` = budget-consenso, `_finalize`). `work_order` = perimetro=verifica by design: `verification` della micro sono SOLO i suoi `proof:<obligation_id>` (comandi pytest `file::test` registrati dal control plane nel catalogo run_tests via `_register_proof_commands`) — mai la suite intera; la suite gira solo nel `phase_synthesis` gate. Fasi "done" = ps_gates ok (`phase_synthesis` o `phase_entry`); entry gate = ri-esecuzione delle prove dei criteri coperti (fase già provata → chiusa a zero LLM); coverage gate a fine piano (criterio provato = ≥1 obbligo verde ADESSO, ri-eseguito mai creduto). Retry gate: firme di fallimento consecutive identiche = fotocopia vietata → micro failed esplicita (niente replanning in v1). `NeedsDecision` → clarification sul canale approvals F2.3, task blocked; per run non presidiate `RG_PLANSYS_AUTODECIDE=recommended` auto-decide sulla raccomandata di M1 (max 2/fase, actor `policy:autodecide`). Accensione: `rg run --plansys`, `rg eval --plansys` (`run_eval(use_plansys=True)` fa `replace(cfg, plansys_enabled=True)`; report modalità `plansys` nel filename). **Esecuzione della micro (`_run_micro`), i 4 recinti aggiunti dai piloti**: (1) **Scope fisico per-micro** — J riceve `Scope(root, files_owned)` con Router/Worker propri, swap attorno a `_execute_subtask` (PS-D4 meccanico, non fiduciario; le letture restano libere: lo Scope limita solo le scritture); (2) **[PROOF TEST SOURCE]** — il sorgente verbatim dei test della micro (≤120 righe/file) iniettato nell'objective (contract anchoring all'ultimo anello); (3) **[PREVIOUS ATTEMPT FAILED]** — al retry la coda (500 char) dell'output dei proof falliti (l'assertion diff è informazione deterministica); (4) **IMPORTS** — la lista dei moduli locali importabili (esistenti su disco esclusa `tasks/` + posseduti dalle micro precedenti), calcolata nel loop di upsert. **Enum dinamici (batch20 strategia n.1)**: `PhaseCompiler._enum_schema(model, spots)` inietta enum nei punti giusti dello schema (top-level o `$defs`) e passa via `grammar_schema=` — M1 involved=file esistenti, M2 files/proves, M3 micro_id/cmd, M4 path=[file corrente], patch target=[id esistenti]; la grammatica vincola, le liste `[ALLOWED …]` nel volatile informano (F3). **Nomi canonici (PS-D11)**: dopo M3 il control plane sovrascrive id/test_file/test_name (`P1.S1.O1 → test_p1_s1.py::test_p1_s1_o1`, salvo file già esistenti su disco); M4 authora PER FILE (subset vbp, `[EXISTING TEST FILE]`, dedup by score, riconciliazione orfani→funzioni libere quando orfani ≤ libere, pruning AST dei test non legati nei soli file canonici). **Ordine = struttura**: sort topologico delle micro (inputs→owner) in `_norm`, dopo auto-split/dedup e prima della rinumerazione `P{k}.S{i}`.
+
+**PS6 (A/B ufficiale, 2026-08-02 — report `bench/results/ab_ps6_plansys_official_20260802.md`):** baseline 6/13 vs plansys **2/13** su severino-sim @`11e3502` → **verdetto D11: plansys resta gated OFF**. Ma: fallimenti a −44% di token (636K vs 1.143K), utili +9pt, e le ablazioni (T040–42, tutti 0/3) dimostrano che ogni componente CONTIENE il costo dei fallimenti: senza oracle gate +51%, senza ledger +76%, senza entry gate +50% (quest'ultimo "resta con riserva": lo scenario fasi-ridondanti non si è materializzato). Forbice completed≠verified = 0 su 62 run ufficiali TRANNE 1 (T041, under-scoping del Senior). 5 fix identificati (ESITO PS6 nel piano): gate copertura-richiesta su S, synthesis gate scoped, eccezione canonica solo test_*.py, M4 a 4096 (+regola cap ≥ 1,5×p95 dal DB), bisection regressione baseline. Verdetto riapribile dopo i fix + thinking T-SM (`plan_thinking_ab.md`).
+
+**PS4 (M3–M4 + Oracle Qualification):** `oracle_qualification_gate` (PS-D5) qualifica L'ORACOLO prima che J esista — check: esistenza statica via AST, asserzioni reali (niente `assert True`), aggancio al contratto (CORPO+import, mai il nome del test: un `test_subtract` vuoto si aggancerebbe da solo), scope, **red-baseline** (un `new_behavior` che passa ORA non prova niente; import error su modulo mancante = rosso legittimo), green-baseline sui characterization, copertura criteri, mutation probe assert-flip opzionale. `materialize_tests` = control plane (mai J), Scope dedicato ai path del bundle + syntax gate, **guardia anti-perdita**: sovrascrivere un test file esistente non può far sparire test (i nomi vecchi devono sopravvivere) e M4 riceve `[EXISTING TEST FILE]` col sorgente per fonderli. `compile_phase` = M1→M4 + loop qualificazione (max 2 round; violazioni instradate: contenuto→M4, disegno→M3; patch invalida = round fallito loggato, mai crash). `_SingleShot` gestisce il TRONCAMENTO come dato: un retry con istruzione di produrre meno, poi l'errore sale. Smoke live PS4.3: compile_phase completa in 134s con qualificazione verde al primo colpo; nei run precedenti il ciclo patch/rigenerazione è scattato live su M2 e M4.
+
+**PS3 (M1–M2):** M1/M2 sono SINGLE-SHOT (base `_SingleShot`: una chiamata, un parse — le correzioni vivono nel compiler come patch, PS-D6). `validate_analysis` fa l'anti-invenzione MECCANICA (`involved` deve apparire testualmente nella proiezione); `validate_blueprint` impone ownership ESCLUSIVA dei file e perimetri dal ledger. `PhaseCompiler._repair_loop`: max 2 patch (`_request_patch` → schema `BlueprintPatch`, `_apply_patch` deterministico sulle liste patchabili micro/obligations/decisions/artifacts per id/path) + 1 rigenerazione citando le violazioni + `CompileFailed`. `decision_required` → `NeedsDecision` (analisi comunque persistita). Il ledger ora include il **listato repo come fact (max 40)**: a task fresco è l'unico ancoraggio possibile per gli `involved`. Card: `phase_analyst.md`, `work_decomposer.md`. Smoke live PS3.4 (severino-sim, brownfield csv_tools): M1 25s (involved ancorati, 2 decisioni), M2 20s (ownership esclusiva), blueprint renderizzato.
+
+**PS2 (Senior):** `dag_problems` è l'UNICO validatore di grafi del repo (estratto da `roles/planner.py::validate_plan_logic`, che ora lo importa lazy — messaggi identici a F3); `macro_validation_gate` valida id (C\d+/P\d+), grafo e **copertura totale** (criterio scoperto = piano respinto); `SeniorPlanner.run` = 1 chiamata + 1 richiamata correttiva che cita le REGOLE, poi `MacroRejected`. Card `prompts/roles/senior_planner.md`. Smoke live PS2.3 su severino-sim: 3/3 piani validi (12–34s, copertura sempre totale).
+
+**PS1 (Ledger):** `astscan.py` è l'UNICO estrattore di firme del repo (nato in `scripts/check_reference.py`, spostato qui perché il Ledger Builder usa le stesse firme; lo script ora importa da qui). `build_ledger` = deterministico da DB (tool_calls→file toccati, decisions via `StateStore.list_decisions` aggiunto per questo, ps_gates ko→failure, sottofasi completate→artifact) + AST + test file; `project_for_phase` riempie a budget con ordine normativo (criteri e intent SEMPRE, poi firme/test/decisioni/failure, troncamento dichiarato `[LEDGER TRUNCATED…]`).
+
 ### `redgiant/core/verify.py` — verifica deterministica (F1.6, D10)
 
 Il trust boundary: tutti i check girano sempre; un check di `verification` sconosciuto è un FAIL (silenzio ≠ successo).
@@ -314,15 +416,15 @@ class EvalTask      # id, domain, prompt, repo_dir, plan_file, success_cmd, time
 class EvalResult    # task_id, completed, verified, skipped, total_tokens, useful_tokens,
                     # wall_s, llm_calls, tool_calls, retries
 def discover_tasks(tasks_dir: Path) -> list[EvalTask]
-def run_eval(profile: str, only: list[str] | None, out_dir: Path, use_planner: bool = False) -> Path
-def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path, use_planner: bool = False) -> Path
+def run_eval(profile: str, only: list[str] | None, out_dir: Path, use_planner: bool = False, use_plansys: bool = False) -> Path
+def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path, use_planner: bool = False, use_plansys: bool = False) -> Path
 # F3.5: use_planner=True ignora plan.json (genera il Planner); False = statico o
 # piano "ingenuo" _naive_plan (baseline D11)
 ```
 
 ### `redgiant/web/jobs.py` + `redgiant/web/app.py` — GUI (F2)
 
-JobQueue: UN worker thread (D7), ciclo di vita del server legato al job (container severino-sim su/giù), config per-task su disco (`data/tasks/<id>/task_config.json`: writable_globs, test_commands, plan, approve_writes), riaccodamento automatico dei task queued/running al riavvio. `cancel` cooperativo. `create_app`: rotte HTML/HTMX (tabella F2.2 del piano — inline in app.py: 10 rotte non giustificano un package), template Jinja2 in `web/templates/`, htmx 2.0.4 vendorizzato in `web/static/`. Avvio: `rg serve` o `scripts/start-gui.ps1` (doppio click).
+JobQueue: UN worker thread (D7), ciclo di vita del server legato al job (container severino-sim su/giù), config per-task su disco (`data/tasks/<id>/task_config.json`: writable_globs, test_commands, plan, approve_writes), riaccodamento automatico dei task queued/running al riavvio. `cancel` cooperativo. `create_app`: rotte HTML/HTMX (tabella F2.2 del piano — inline in app.py: 10 rotte non giustificano un package), template Jinja2 in `web/templates/`, htmx 2.0.4 vendorizzato in `web/static/`. Avvio: `rg serve` o `scripts/start-gui.ps1` (doppio click). **PS7.1**: `_run_one` seleziona il driver — `cfg.plansys_enabled` E nessun piano statico (`state.plan is None and not tc.get("plan")`) → `PlanSysEngine`, altrimenti `Orchestrator` (default: `[plansys] enabled=false`). **PS7.2**: rotta `GET /tasks/{task_id}/plan/{name}` (read-only, nome vincolato `[A-Za-z0-9._-]+` — mai path traversal, riuso template log.html, `?tail=`); la pagina task riceve `plan_docs` (stem dei .md in `tasks/<id>/plan/`) e `gates` (righe `ps_gate_history` ✓/✗) — sezioni visibili solo se non vuote, zero impatto sui task naive.
 
 ```python
 def write_task_config(tasks_dir: Path, task_id: str, *, writable_globs: list[str], test_commands: dict[str, list[str]], plan: dict | None = None) -> None
@@ -342,15 +444,15 @@ Tutte le tabelle del piano §A5 esistono da F1 (le CREATE sono idempotenti): `ta
 
 ## 5. Endpoint / rotte
 
-Nessuna rotta nostra (GUI = F2). Endpoint llama-server usati: `POST /completion` (json_schema, cache_prompt, seed), `POST /tokenize`, `GET /props`, `POST /slots/0?action=save|restore` (bench).
+Rotte GUI: tabella F2.2 del piano (inline in `web/app.py`) + **PS7.2**: `GET /tasks/{task_id}/plan/{name}?tail=` (documenti di piano plansys, read-only). Endpoint llama-server usati: `POST /completion` (json_schema, cache_prompt, seed), `POST /tokenize`, `GET /props`, `POST /slots/0?action=save|restore` (bench).
 
 ## 6. Configurazione
 
-V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
+V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità PS0:** sezione `[plansys]` (`enabled=false` PS-D9, `max_phases`, `max_micro_per_phase`, `projection_max_tokens`, `m_pass_max_tokens`, `test_author_max_tokens`, `mutation_probe`) → `Config.plansys_enabled: bool` + `Config.plansys: PlansysCfg`. **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 55 test, nessuno tocca il modello (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
+`tests/unit/` — 80 test, nessuno tocca il modello (delta PS4 in `test_plansys_gates.py`: validate_verification, oracle gate che qualifica l'oracolo buono e respinge tautologie/scollegati/new_behavior-che-passa, validate_bundle; delta PS5 in `test_plansys_compiler.py`: work_order con verification=proof:*, retry gate anti-fotocopia, bookkeeping fasi/eleggibilità/proof-commands) (delta PS2 in `test_plansys_gates.py`: gate macro su copertura/id/grafo, normalize dei sentinelli, richiamata correttiva del Senior con [RULES] e MacroRejected; delta PS3 in `test_plansys_compiler.py`: anti-invenzione M1, ownership esclusiva M2, _apply_patch replace/add/remove con ValueError su target ignoto, flusso patch→rigenerazione→CompileFailed, NeedsDecision con analisi persistita) (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
 | File | Dimostra |
 |---|---|
@@ -412,6 +514,14 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **`depends_on` spazzatura dal Planner** (`["none"]`, `["geometry.py"]`): i sentinelli inequivoci sono riparati da `normalize_plan`; la richiamata correttiva ora cita la regola (`depends_on` solo id di fasi del piano, root = `[]`), non solo i sintomi.
 - **Loop di edit no-op**: `edit_file` con old==new "riusciva" senza cambiare nulla → 15 ripetizioni identiche fino a esaurire gli step, invisibili al guard (ogni chiamata era un successo). Fix doppio: `no_op_edit` è un errore, e la chiamata identica consecutiva conta nel guard cumulativo come `identical_repeat` anche se ok.
 
+**Batch plansys PS4 (smoke live 2026-08-03 — 5 trappole pagate sul campo):**
+
+- **`maxLength` grande = grammatica che uccide il server**: `Field(max_length=4000)` su una stringa diventa una ripetizione GBNF `{0,4000}` che llama-server rifiuta con **400 Bad Request**. I tetti stretti (≤300) reggono; i tetti larghi si tolgono (il limite vero è il budget di generazione).
+- **M2 inventa criteri** (`proves: [C3, C4]` su un piano C1–C2): sentinello inequivoco → strip deterministico prima della validazione (come "none" in depends_on), non un giro di patch.
+- **M4 sovrascrive i test esistenti**: scrivendo il "file completo" perdeva i test già presenti. Guardia deterministica in materializzazione (i nomi vecchi devono sopravvivere) + `[EXISTING TEST FILE]` nel contesto di M4.
+- **Il troncamento nei passi M** va trattato come in F2: un retry con "produce a SMALLER object", poi errore esplicito — alzare il budget all'infinito non è una strategia (2048→3072 per M4 e 1024→1536 per M1-M3 sono i valori misurati).
+- **La patch è una stringa libera dentro uno schema**: `payload_json` non è vincolato dalla grammatica → può essere deforme. La rivalidazione post-patch va SEMPRE try-ata: patch invalida = round fallito loggato, mai crash del compile.
+
 **Rerun A/B ufficiale (2026-08-02, @611d894 — Planner 2/10 vs baseline 9/10: verdetto D11):**
 
 - **Auto-dipendenza del Planner** (`P1 depends on P1`): altro sentinello dopo "none" — 2 task morti in 2 chiamate. Riparato in `normalize_plan` (dep == id → rimossa).
@@ -419,6 +529,28 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **Fasi ridondanti**: su task banali il Planner genera 3-4 fasi che ripetono lo stesso lavoro (P2 che ricerca ciò che P1 ha già trovato) — costo puro, nessun guadagno. È il volto strutturale dell'overhead di governance, non un bug puntuale.
 - **Sottofasi-analisi artificiali**: la revisione scoped spinge il Designer a creare sottofasi "analizza e produci report.txt" con output che il Worker non produce naturalmente → 3 tentativi bloccati → replan. Il perimetro giusto non basta: gli expected_outputs devono essere artefatti del lavoro vero, non compiti in classe.
 - **La verifica scoped sposta l'errore in avanti**: T009 rerun — P1.S1 "passa" sugli expected_outputs ma contiene `slugify` invece di `slug`; il falso positivo intermedio esplode solo sull'ultima sottofase. Trade-off accettato consapevolmente (F3.2-REVISIONE), ora con la sua prima evidenza di costo.
+
+**Piloti PS5 + BATCH20 n.1–8 (2026-08-01/02, ~130 run end-to-end — la campagna che ha prodotto PS-D11 e le finding F15–F18 del README):**
+
+- **⭐ La `tasks_dir` dentro la workdir inquina i prompt** (batch n.5): log/blueprint/ledger con ULID per-run entravano nei listati (`_existing_files`, fatti del ledger, `_repo_listing`) → prompt diversi a ogni run → seed 42 irrilevante. Esclusa ovunque. Corollario: su GPU il seed fisso NON è determinismo comunque (batching CUDA) — i batch GPU classificano famiglie, i numeri comparabili sono solo severino-sim.
+- **⭐ M1 inventa i nomi dei file** (6/20 nel batch n.1): enum GBNF dei file ESISTENTI su `involved` → famiglia a zero da allora. Stessa medicina su M2 (files/proves), M3 (micro_id/cmd), M4 (path), patch (target).
+- **⭐ M3 nomina test_X, M4 scrive test_Y** (11/20 nel batch n.3): i nomi canonici li impone il control plane (`P1.S1.O1 → test_p1_s1.py::test_p1_s1_o1`) — il modello crea il significato, il control plane l'identità.
+- **⭐ Test new_behavior verdi a modulo assente** (5/20 nel batch n.7): import del bersaglio dentro la funzione o in try/except → la red baseline non può fallire. Obbligo di import TOP-LEVEL in `validate_bundle` → 0/20 al batch n.8.
+- **⭐ Proof con import irrisolvibili = sessione J invincibile by design** (pilota n.3): il test importava un modulo che NESSUNA micro possiede. Check "ghost imports" in `validate_bundle` (stdlib+pytest+esistenti+micro precedenti).
+- **Micro ordinate col deposito invertito** (pilota n.1): storage.py schedulata prima di models.py → J 4 step contro lo scope. Sort topologico inputs→owner in `_norm`.
+- **J importa moduli futuri** (pilota n.2): `import storage` prima che storage.py esistesse. Riga IMPORTS nel work order coi moduli locali esistenti.
+- **La prosa comanda più dello scope** (pilota n.4): goal "create both storage.py and report.py" su micro che possiede solo report.py → J insegue la prosa. `validate_blueprint`: goal/boundary citano solo file del perimetro.
+- **J sovrascrive i test qualificati** (pilota n.18 pre-batch): PS-D4 era solo scritto. Scope fisico per-micro (`Scope(root, files_owned)`) — il perimetro applicato meccanicamente.
+- **Covers duplicati → proves oltre il tetto → crash** (batch n.5 run 11): dedup in `normalize_macro` + guardia `len<8` nell'auto-assegnazione. Corollario generale: ogni lista che il control plane riempie automaticamente deve rispettare i tetti degli schemi.
+- **La patch eredita il budget del chiamante** (batch n.7 run 15): `_request_patch` con budget m_pass troncava i payload di M4 (file interi). `max_tokens` passato dal `_repair_loop`.
+- **Micro multi-file = contesto esploso** (7674 tok): cap meccanico 1 file nuovo/micro + AUTO-SPLIT dal control plane con rinumerazione (la patch non sa "dividere"; il codice sì).
+- **Il retry cieco fotocopia**: senza l'output del test fallito J riproduce lo stesso errore. `[PREVIOUS ATTEMPT FAILED]` con la coda del proof — spesso comunque non basta (limite di capacità, F18): la fotocopia resta vietata.
+- **PhaseAlreadySatisfied ingannato dai test vuoti**: richiede anche che i files_owned esistano, non solo proofs verdi.
+- **⭐ Il synthesis gate su suite fornita multi-fase è morte certa a P1** (A/B ufficiale: 3 morti su 13 — T007, T010, T040): `synthesis_cmds=pytest` esegue TUTTA la suite alla chiusura della fase, ma i test delle fasi future sono rossi per definizione. Fix a piano (ESITO PS6): sintesi SCOPED (proof della fase + test delle fasi già chiuse), suite piena solo al coverage finale.
+- **⭐ Il Senior sottodimensiona la richiesta e nessun gate se ne accorge** (T041 ufficiale, l'unica forbice completed≠verified): criteri = un terzo della richiesta, coverage interno verde, giudice esterno `No module named 'hist'`. Fix a piano: i file NOMINATI nella richiesta devono comparire negli artifacts di qualche fase (gate deterministico su S).
+- **L'eccezione "test_file esistente" dei nomi canonici tiene anche file non-py** (T003 ufficiale: M3 punta a `test.php` esistente → non canonicalizzato → morte in repair). Fix a piano: eccezione solo per `test_*.py` esistenti.
+- **⭐ Varianza run-to-run ANCHE su severino-sim** (ri-misura PS6-bis: baseline 6/13→8/13 a codice IDENTICO, 4 task flippati): lo stato della cache del server cambia i numeri (llama.cpp #2838: prompt valutato a freddo ≠ con cache, numericamente) — banda **±2/13**. Regola permanente: verdetti ufficiali SOLO su run multiple mediate; le diagnosi "è il codice, non il rumore" su run singola sono vietate (già costata una diagnosi troppo sicura sulla regressione 9/10→6/10, da rifare come bisection multi-run).
+- **Residuo NON risolto (il muro, F18)**: ~metà delle morti residue è J che non riproduce i formati esatti chiesti dai proof (report/storage) pur vedendo sorgente dei test e assertion diff; gli f-string annidati restano una debolezza riconosciuta ma non attuata dal modello (hint + regola 12 della card). Leva proposta e in attesa di decisione: emendamento PS-D6 (un tentativo informato in più prima del blocco fotocopia).
 
 ## 10. Debito tecnico aperto
 
