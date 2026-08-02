@@ -94,6 +94,42 @@ This section records the engineering findings produced while building Red Giant.
 - **F8 — Planning governance must earn its keep; measured twice, it has not — but the *cost of failing* tells a different story.** *(measured, verdict standing)* The in-loop planner lost its A/B outright (**2/10 vs 9/10** for the naive baseline, 815K vs 710K tokens) and was gated off. Its redesigned successor — a plan *compiler* behind deterministic gates (S/M/J) — was then measured on a harder battery including three genuinely multi-session tasks: **2/13 vs 6/13**, with both arms at **0/3 on the wide tasks** — so it stays gated. What the rebuilt system *does* buy, measured: failures cost **44% fewer tokens** (636K vs 1,143K, equal wall time), useful-token share +9pt, and component ablations show each gate pays for itself in failure containment (removing oracle qualification, the task ledger, or the entry gate raises failure cost by **+51% / +76% / +50%** respectively). Three of the wide-task deaths traced to fixable control-plane defects, not model limits; the verdict reopens after those fixes plus a controlled thinking-mode experiment on the planning roles.
 - **F9 — Token accounting must be explicit, compact and clamped.** *(engineering safeguard)* Compact JSON (no pretty-printing, in either direction) saved 20–30% of output tokens with no measured quality loss. And budget math must clamp against runtime cache reporting: the server can report more cached tokens than the prompt count, naive `prompt − cached` goes negative, and a summed budget silently *disables itself* — work is charged as `max(prompt − cached, 0) + generated` per call.
 
+### 📏 The scoreboard — every official A/B, in numbers
+
+All runs on the CPU reference profile (`severino-sim`), committed code only, external judges. This is the evidence the thesis stands on — including the parts it does *not* yet support.
+
+**Where the floor HAS been raised, measured** (same model, same hardware — only the workflow changed):
+
+| Lever | Without | With | Finding |
+|---|---|---|---|
+| Edit interface adapted to the model (diff → exact-string) | 20+ failing calls per fix | **5–6 clean calls** | F1 |
+| Schema shown in prompt (grammar alone) | **0/60** semantically usable | **60/60** | F3 |
+| Structural derail recovery (discriminated unions) | 60-call chaos loop | **8/8 probes recovered** | F4 |
+| Stable prompt prefixes (append-only loops) | 7,971 tokens reprocessed on one changed byte | **65 tokens** | F10 |
+| Identity decisions moved to control plane | invented files 6/20 · name mismatches 11/20 · oracle-fooling tests 5/20 | **0 · 0 · 0** | F15 |
+| False success claims (verification-first, both directions) | — | **1 gap in 35 official A/B runs**, cause diagnosed and gated | F13/F18 |
+
+**Where it has NOT been raised (yet) — the planning A/Bs, honestly:**
+
+| Official run (severino-sim) | Verified | Tokens | Useful % | Wall |
+|---|---|---|---|---|
+| F3 A/B — baseline static | **9/10** | 710K | — | — |
+| F3 A/B — in-loop planner | 2/10 | 815K (~10× LLM calls) | — | — |
+| PS6 A/B — baseline naive (13 tasks) | **6/13** | 1,143K | 20.8% | 2,610s |
+| PS6 A/B — S/M/J plan compiler (13 tasks) | 2/13 | **636K (−44%)** | **30.2%** | 2,632s |
+| PS6 — both arms on the 3 multi-session tasks | **0/3 vs 0/3** | 387K vs 192K | — | — |
+
+**Component ablations** (plan compiler, 3 wide tasks — all arms 0/3, so the comparison is the *cost of failing*):
+
+| Configuration | Tokens | vs full system |
+|---|---|---|
+| Full S/M/J compiler | 192K | — |
+| − oracle qualification gate | 290K | **+51%** |
+| − task ledger | 338K | **+76%** |
+| − phase entry gate | 288K | **+50%** |
+
+Reading: at the *step* level the workflow demonstrably turns an unreliable 2B into a reliable executor (first table). At the *plan* level the governance does not yet convert wide tasks — it makes failure **honest** (completed≠verified gap ≈ 0) and **cheap** (−44% tokens; every gate pays for itself in containment), which is the precondition for the next lever (explicit reasoning for the planning roles) to be measurable at all. The verdict stays: planner gated off until it wins its A/B.
+
 ### ♻️ KV-cache reuse and prefill engineering
 
 - **F10 — Prefix instability dominated agent-loop cost in the tested CPU setup.** *(measured confirmation — the strongest numbers in this repository)* Cold prefill on target-equivalent cores: 6.8s @ 1K → 30.7s @ 4K → 69.6s @ 8K → **173.6s @ 16K** of context; generation is memory-bound at 35.8 tok/s. Against that physics, call count alone predicted latency poorly: an 88-call append-only session incurred only **~82s of total prefill**, while changing one byte inside the shared prefix raised reprocessing from **65 to 7,971 tokens** (~120×). This supports treating prompt layout — stable prefixes, append-only agent loops — as part of the runtime architecture, not as prompt style.
