@@ -18,6 +18,18 @@ from redgiant.tools.base import Scope, ToolResult
 _MAX_LINES = 400
 
 
+def syntax_hint(detail: str) -> str:
+    """Pilota PS5 #15: l'errore deve INSEGNARE (D4 del README). Le f-string
+    con apici/newline annidati sono il modo tipico in cui un modello piccolo
+    rompe la sintassi serializzando codice dentro JSON: 8 retry identici
+    osservati. Il suggerimento mirato spezza il loop."""
+    low = detail.lower()
+    if "unterminated" in low or "f-string" in low:
+        return (" HINT: avoid f-strings with nested quotes or newlines - "
+                "build the string with concatenation or .format() instead.")
+    return ""
+
+
 def syntax_check(path: Path, content: str) -> str | None:
     """Syntax gate (§A7, richiesta utente pre-F2): messaggio d'errore o None se ok.
 
@@ -179,7 +191,8 @@ def edit_file(scope: Scope, path: str, old_string: str, new_string: str,
     if err is not None:
         return ToolResult(ok=False, data={"detail": err,
                                           "hint": "edit NOT applied: it would break the "
-                                                  "file's syntax. Fix new_string and retry."},
+                                                  "file's syntax. Fix new_string and retry."
+                                                  + syntax_hint(err)},
                           error="syntax_error")
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgedit")
     try:
@@ -215,7 +228,8 @@ def write_file(scope: Scope, path: str, content: str) -> ToolResult:
     if err is not None:
         return ToolResult(ok=False, data={"detail": err,
                                           "hint": "file NOT written: content has a syntax "
-                                                  "error. Fix it and retry."},
+                                                  "error. Fix it and retry."
+                                                  + syntax_hint(err)},
                           error="syntax_error")
     existed = real.is_file()
     real.parent.mkdir(parents=True, exist_ok=True)

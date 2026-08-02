@@ -1,0 +1,14 @@
+id = "T040"
+domain = "coding"
+prompt = "Build the three missing modules of this data tool: parser.py, transform.py and report.py. The provided test suite (test_parser.py, test_transform.py, test_report.py) defines the exact contracts and must pass in full. The modules build on each other: report uses transform, transform uses parser's row format."
+success_cmd = "pytest -q"
+timeout_s = 5400
+tags = ["multi-phase", "python", "greenfield", "plansys"]
+writable_globs = ["parser.py", "transform.py", "report.py", "test_*.py"]
+
+# PS6.1: progettato per NON stare in una singola sessione Worker (~20 step):
+# tre moduli interdipendenti, 18 test su 3 file. Se la baseline lo chiude, il
+# task e' troppo piccolo e va rifatto (criterio di accettazione del piano).
+
+[test_commands]
+pytest = ["pytest", "-q"]

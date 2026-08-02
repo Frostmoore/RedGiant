@@ -22,3 +22,13 @@ Rules:
    outcome ("the provided test suite passes") instead of naming APIs.
 6. Most tasks need 2-4 phases; one phase is legitimate for narrow tasks.
    Split phases where their outcomes are independently checkable.
+
+Minimal example of a VALID plan (format reference - use the real task's
+content, never these placeholder words):
+
+{"goal": "Add a merge function to csv_tools with tests",
+ "criteria": [{"id": "C1", "text": "merge() exists in csv_tools.py"},
+              {"id": "C2", "text": "pytest passes on the whole suite"}],
+ "phases": [{"id": "P1", "title": "Implement merge",
+             "intent": "csv_tools.py gains merge and tests prove it",
+             "depends_on": [], "covers": ["C1", "C2"]}]}

@@ -1,0 +1,14 @@
+id = "T041"
+domain = "coding"
+prompt = "Add a stats.py module to this tool: mean(values) -> float, median(values) -> float (average of the two middle values for even length), and spread(values) -> float (max - min). Each raises ValueError on an empty list. Write tests that prove each behaviour; pytest must pass. Do not modify judge.py."
+success_cmd = "python judge.py"
+timeout_s = 3600
+tags = ["feature", "python", "no-tests-given", "plansys"]
+writable_globs = ["stats.py", "test_*.py"]
+
+# PS6.1: NESSUN test fornito — il sistema deve scriverseli (M4) e qualificarli;
+# il giudice esterno (judge.py, non scrivibile) e' indipendente dai test
+# dell'imputato: verifica i comportamenti direttamente.
+
+[test_commands]
+pytest = ["pytest", "-q"]

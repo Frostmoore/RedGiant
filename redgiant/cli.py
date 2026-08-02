@@ -22,7 +22,9 @@ def main(argv: list[str] | None = None) -> int:
     p_run = sub.add_parser("run", help="esegue un task (piano statico in F1)")
     p_run.add_argument("--target", required=True, help="directory bersaglio")
     p_run.add_argument("--prompt", required=True)
-    p_run.add_argument("--plan", required=True, help="plan.json statico")
+    p_run.add_argument("--plan", default=None, help="plan.json statico")
+    p_run.add_argument("--plansys", action="store_true",
+                       help="PS5: pianificazione S/M/J + gate (senza plan.json)")
     p_run.add_argument("--profile", default="dev-fast")
     p_run.add_argument("--domain", default="coding")
     p_run.add_argument("--writable", nargs="*", default=[],
@@ -40,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
     p_eval.add_argument("--out", type=Path, default=Path("bench/results"))
     p_eval.add_argument("--planner", action="store_true",
                         help="F3: il piano lo genera il Planner (A/B vs baseline statica)")
+    p_eval.add_argument("--plansys", action="store_true",
+                        help="PS6: pianificazione S/M/J + gate (A/B vs baseline)")
 
     p_bench = sub.add_parser("bench", help="wrapper di bench/run_bench.py")
     p_bench.add_argument("--profile", required=True)
@@ -77,11 +81,19 @@ def _run(ns: argparse.Namespace) -> int:
 
     scope = Scope(Path(ns.target), ns.writable)
     router = ToolRouter(default_catalog(cfg, scope, test_commands), scope, store)
-    orch = Orchestrator(cfg, store, llm, router, PromptAssembler(_PROMPTS_DIR))
+    if ns.plansys:
+        from redgiant.plansys.engine import PlanSysEngine
+        orch = PlanSysEngine(cfg, store, llm, router, PromptAssembler(_PROMPTS_DIR))
+    else:
+        if ns.plan is None:
+            print("serve --plan (statico) oppure --plansys")
+            return 2
+        orch = Orchestrator(cfg, store, llm, router, PromptAssembler(_PROMPTS_DIR))
 
     tid = store.create_task(ns.prompt, ns.target, ns.profile,
                             Budget(**vars(cfg.budget)))
-    load_static_plan(store, tid, Path(ns.plan))
+    if not ns.plansys:
+        load_static_plan(store, tid, Path(ns.plan))
     print(f"task {tid} avviato (profilo {ns.profile})")
     state = orch.run_task(tid)
     print(f"esito: {state.status}")
@@ -126,7 +138,8 @@ def _print_tree(store, task_id: str) -> None:
 def _eval(ns: argparse.Namespace) -> int:
     from redgiant.eval.harness import run_eval
     only = ns.only.split(",") if ns.only else None
-    report = run_eval(ns.profile, only, ns.out, use_planner=ns.planner)
+    report = run_eval(ns.profile, only, ns.out, use_planner=ns.planner,
+                      use_plansys=ns.plansys)
     print(f"report: {report}")
     print(Path(report).read_text(encoding="utf-8"))
     return 0

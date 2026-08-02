@@ -82,6 +82,7 @@ Stesse regole del piano padre, che qui si richiamano per contratto:
 
 - **Enunciato:** ogni decisione progettuale di M appare in `PhaseAnalysis.decisions` (decisione, alternative scartate, vincolo determinante, conseguenze). Quando né codebase né piano determinano una scelta, M emette `decision_required` (domanda, opzioni con conseguenze, raccomandazione): il control plane la instrada sul canale clarification ESISTENTE (tabella `approvals`, kind `clarification`, GUI F2.3) — l'utente risponde, la risposta diventa una decisione registrata. M non inventa mai in silenzio.
 - **Perché:** il Junior che riceve contratti "precisi" basati su decisioni invisibili non può correggerle senza riscrivere tutto; e l'utente ha già un canale di consenso rodato — si riusa, non si duplica.
+- **Policy per run non presidiate (aggiunta PS5, dal pilota):** nell'eval (`RG_PLANSYS_AUTODECIDE=recommended`) il choice point si auto-decide sulla RACCOMANDATA di M1, registrata in `decisions` (actor `policy:autodecide`) e nel canale approvals come clarification già risposta — mai silenziosa, max 2 per fase poi blocked vero. È il "default versionato" previsto da questa decisione.
 
 ### PS-D9 — D11 vale anche qui: A/B su task multi-fase, con ablation
 
@@ -181,7 +182,10 @@ class MicroPhase(BaseModel):
     id: str                                  # "P2.S1"
     title: str = Field(max_length=80)
     work: WorkContract
-    proves: list[str] = Field(max_length=4)  # id di Criterion a cui contribuisce
+    proves: list[str] = Field(max_length=8)  # id di Criterion a cui contribuisce
+                                             # (REVISIONE fast #5: 4→8 — con la coverage_chain
+                                             # una micro sola deve poter provare tutti i criteri
+                                             # di una fase, che possono essere fino a 8)
 class PhaseBlueprint(BaseModel):
     phase_id: str
     micro: list[MicroPhase] = Field(min_length=1, max_length=6)
@@ -460,7 +464,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
       def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> MacroPlan
   ```
   Card (EN, regole — lezione F6 del README: ogni regola del validatore ha la sua frase): phases describe OUTCOMES, never operations; criteria are observable facts with stable ids C1..; every phase covers ≥1 criterion; depends_on lists ONLY phase ids from THIS plan, root = []; no ceremony phases; copy identifiers verbatim from CONTEXT, never invent (contract anchoring: la proiezione iniziale contiene il listato repo + estratti dei test se esistono).
-- **Accettazione:** su fixture di richiesta larga, output valido alle validazioni sotto in ≤2 chiamate (1 correttiva ammessa).
+- **Accettazione:** su fixture di richiesta larga, output valido alle validazioni sotto in ≤2 chiamate (1 correttiva ammessa). *(REVISIONE fast #4: correttive del Senior 1→2 — la coverage è l'errore più meccanicamente correggibile e una sola richiamata perdeva task interi sulle code di instabilità; costo marginale solo quando serve)*
 
 #### PS2.2 — Macro validation gate
 
@@ -560,7 +564,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS5.1 — Work order per J
 
-- [ ] 🤖 **Obiettivo:** la conversione MicroPhase+obblighi → `SubtaskSpec` ESISTENTE (J non cambia):
+- [x] 🤖 **Obiettivo:** la conversione MicroPhase+obblighi → `SubtaskSpec` ESISTENTE (J non cambia):
   ```python
   # engine.py
   def work_order(micro: MicroPhase, vbp: VerificationBlueprint) -> SubtaskSpec
@@ -573,21 +577,24 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS5.2 — Micro gate + retry gate
 
-- [ ] 🤖 **Obiettivo:** in `gates.py`:
+- [x] 🤖 **Obiettivo:** in `gates.py`:
   ```python
-  def micro_gate(spec: SubtaskSpec, report: FinishReport, scope: Scope,
-                 router: ToolRouter, task_id: str) -> GateReport      # verify_subtask + wrap
-  def retry_gate(prev_failed_checks: list[str], new_volatile: str) -> GateReport
-      # il retry DEVE differire: new_volatile contiene [PREVIOUS ATTEMPT FAILED] con i check
-      # falliti E un'istruzione emendata NON identica alla precedente (confronto stringa
-      # normalizzata); fotocopia → gate ko → si salta il retry e si fallisce la micro
+  def micro_gate(verdict_ok: bool, target: str, checks: list[CheckResult]) -> GateReport
+  def failure_signature(failed_checks: list[str], summary: str) -> str
+  def retry_gate(prev_sig: str | None, new_sig: str) -> GateReport
   ```
+  **REVISIONE PS5 (firma cambiata QUI prima del codice, regola di direzione):** il retry gate
+  confronta le **firme di fallimento consecutive** (check falliti + sintesi normalizzata),
+  non le istruzioni emendate — misura l'ESITO, non l'intenzione: stessa firma due volte di
+  fila = fotocopia vietata → micro `failed` esplicita. L'emendamento informativo del contesto
+  ([PREVIOUS ATTEMPT FAILED] + check) è già prodotto da `_execute_subtask` ereditato. `micro_gate`
+  è l'involucro del Verdict di `verify_subtask` (che l'engine ottiene via `_execute_subtask`).
   L'emendamento è deterministico in v1 (template dai check falliti: quali file, quale assert, quale exit code — informazione, non strategia); la strategia generata è del Supervisor del piano padre (F4), non di questo sistema.
 - **Accettazione:** unit: retry identico bloccato; retry emendato passa; micro con obbligo rosso → gate ko coi check.
 
 #### PS5.3 — PlanSysEngine
 
-- [ ] 🤖 **Obiettivo:** `engine.py`:
+- [x] 🤖 **Obiettivo:** `engine.py`: *(implementato come SOTTOCLASSE dell'Orchestrator — eredita ripresa orfani, esecuzione sottofase con resume in-place, budget-consenso e finalize: il collaudato di F1/F2 non si riscrive)*
   ```python
   class PlanSysEngine:
       def __init__(self, cfg: Config, store: StateStore, llm: LlamaClient,
@@ -605,7 +612,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS5.4 — CLI
 
-- [ ] 🤖 **Obiettivo:** `rg eval --plansys` (harness: `dataclasses.replace(cfg, plansys_enabled=True)` + engine al posto dell'orchestrator quando attivo) e `rg run --plansys` per il pilota manuale.
+- [x] 🤖 **Obiettivo:** `rg eval --plansys` (harness: `dataclasses.replace(cfg, plansys_enabled=True)` + engine al posto dell'orchestrator quando attivo) e `rg run --plansys` per il pilota manuale. *(+ leva ablation PS6.2 via env `RG_PLANSYS_ABLATE`, solo A/B)*
 - **Accettazione:** `rg eval --plansys --only T040` parte e usa l'engine (verificabile dal log: righe `senior`/`compiler`/`gate`).
 
 #### PS5.5 — 🔎 Verifica di fase
@@ -631,7 +638,7 @@ Identico nella sostanza al piano padre, adattato nei riferimenti. Al completamen
 
 #### PS6.2 — 📌 A/B + ablation
 
-- [ ] 🤖 **Obiettivo:** run ufficiali (severino-sim, codice committato, regola F3): (A) baseline naive su T001–T010 + T040–T042; (B) plansys completo, stesso set; ablation su T040–T042: (B1) senza oracle qualification (gate bypass, flag di test); (B2) senza ledger/projection (proiezione = listato repo grezzo); (B3) senza phase entry gate. Report con le 5 metriche cardine + le metriche PS-D9 (token di governance, test deboli respinti, retry fotocopia bloccati, criteri coperti, lavoro duplicato).
+- [ ] 🤖 **Obiettivo:** run ufficiali (severino-sim, codice committato, regola F3): (A) baseline naive su T001–T010 + T040–T042; (B) plansys completo, stesso set; ablation su T040–T042: (B1) senza oracle qualification (gate bypass, flag di test); (B2) senza ledger/projection (proiezione = listato repo grezzo); (B3) senza phase entry gate. *(meccanica ablation decisa in implementazione: env var `RG_PLANSYS_ABLATE` ∈ {oracle, ledger, entry}, helper `plansys.ablated()` — leva di solo-A/B, mai in produzione: non tocca il contratto config)* Report con le 5 metriche cardine + le metriche PS-D9 (token di governance, test deboli respinti, retry fotocopia bloccati, criteri coperti, lavoro duplicato).
 - **Accettazione:** report committato in `bench/results/` con conclusione scritta per componente (resta / esce / resta con riserva); atlante §8-bis aggiornato; **README aggiornato** (finding F8 riscritta coi numeri nuovi, qualunque essi siano).
 
 #### PS6.3 — 🔎 Verifica di fase

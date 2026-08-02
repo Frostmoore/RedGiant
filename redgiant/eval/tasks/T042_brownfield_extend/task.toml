@@ -1,0 +1,13 @@
+id = "T042"
+domain = "coding"
+prompt = "Add a 'count' command to this notes tool, following the conventions of the existing commands exactly: a module in commands/ with NAME, HELP and run(notes, args), registered via registry.register at import time, and imported in commands/__init__.py. run returns the number of notes. The whole suite, including the provided test_count.py, must pass without breaking the existing tests."
+success_cmd = "pytest -q"
+timeout_s = 3600
+tags = ["brownfield", "python", "conventions", "plansys"]
+writable_globs = ["commands/*.py", "test_*.py"]
+
+# PS6.1: brownfield ~13 file con convenzioni proprie — misura il ledger e la
+# proiezione (senza, il modello ri-esplora; con, consulta le firme reali).
+
+[test_commands]
+pytest = ["pytest", "-q"]

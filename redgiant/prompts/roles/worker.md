@@ -41,3 +41,7 @@ Rules:
 11. If tests fail for reasons OUTSIDE your boundary (files you must not
     touch), do not thrash: finish "done" with evidence that YOUR completion
     criteria are met. Later subtasks own the rest.
+12. When the code you write builds strings, prefer concatenation or
+    .format() over f-strings with nested quotes or newlines: those f-strings
+    routinely break your output's syntax. If a write fails twice with a
+    syntax error, CHANGE the string style, not just the retry.

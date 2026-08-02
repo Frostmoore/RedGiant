@@ -40,6 +40,16 @@ class CompileFailed(Exception):
         super().__init__(f"{step}: " + "; ".join(problems))
 
 
+class PhaseAlreadySatisfied(Exception):
+    """Pilota PS5: se TUTTE le prove new_behavior di una fase sono GIA' verdi
+    prima di J, la fase e' gia' soddisfatta (fase-ridondante scoperta
+    post-compile) — si chiude a costo zero, come l'entry gate."""
+
+    def __init__(self, phase_id: str) -> None:
+        self.phase_id = phase_id
+        super().__init__(phase_id)
+
+
 class NeedsDecision(Exception):
     """PS-D8: M1 ha emesso decision_required — il chiamante instrada la
     clarification sul canale approvals esistente e sospende la compilazione."""
@@ -73,29 +83,65 @@ class PhaseCompiler:
     # ── passi M1/M2 (PS3; M3/M4 in PS4) ─────────────────────────────────────
 
     def projection(self, task_id: str, plan: MacroPlan, phase: MacroPhase) -> str:
-        ledger = build_ledger(self.store, self.scope, task_id)
-        write_plan_doc(self.cfg.paths.tasks_dir, task_id, "ledger",
-                       render_ledger(ledger))
-        proj = project_for_phase(ledger, plan, phase.id,
-                                 self.cfg.plansys.projection_max_tokens,
-                                 self.llm.count_tokens)
+        from redgiant.plansys import ablated
+        if ablated("ledger"):
+            # ablation B2: listato grezzo al posto della proiezione del ledger
+            files = [p.relative_to(self.scope.root).as_posix()
+                     for p in sorted(self.scope.root.rglob("*"))
+                     if p.is_file()][:40]
+            crit = {c.id: c.text for c in plan.criteria}
+            proj = "\n".join(
+                [f"[PHASE] {phase.id} — {phase.title}: {phase.intent}"]
+                + [f"[CRITERION] {cid}: {crit[cid]}" for cid in phase.covers
+                   if cid in crit]
+                + [f"[FILE] {f}" for f in files])
+        else:
+            ledger = build_ledger(self.store, self.scope, task_id)
+            write_plan_doc(self.cfg.paths.tasks_dir, task_id, "ledger",
+                           render_ledger(ledger))
+            proj = project_for_phase(ledger, plan, phase.id,
+                                     self.cfg.plansys.projection_max_tokens,
+                                     self.llm.count_tokens)
         answer = self.store.latest_clarification_answer(task_id)
         if answer:
             proj += f"\n[USER ANSWER] {answer}"
         return proj
 
+    def _existing_files(self) -> list[str]:
+        out: list[str] = []
+        for p in sorted(self.scope.root.rglob("*")):
+            if p.is_file() and ".git" not in p.parts and p.suffix not in (
+                    ".db", ".rgedit", ".rgwrite"):
+                out.append(p.relative_to(self.scope.root).as_posix())
+            if len(out) >= 60:
+                break
+        return out
+
     def analyze(self, task_id: str, plan: MacroPlan, phase: MacroPhase,
                 projection: str, log) -> PhaseAnalysis:
         state = self.store.load_task(task_id)
+        existing = self._existing_files()
         volatile = (f"{projection}\n[MACRO PHASE] {phase.id} — {phase.title}: "
-                    f"{phase.intent} (covers: {', '.join(phase.covers)})")
+                    f"{phase.intent} (covers: {', '.join(phase.covers)})"
+                    f"\n[ALLOWED involved] only these existing files: "
+                    f"{', '.join(existing) or '(repo empty: leave involved [])'}")
         ctx = RoleContext(task=state, subtask=None, volatile=volatile)
         role = PhaseAnalyst(self.llm, self.assembler, self.router)
+        grammar = self._enum_schema(PhaseAnalysis,
+                                    [(None, "involved", existing, True)])
+
+        def _norm_paths(a: PhaseAnalysis) -> PhaseAnalysis:
+            a.artifacts = [self._relativize(f) for f in a.artifacts]
+            a.involved = [self._relativize(f) for f in a.involved]
+            return a
+
         out: PhaseAnalysis = role.run(
-            ctx, max_tokens=self.cfg.plansys.m_pass_max_tokens)  # type: ignore
-        out = self._repair_loop("M1", role, ctx, out, PhaseAnalysis,
-                                lambda a: validate_analysis(a, volatile, phase.id),
-                                log)
+            ctx, max_tokens=self.cfg.plansys.m_pass_max_tokens,
+            grammar_schema=grammar)  # type: ignore
+        out = self._repair_loop(
+            "M1", role, ctx, out, PhaseAnalysis,
+            lambda a: validate_analysis(_norm_paths(a), volatile, phase.id), log,
+            grammar_schema=grammar)
         if out.decision_required is not None:
             self.store.save_ps_artifact(
                 task_id, kind="phase_analysis", ref=phase.id,
@@ -111,9 +157,22 @@ class PhaseCompiler:
     def decompose(self, task_id: str, phase: MacroPhase, analysis: PhaseAnalysis,
                   projection: str, log) -> PhaseBlueprint:
         state = self.store.load_task(task_id)
-        volatile = (f"{projection}\n[ANALYSIS] {analysis.model_dump_json()}")
+        allowed_files = sorted(set(self._existing_files())
+                               | set(analysis.artifacts)
+                               | set(analysis.involved))
+        allowed_files = [f for f in allowed_files
+                         if not f.rsplit("/", 1)[-1].startswith("test_")]
+        volatile = (f"{projection}\n[ANALYSIS] {analysis.model_dump_json()}"
+                    f"\n[ALLOWED files_owned/inputs/outputs] "
+                    f"{', '.join(allowed_files)}"
+                    f"\n[ALLOWED proves] {', '.join(phase.covers)}")
         ctx = RoleContext(task=state, subtask=None, volatile=volatile)
         role = WorkDecomposer(self.llm, self.assembler, self.router)
+        grammar = self._enum_schema(PhaseBlueprint, [
+            ("WorkContract", "files_owned", allowed_files, True),
+            ("WorkContract", "inputs", allowed_files, True),
+            ("WorkContract", "outputs", allowed_files, True),
+            ("MicroPhase", "proves", list(phase.covers), True)])
 
         def _norm(b: PhaseBlueprint) -> PhaseBlueprint:
             # Smoke PS4.3: M2 inventa criteri mai esistiti (C3/C4 su un piano
@@ -121,13 +180,30 @@ class PhaseCompiler:
             # riparazione deterministica, non un giro di patch.
             for m in b.micro:
                 m.proves = [c for c in m.proves if c in phase.covers]
+                m.work.files_owned = [self._relativize(f)
+                                      for f in m.work.files_owned]
+                m.work.inputs = [self._relativize(f) for f in m.work.inputs]
+                m.work.outputs = [self._relativize(f) for f in m.work.outputs]
+            # fast #6: con UNA sola micro l'assegnazione dei criteri orfani e'
+            # INEQUIVOCA (possono andare solo li'): riparazione deterministica.
+            # Con piu' micro resta una scelta di design -> violazione a M2.
+            if len(b.micro) == 1:
+                only = b.micro[0]
+                for c in phase.covers:
+                    if c not in only.proves:
+                        only.proves.append(c)
             return b
 
+        existing = {p.relative_to(self.scope.root).as_posix()
+                    for p in self.scope.root.rglob("*.py") if p.is_file()}
         out: PhaseBlueprint = role.run(
-            ctx, max_tokens=self.cfg.plansys.m_pass_max_tokens)  # type: ignore
+            ctx, max_tokens=self.cfg.plansys.m_pass_max_tokens,
+            grammar_schema=grammar)  # type: ignore
         out = self._repair_loop(
             "M2", role, ctx, out, PhaseBlueprint,
-            lambda b: validate_blueprint(_norm(b), analysis, phase.covers), log)
+            lambda b: validate_blueprint(_norm(b), analysis, phase.covers,
+                                         existing), log,
+            grammar_schema=grammar)
         self.store.save_ps_artifact(task_id, kind="phase_blueprint", ref=phase.id,
                                     payload_json=out.model_dump_json(),
                                     actor="phase_compiler")
@@ -147,15 +223,37 @@ class PhaseCompiler:
                             log) -> VerificationBlueprint:
         known = self._known_cmd_ids()
         state = self.store.load_task(task_id)
+        micro_ids = [m.id for m in bp.micro]
         volatile = (f"{projection}\n[BLUEPRINT] {bp.model_dump_json()}"
-                    f"\n[KNOWN TEST COMMANDS] {sorted(known)}")
+                    f"\n[KNOWN TEST COMMANDS] {sorted(known)}"
+                    f"\n[ALLOWED micro_id] {', '.join(micro_ids)}")
         ctx = RoleContext(task=state, subtask=None, volatile=volatile)
         role = VerificationDesigner(self.llm, self.assembler, self.router)
+        grammar = self._enum_schema(VerificationBlueprint, [
+            ("ProofObligation", "micro_id", micro_ids, False),
+            ("ProofObligation", "cmd_id", sorted(known), False),
+            (None, "synthesis_cmds", sorted(known), True)])
+
+        def _norm_kinds(v: VerificationBlueprint) -> VerificationBlueprint:
+            # Pilota PS5: 'characterization' su file che NON esistono ancora
+            # non puo' essere verde ora — il control plane lo sa: riparazione
+            # deterministica a new_behavior (inequivoca), mai un giro di patch.
+            micros = {m.id: m for m in bp.micro}
+            for o in v.obligations:
+                m = micros.get(o.micro_id)
+                if (m and o.kind == "characterization"
+                        and not any((self.scope.root / f).exists()
+                                    for f in m.work.files_owned)):
+                    o.kind = "new_behavior"
+            return v
+
         out: VerificationBlueprint = role.run(
-            ctx, max_tokens=self.cfg.plansys.m_pass_max_tokens)  # type: ignore
-        out = self._repair_loop("M3", role, ctx, out, VerificationBlueprint,
-                                lambda v: validate_verification(v, bp, known),
-                                log)
+            ctx, max_tokens=self.cfg.plansys.m_pass_max_tokens,
+            grammar_schema=grammar)  # type: ignore
+        out = self._repair_loop(
+            "M3", role, ctx, out, VerificationBlueprint,
+            lambda v: validate_verification(_norm_kinds(v), bp, known), log,
+            grammar_schema=grammar)
         self.store.save_ps_artifact(task_id, kind="verification_blueprint",
                                     ref=phase.id,
                                     payload_json=out.model_dump_json(),
@@ -167,8 +265,12 @@ class PhaseCompiler:
                      vbp: VerificationBlueprint, projection: str,
                      log) -> TestBundle:
         state = self.store.load_task(task_id)
+        required = sorted({o.test_file for o in vbp.obligations})
         volatile = (f"{projection}\n[BLUEPRINT] {bp.model_dump_json()}"
-                    f"\n[OBLIGATIONS] {vbp.model_dump_json()}")
+                    f"\n[OBLIGATIONS] {vbp.model_dump_json()}"
+                    f"\n[REQUIRED TEST FILES] exactly these relative paths, "
+                    f"one artifact each, nothing else: {', '.join(required)}"
+                    f"\n{self._import_hint(bp, vbp)}")
         # smoke PS4.3: se un test_file degli obblighi ESISTE, M4 deve vederne
         # il contenuto per includerlo (la guardia di materializzazione rifiuta
         # i test persi) — senza il sorgente non potrebbe che inventare
@@ -180,16 +282,139 @@ class PhaseCompiler:
                                                   errors="replace"))
         ctx = RoleContext(task=state, subtask=None, volatile=volatile)
         role = TestAuthor(self.llm, self.assembler, self.router)
+        def _val(b: TestBundle) -> list[str]:
+            self._dedup_bundle(vbp, b, log)
+            self._reconcile_test_names(vbp, b, log)
+            return validate_bundle(b, vbp)
+
+        grammar = self._enum_schema(TestBundle, [
+            ("TestArtifact", "path", required, False)])
         out: TestBundle = role.run(
-            ctx, max_tokens=self.cfg.plansys.test_author_max_tokens)  # type: ignore
-        out = self._repair_loop("M4", role, ctx, out, TestBundle,
-                                lambda b: validate_bundle(b, vbp), log,
-                                max_tokens=self.cfg.plansys.test_author_max_tokens)
+            ctx, max_tokens=self.cfg.plansys.test_author_max_tokens,
+            grammar_schema=grammar)  # type: ignore
+        out = self._repair_loop("M4", role, ctx, out, TestBundle, _val, log,
+                                max_tokens=self.cfg.plansys.test_author_max_tokens,
+                                grammar_schema=grammar)
         self.store.save_ps_artifact(task_id, kind="test_bundle", ref=phase.id,
                                     payload_json=out.model_dump_json(),
                                     actor="phase_compiler")
+        # la riconciliazione puo' aver ri-puntato i test_name degli obblighi
+        self.store.save_ps_artifact(task_id, kind="verification_blueprint",
+                                    ref=phase.id,
+                                    payload_json=vbp.model_dump_json(),
+                                    actor="phase_compiler")
         log.line("compiler", f"{phase.id} M4: {len(out.artifacts)} file di test")
         return out
+
+    @staticmethod
+    def _dedup_bundle(vbp: VerificationBlueprint, bundle: TestBundle,
+                      log) -> None:
+        """Pilota PS5 #19: M4 emette lo stesso path due volte. Dedup
+        deterministico: vince l'artefatto che contiene PIU' test richiesti
+        dagli obblighi (a parita', il piu' lungo)."""
+        from redgiant.plansys.gates import _parse_tests
+        needed = {o.test_file: {ob.test_name for ob in vbp.obligations
+                                if ob.test_file == o.test_file}
+                  for o in vbp.obligations}
+        best: dict[str, tuple[int, int, int]] = {}  # path -> (score, len, idx)
+        for i, a in enumerate(bundle.artifacts):
+            fns, _ = _parse_tests(a.content)
+            score = len(set(fns) & needed.get(a.path, set()))
+            key = (score, len(a.content), -i)
+            if a.path not in best or key > best[a.path]:
+                best[a.path] = key
+        seen: set[str] = set()
+        kept = []
+        for i, a in enumerate(bundle.artifacts):
+            fns, _ = _parse_tests(a.content)
+            score = len(set(fns) & needed.get(a.path, set()))
+            if a.path in seen:
+                log.line("compiler", f"dedup bundle: scartato duplicato "
+                                     f"di {a.path}")
+                continue
+            if (score, len(a.content), -i) == best[a.path]:
+                kept.append(a)
+                seen.add(a.path)
+        if len(kept) != len(bundle.artifacts):
+            bundle.artifacts = kept
+
+    @staticmethod
+    def _reconcile_test_names(vbp: VerificationBlueprint, bundle: TestBundle,
+                              log) -> None:
+        """Pilota PS5 #14: M3 battezza un test, M4 lo scrive con un altro nome.
+        Il nome e' un puntatore, il contratto e' il comportamento: quando il
+        legame e' INEQUIVOCO (N obblighi orfani <-> N funzioni non reclamate,
+        in ordine) il control plane ri-punta i test_name, loggandolo."""
+        from redgiant.plansys.gates import _parse_tests
+        for a in bundle.artifacts:
+            fns, _ = _parse_tests(a.content)
+            here = [o for o in vbp.obligations if o.test_file == a.path]
+            claimed = {o.test_name for o in here if o.test_name in fns}
+            orphans = [o for o in here if o.test_name not in fns]
+            free = [n for n in fns if n not in claimed]
+            if orphans and len(orphans) == len(free):
+                for o, name in zip(orphans, free):
+                    log.line("compiler", f"riconciliato {o.id}: "
+                                         f"'{o.test_name}' -> '{name}'")
+                    o.test_name = name
+
+    # ── enum dinamici nella grammatica (batch20, strategia generale n.1) ─────
+    # "Il modello non NOMINA mai cio' che il sistema gia' conosce": i campi di
+    # riferimento diventano enum GBNF costruiti dalla realta' — l'invenzione
+    # e' irrappresentabile (generalizzazione della lezione discriminated-union).
+    # Lo schema in S2 resta statico (KV); la specializzazione viaggia solo nel
+    # payload del server + come lista [ALLOWED] nel contesto volatile (D6:
+    # la grammatica vincola ma non informa).
+
+    @staticmethod
+    def _enum_schema(model: type[BaseModel],
+                     spots: list[tuple[str | None, str, list[str], bool]]) -> dict | None:
+        """spots: (nome in $defs | None per il top-level, proprieta',
+        valori, is_list). Valori vuoti -> spot saltato; nessuno spot -> None."""
+        import copy
+        schema = copy.deepcopy(model.model_json_schema())
+        touched = False
+        for defs_name, prop, values, is_list in spots:
+            if not values:
+                continue
+            try:
+                host = (schema["$defs"][defs_name]["properties"] if defs_name
+                        else schema["properties"])
+                if is_list:
+                    host[prop]["items"] = {"type": "string",
+                                           "enum": sorted(values)}
+                else:
+                    host[prop] = {"type": "string", "enum": sorted(values),
+                                  "title": host[prop].get("title", prop)}
+                touched = True
+            except KeyError:
+                continue
+        return schema if touched else None
+
+    def _relativize(self, p: str) -> str:
+        """Pilota PS5: M1/M2 a volte scrivono path ASSOLUTI. Se il path sta
+        sotto la root del task la riparazione e' inequivoca (si relativizza);
+        fuori root resta com'e' e lo boccia il validatore."""
+        from pathlib import Path as _P
+        try:
+            pp = _P(p)
+            if pp.is_absolute():
+                return pp.resolve().relative_to(
+                    self.scope.root.resolve()).as_posix()
+        except (ValueError, OSError):
+            pass
+        return p
+
+    @staticmethod
+    def _import_hint(bp: PhaseBlueprint, vbp: VerificationBlueprint) -> str:
+        """Pilota PS5: un test che non importa il modulo bersaglio non prova
+        niente — l'ancora la fornisce il control plane, deterministicamente."""
+        owned = {o.micro_id for o in vbp.obligations}
+        stems = sorted({f.rsplit("/", 1)[-1].removesuffix(".py")
+                        for m in bp.micro if m.id in owned
+                        for f in m.work.files_owned if f.endswith(".py")})
+        return ("[MUST IMPORT] each test must import and exercise the target "
+                "module(s): " + ", ".join(stems))
 
     def materialize_tests(self, bundle: TestBundle, log) -> None:
         """Il CONTROL PLANE scrive i test (mai J): Scope dedicato ai soli path
@@ -249,9 +474,19 @@ class PhaseCompiler:
                     task_id, kind="test_bundle", ref=phase.id,
                     payload_json=bundle.model_dump_json(), actor="phase_compiler")
                 continue
-            report = oracle_qualification_gate(
-                vbp, bundle, bp, self.scope, self.router, task_id,
-                mutation_probe=self.cfg.plansys.mutation_probe)
+            from redgiant.plansys import ablated
+            if ablated("oracle"):
+                # ablation B1: il gate di qualificazione e' bypassato
+                from redgiant.core.verify import CheckResult
+                from redgiant.plansys.artifacts import GateReport
+                report = GateReport(gate="oracle_qualification", target=phase.id,
+                                    ok=True, checks=[CheckResult(
+                                        name="ABLATED", ok=True,
+                                        detail="oracle gate bypassed (A/B)")])
+            else:
+                report = oracle_qualification_gate(
+                    vbp, bundle, bp, self.scope, self.router, task_id,
+                    mutation_probe=self.cfg.plansys.mutation_probe)
             self.store.log_ps_gate(
                 task_id, gate="oracle_qualification", target=phase.id,
                 ok=report.ok,
@@ -259,27 +494,62 @@ class PhaseCompiler:
             if report.ok:
                 break
             failed = [c for c in report.checks if not c.ok]
+            if failed and all(":baseline_new_behavior" in c.name
+                              and "exit=0" in c.detail for c in failed):
+                # prove nuove GIA' verdi: fase ridondante SOLO se il lavoro
+                # esiste davvero (fast #1: senza questo check, test vuoti
+                # chiudevano fasi mai eseguite)
+                work_exists = all(
+                    (self.scope.root / f).exists()
+                    for m in bp.micro for f in m.work.files_owned)
+                if work_exists:
+                    self.store.log_ps_gate(
+                        task_id, gate="phase_entry", target=phase.id, ok=True,
+                        checks_json=json.dumps([{
+                            "name": "satisfied_post_compile", "ok": True,
+                            "detail": "all new_behavior proofs green AND owned "
+                                      "files exist"}]))
+                    log.line("gate", f"{phase.id} gia' soddisfatta post-compile "
+                                     f"(prove verdi, file esistenti): chiusa a "
+                                     f"costo zero")
+                    raise PhaseAlreadySatisfied(phase.id)
+                # file inesistenti + test verdi = test VUOTI: violazione a M4
+                for c in failed:
+                    c.detail += (" — the owned files do NOT exist yet: a green "
+                                 "new_behavior here means the test proves "
+                                 "nothing; import and call the target module")
             log.line("gate", f"{phase.id} oracle_qualification KO: "
                              f"{[c.name for c in failed][:6]}")
             rounds += 1
             if rounds > 2:
                 raise CompileFailed("oracle_qualification",
                                     [f"{c.name}: {c.detail}" for c in failed])
-            # routing della correzione: contenuto test -> M4; disegno prove -> M3
+            # routing della correzione: contenuto test -> M4; disegno prove -> M3.
+            # Pilota PS5: anche i baseline vanno a M4 — un new_behavior che passa
+            # gia' e' quasi sempre un TEST debole, non un obbligo sbagliato
             m4_keys = (":exists", ":asserts", ":targets_contract", ":scope",
-                       "bundle_covers")
+                       ":baseline_", "bundle_covers")
             m4_issues = [f"{c.name}: {c.detail}" for c in failed
                          if any(k in c.name for k in m4_keys)]
             m3_issues = [f"{c.name}: {c.detail}" for c in failed
                          if not any(k in c.name for k in m4_keys)]
+            if any(":baseline_new_behavior" in i for i in m4_issues):
+                m4_issues.append(
+                    "a new_behavior test PASSING now proves nothing: rewrite it "
+                    "so it exercises the MISSING behaviour (import and call the "
+                    "not-yet-implemented function) and FAILS on the current code")
             # una patch INVALIDA (payload deforme, target ignoto, validatore
             # rosso) e' un round fallito, non un crash: si logga e si ritenta
             # (il tetto rounds fa da uscita deterministica, PS-D1)
             if m4_issues:
                 try:
+                    required = sorted({o.test_file for o in vbp.obligations})
                     ctx = RoleContext(
                         task=state, subtask=None,
-                        volatile=f"[OBLIGATIONS] {vbp.model_dump_json()}")
+                        volatile=(f"[OBLIGATIONS] {vbp.model_dump_json()}"
+                                  f"\n[REQUIRED TEST FILES] only these: "
+                                  f"{', '.join(required)}"
+                                  f"\n{self._import_hint(bp, vbp)}"))
                     patch = self._request_patch(ctx, "test_author", m4_issues,
                                                 bundle.model_dump_json())
                     cand = TestBundle.model_validate_json(self._apply_patch(
@@ -325,7 +595,8 @@ class PhaseCompiler:
 
     def _repair_loop(self, step: str, role, ctx: RoleContext, artifact: BaseModel,
                      model: type[BaseModel], validate, log,
-                     max_tokens: int | None = None) -> BaseModel:
+                     max_tokens: int | None = None,
+                     grammar_schema: dict | None = None) -> BaseModel:
         if max_tokens is None:
             max_tokens = self.cfg.plansys.m_pass_max_tokens
         problems = validate(artifact)
@@ -350,7 +621,8 @@ class PhaseCompiler:
                 volatile=ctx.volatile + "\n[REJECTED] your previous output had "
                 "these problems, produce a corrected COMPLETE object: "
                 + "; ".join(problems))
-            artifact = role.run(retry_ctx, max_tokens=max_tokens)
+            artifact = role.run(retry_ctx, max_tokens=max_tokens,
+                                grammar_schema=grammar_schema)
             problems = validate(artifact)
             if problems:
                 raise CompileFailed(step, problems)
@@ -358,6 +630,19 @@ class PhaseCompiler:
 
     def _request_patch(self, ctx: RoleContext, role_name: str,
                        violations: list[str], current_json: str) -> BlueprintPatch:
+        # enum dinamico anche sul TARGET della patch: si puo' patchare solo
+        # un elemento che ESISTE nell'artefatto corrente
+        targets: list[str] = []
+        try:
+            data = json.loads(current_json)
+            for list_key, id_key in _PATCHABLE.values():
+                for item in data.get(list_key, []):
+                    if isinstance(item, dict) and item.get(id_key):
+                        targets.append(str(item[id_key]))
+        except json.JSONDecodeError:
+            pass
+        patch_grammar = self._enum_schema(BlueprintPatch, [
+            ("PatchOp", "target", targets, False)]) if targets else None
         parts = self.assembler.build(
             role_name, task=ctx.task, subtask=None, tools=[],
             volatile=(f"[ARTIFACT] {current_json}\n[VIOLATIONS] "
@@ -365,13 +650,20 @@ class PhaseCompiler:
                       + "\nEmit a BlueprintPatch that fixes ONLY the violated "
                         "parts. op=replace/add/remove; target = the id (or path)"
                         " of the element; payload_json = the complete corrected "
-                        "element as a JSON string (empty for remove)."),
+                        "element as a JSON string (empty for remove). For TEST "
+                        "FILE artifacts, payload_json may simply be the raw "
+                        "corrected file content (not JSON).\nExample: "
+                        '{"phase_id": "P1", "ops": [{"op": "replace", '
+                        '"target": "test_mod.py", "payload_json": '
+                        '"import mod\\n\\ndef test_x():\\n    assert '
+                        'mod.f() == 1\\n"}]}'),
             output_schema=BlueprintPatch.model_json_schema(),
             schema_name="BlueprintPatch")
         return self.llm.complete(
             parts, role=role_name, schema=BlueprintPatch,
             max_tokens=self.cfg.plansys.m_pass_max_tokens,
-            task_id=ctx.task.id).parsed  # type: ignore[return-value]
+            task_id=ctx.task.id,
+            grammar_schema=patch_grammar).parsed  # type: ignore[return-value]
 
     @staticmethod
     def _apply_patch(model: type[BaseModel], artifact_json: str,
@@ -385,7 +677,18 @@ class PhaseCompiler:
             if op.op == "remove":
                 items = [i for i in items if i.get(id_key) != op.target]
                 continue
-            payload = json.loads(op.payload_json)
+            try:
+                payload = json.loads(op.payload_json)
+                if not isinstance(payload, dict):
+                    raise ValueError("payload is not an object")
+            except (json.JSONDecodeError, ValueError):
+                if model.__name__ == "TestBundle":
+                    # accomodamento (lezione F1: adatta l'ambiente): per i test
+                    # il payload puo' essere il CONTENUTO GREZZO del file —
+                    # il JSON-annidato-nella-stringa e' ostile a un 2B
+                    payload = {"path": op.target, "content": op.payload_json}
+                else:
+                    raise
             if op.op == "add":
                 items.append(payload)
             else:  # replace

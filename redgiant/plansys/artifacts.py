@@ -89,7 +89,9 @@ class MicroPhase(_Strict):
     id: str
     title: str = Field(max_length=80)
     work: WorkContract
-    proves: list[str] = Field(max_length=4)
+    # fast #5: max 4 confliggeva con coverage_chain (una fase puo' coprire
+    # fino a 8 criteri e una micro sola deve poterli provare tutti)
+    proves: list[str] = Field(max_length=8)
 
 
 class PhaseBlueprint(_Strict):

@@ -36,20 +36,27 @@ class SeniorPlanner(Role):
             parts, role=self.name, schema=MacroPlan, max_tokens=max_tokens,
             task_id=ctx.task.id).parsed  # type: ignore[assignment]
         report = macro_validation_gate(normalize_macro(out))
-        if report.ok:
-            return out
-        problems = [f"{c.name}: {c.detail}" for c in report.checks if not c.ok]
-        # una sola richiamata, citando le REGOLE violate (non solo i sintomi)
-        retry = parts.with_appended_context(
-            "\n[PLAN REJECTED] fix ALL of these problems: " + "; ".join(problems)
-            + "\n[RULES] every criterion id (C1..) must appear in the covers list"
-              " of at least one phase; depends_on may list ONLY ids of phases in"
-              " THIS plan (like \"P1\"); a phase with no dependencies has"
-              " depends_on: []; at least one phase must have depends_on: [].")
-        out = self.llm.complete(
-            retry, role=self.name, schema=MacroPlan, max_tokens=max_tokens,
-            task_id=ctx.task.id).parsed  # type: ignore[assignment]
-        report = macro_validation_gate(normalize_macro(out))
+        # fino a DUE richiamate correttive (fast #4: la coverage e' l'errore
+        # piu' meccanicamente correggibile; una richiamata sola perdeva task
+        # interi su code di instabilita' — revisione annotata nel piano),
+        # ciascuna citando le REGOLE violate, non solo i sintomi
+        for _ in range(2):
+            if report.ok:
+                return out
+            problems = [f"{c.name}: {c.detail}" for c in report.checks
+                        if not c.ok]
+            retry = parts.with_appended_context(
+                "\n[PLAN REJECTED] fix ALL of these problems: "
+                + "; ".join(problems)
+                + "\n[RULES] every criterion id (C1..) must appear in the"
+                  " covers list of at least one phase; depends_on may list ONLY"
+                  " ids of phases in THIS plan (like \"P1\"); a phase with no"
+                  " dependencies has depends_on: []; at least one phase must"
+                  " have depends_on: [].")
+            out = self.llm.complete(
+                retry, role=self.name, schema=MacroPlan, max_tokens=max_tokens,
+                task_id=ctx.task.id).parsed  # type: ignore[assignment]
+            report = macro_validation_gate(normalize_macro(out))
         if not report.ok:
             raise MacroRejected(
                 [f"{c.name}: {c.detail}" for c in report.checks if not c.ok])
@@ -67,7 +74,8 @@ class _SingleShot(Role):
     Eccezione (lezione F0/F2): il TRONCAMENTO e' un dato — un solo retry con
     l'istruzione esplicita di produrre MENO, poi l'errore sale."""
 
-    def run(self, ctx: RoleContext, *, max_tokens: int = 1024) -> BaseModel:
+    def run(self, ctx: RoleContext, *, max_tokens: int = 1024,
+            grammar_schema: dict | None = None) -> BaseModel:
         from redgiant.llm.client import LlmTruncated
         volatile = ctx.volatile
         for attempt in (1, 2):
@@ -79,7 +87,8 @@ class _SingleShot(Role):
             try:
                 return self.llm.complete(
                     parts, role=self.name, schema=self.output_model,
-                    max_tokens=max_tokens, task_id=ctx.task.id).parsed
+                    max_tokens=max_tokens, task_id=ctx.task.id,
+                    grammar_schema=grammar_schema).parsed
             except LlmTruncated:
                 if attempt == 2:
                     raise

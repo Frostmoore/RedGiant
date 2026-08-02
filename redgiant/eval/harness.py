@@ -103,12 +103,16 @@ def _naive_plan(task: EvalTask) -> dict:
 
 
 def run_eval(profile: str, only: list[str] | None, out_dir: Path,
-             use_planner: bool = False) -> Path:
+             use_planner: bool = False, use_plansys: bool = False) -> Path:
     cfg = Config.load(profile)
     if use_planner:
         # gate D11: --planner e' la riaccensione ESPLICITA (config default: off)
         from dataclasses import replace
         cfg = replace(cfg, planner_enabled=True)
+    if use_plansys:
+        # PS-D9: idem per il plansys
+        from dataclasses import replace
+        cfg = replace(cfg, plansys_enabled=True)
     store = StateStore(cfg.paths.db)
     llm = LlamaClient(cfg.llm, store)
     if not llm.health():
@@ -129,10 +133,12 @@ def run_eval(profile: str, only: list[str] | None, out_dir: Path,
                                       total_tokens=0, useful_tokens=0, wall_s=0.0,
                                       llm_calls=0, tool_calls=0, retries=0))
             continue
-        results.append(_run_one(cfg, store, llm, assembler, task, use_planner))
+        results.append(_run_one(cfg, store, llm, assembler, task, use_planner,
+                                use_plansys))
 
     git_ref = _git_ref()
-    report = write_report(results, profile, git_ref, out_dir, use_planner)
+    report = write_report(results, profile, git_ref, out_dir, use_planner,
+                          use_plansys)
     store_row = StateStore(cfg.paths.db)
     with store_row._conn() as c:  # riga eval_runs (harness = unico scrittore)
         c.execute("INSERT INTO eval_runs (started_at, profile, git_ref, report_path)"
@@ -144,13 +150,21 @@ def run_eval(profile: str, only: list[str] | None, out_dir: Path,
 
 def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
              assembler: PromptAssembler, task: EvalTask,
-             use_planner: bool = False) -> EvalResult:
+             use_planner: bool = False, use_plansys: bool = False) -> EvalResult:
     workdir = Path(tempfile.mkdtemp(prefix=f"rgeval_{task.id}_"))
     shutil.copytree(task.repo_dir, workdir, dirs_exist_ok=True)
 
     scope = Scope(workdir, task.writable_globs)
     router = ToolRouter(default_catalog(cfg, scope, task.test_commands), scope, store)
-    orch = Orchestrator(cfg, store, llm, router, assembler)
+    if use_plansys:
+        import os
+        from redgiant.plansys.engine import PlanSysEngine
+        # PS-D8, run non presidiate: i choice point si auto-decidono sulla
+        # raccomandata (registrata come decisione, mai silenziosa)
+        os.environ["RG_PLANSYS_AUTODECIDE"] = "recommended"
+        orch = PlanSysEngine(cfg, store, llm, router, assembler)
+    else:
+        orch = Orchestrator(cfg, store, llm, router, assembler)
 
     budget = Budget(max_total_tokens=cfg.budget.max_total_tokens,
                     max_tool_calls=cfg.budget.max_tool_calls,
@@ -158,8 +172,9 @@ def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
                     max_wall_s=min(cfg.budget.max_wall_s, task.timeout_s))
     tid = store.create_task(task.prompt, str(workdir), cfg.profile_name, budget)
     # F3.5 A/B: con use_planner il piano lo genera il Planner (si IGNORA il
-    # plan.json); senza, si usa il piano statico o quello 'ingenuo' come baseline
-    if not use_planner:
+    # plan.json); con use_plansys lo genera S (PS5); senza, piano statico o
+    # 'ingenuo' come baseline
+    if not use_planner and not use_plansys:
         if task.plan_file is not None:
             load_static_plan(store, tid, task.plan_file)
         else:
@@ -218,11 +233,12 @@ def _metrics(store: StateStore, task_id: str) -> tuple[int, int, int, int, int]:
 
 
 def write_report(results: list[EvalResult], profile: str, git_ref: str,
-                 out_dir: Path, use_planner: bool = False) -> Path:
+                 out_dir: Path, use_planner: bool = False,
+                 use_plansys: bool = False) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     official = profile != "dev-fast"
-    mode = "planner" if use_planner else "static"
+    mode = "plansys" if use_plansys else ("planner" if use_planner else "static")
     ran = [r for r in results if r.skipped is None]
     lines = [
         f"# Evaluator — run {stamp} UTC",

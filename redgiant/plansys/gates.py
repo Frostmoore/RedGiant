@@ -126,9 +126,12 @@ _TEST_FILE = re.compile(r"(^|/)test_[^/]+\.py$")
 
 
 def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis,
-                       covers: list[str]) -> list[str]:
+                       covers: list[str],
+                       existing: set[str] | None = None) -> list[str]:
     """PS3.2 — M2 validata in codice. Ownership ESCLUSIVA dei file (il difetto
-    'fasi ridondanti' di F3 reso irrappresentabile) e perimetri dal ledger."""
+    'fasi ridondanti' di F3 reso irrappresentabile) e perimetri dal ledger.
+    Fast #2: `existing` = file reali del repo — lavorare su un file che ESISTE
+    non e' invenzione (l'anti-invenzione vieta i fantasmi, non il brownfield)."""
     problems: list[str] = []
     if bp.phase_id != analysis.phase_id:
         problems.append(f"phase_id must be '{analysis.phase_id}', got '{bp.phase_id}'")
@@ -140,9 +143,15 @@ def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis,
         if not mm or mm.group(1) != bp.phase_id:
             problems.append(f"micro id '{m.id}' must match {bp.phase_id}.S<n>")
     owned: dict[str, str] = {}
-    allowed = set(analysis.artifacts) | set(analysis.involved)
+    allowed = set(analysis.artifacts) | set(analysis.involved) | (existing or set())
     for m in bp.micro:
         for f in m.work.files_owned:
+            if _TEST_FILE.search(f):
+                problems.append(f"{m.id} owns test file '{f}': FORBIDDEN — "
+                                f"tests are written by the compiler and are "
+                                f"immutable for the junior (PS-D4); own the "
+                                f"implementation files instead")
+                continue
             if f in owned:
                 problems.append(f"file '{f}' owned by both {owned[f]} and {m.id}: "
                                 f"ownership is EXCLUSIVE")
@@ -154,6 +163,25 @@ def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis,
             if cid not in covers:
                 problems.append(f"{m.id} proves '{cid}' which this phase does "
                                 f"not cover (covers: {covers})")
+    # fast #7: una micro che CREA piu' di un file nuovo non sta in una
+    # sessione Junior (PS-D10 reso meccanico: contesto esploso a 7674 tok,
+    # loop di write) — granularita' minima: un file nuovo per micro
+    if existing is not None:
+        for m in bp.micro:
+            new_files = [f for f in m.work.files_owned if f not in existing]
+            if len(new_files) > 1:
+                problems.append(f"{m.id} creates {len(new_files)} new files "
+                                f"{new_files}: too big for one junior session "
+                                f"— split into one micro phase per new file")
+    # fast #3: la CATENA di copertura deve chiudersi — ogni criterio coperto
+    # dalla fase deve essere PROVATO da almeno una micro, o restera' orfano
+    # fino al coverage gate finale (fallimento tardivo = fallimento caro)
+    proved = {cid for m in bp.micro for cid in m.proves}
+    orphan = sorted(set(covers) - proved)
+    if orphan:
+        problems.append(f"criteria {orphan} are covered by this phase but "
+                        f"proved by NO micro phase: add them to the 'proves' "
+                        f"of the micro phase whose work demonstrates them")
     return problems
 
 
@@ -202,9 +230,27 @@ def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint) -> list[str]
     needed = {o.test_file for o in vbp.obligations}
     for miss in sorted(needed - set(paths)):
         problems.append(f"obligation test_file '{miss}' has no artifact in bundle")
+    # ogni obbligo deve trovare la SUA funzione nel file del bundle (pilota PS5:
+    # M3 nomina test_X, M4 scrive test_Y — va beccato QUI, non al gate)
+    by_path = {a.path: a.content for a in bundle.artifacts}
+    for o in vbp.obligations:
+        content = by_path.get(o.test_file)
+        if content is None:
+            continue
+        fns, _ = _parse_tests(content)
+        if o.test_name not in fns:
+            problems.append(f"obligation {o.id} requires test function "
+                            f"'{o.test_name}' in {o.test_file} — missing "
+                            f"(found: {sorted(fns)[:6]})")
     for a in bundle.artifacts:
+        if re.match(r"^[A-Za-z]:[\\/]|^[\\/]", a.path):
+            problems.append(f"artifact '{a.path}': paths must be RELATIVE to "
+                            f"the repo root, never absolute")
+            continue
         if not _TEST_FILE.search(a.path):
-            problems.append(f"artifact '{a.path}' must be named test_*.py")
+            problems.append(f"artifact '{a.path}' must be named test_*.py — "
+                            f"you write ONLY the test files named by the "
+                            f"obligations, never implementation files")
         try:
             ast.parse(a.content)
         except SyntaxError as e:
@@ -244,17 +290,22 @@ def _has_real_assert(fn: ast.FunctionDef) -> bool:
     return False
 
 
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
 def _micro_symbols(bp: PhaseBlueprint, micro_id: str) -> set[str]:
     m = next(x for x in bp.micro if x.id == micro_id)
     syms: set[str] = set()
     for f in m.work.files_owned:
         stem = f.rsplit("/", 1)[-1].removesuffix(".py")
-        if stem:
+        if stem and _IDENT.match(stem):
             syms.add(stem)
     for sig in m.work.signatures:
-        name = re.sub(r"^(def|class)\s+", "", sig.strip()).split("(")[0].split(":")[0]
-        if name:
-            syms.add(name.strip())
+        name = re.sub(r"^(def|class)\s+", "", sig.strip()).split("(")[0].split(":")[0].strip()
+        # solo identificatori VERI: M2 a volte mette prose nelle signatures
+        # ("Item dataclass definition in models.py") — non sono ancore
+        if name and _IDENT.match(name):
+            syms.add(name)
     return syms
 
 
@@ -303,12 +354,33 @@ def oracle_qualification_gate(vbp: VerificationBlueprint, bundle: TestBundle,
             detail="has observable assert" if _has_real_assert(fn)
             else "no real assertion (empty body or tautology)"))
 
-        # (5) aggancio al bersaglio: il CORPO del test (o gli import del file)
-        # cita un simbolo del contratto — mai il nome del test stesso (un
-        # 'test_subtract' vuoto si aggancerebbe da solo)
+        # (4b) niente INTROSPEZIONE nei test: __annotations__ (#13), __dict__
+        # (#17), get_type_hints... — pattern fragili che falliscono anche su
+        # implementazioni corrette. Generalizzato: nessun accesso a dunder.
+        fragile = sorted({n.attr for n in ast.walk(fn)
+                          if isinstance(n, ast.Attribute)
+                          and n.attr.startswith("__") and n.attr.endswith("__")})
+        if "get_type_hints" in ast.unparse(fn):
+            fragile.append("get_type_hints")
+        checks.append(CheckResult(
+            name=f"{o.id}:no_introspection", ok=not fragile,
+            detail=f"fragile introspection: {fragile} — test behaviour "
+                   f"(construct, call, compare results) instead" if fragile
+            else "behavioural"))
+
+        # (5) aggancio al bersaglio: IDENTIFICATORI usati dal test (AST: nomi,
+        # attributi, import) — mai sottostringhe (fast #1: "models" dentro un
+        # letterale ingannava il check) ne' il nome del test stesso
         syms = _micro_symbols(bp, o.micro_id)
-        body_src = "\n".join(ast.unparse(s) for s in fn.body)
-        hooked = any(s in body_src or s in imports_src for s in syms)
+        used: set[str] = set()
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Name):
+                used.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                used.add(node.attr)
+        for tok in imports_src.replace(",", " ").split():
+            used.add(tok.strip("."))
+        hooked = bool(syms & used)
         checks.append(CheckResult(
             name=f"{o.id}:targets_contract", ok=hooked,
             detail=f"references one of {sorted(syms)}" if hooked
@@ -361,6 +433,33 @@ def oracle_qualification_gate(vbp: VerificationBlueprint, bundle: TestBundle,
 
     return GateReport(gate="oracle_qualification", target=vbp.phase_id,
                       ok=all(c.ok for c in checks), checks=checks)
+
+
+def micro_gate(verdict_ok: bool, target: str,
+               checks: list[CheckResult]) -> GateReport:
+    """PS5.2 — involucro del verdetto di verify_subtask nel formato gate."""
+    return GateReport(gate="micro", target=target, ok=verdict_ok, checks=checks)
+
+
+def failure_signature(failed_checks: list[str], summary: str) -> str:
+    """Firma normalizzata di un fallimento micro (per il retry gate)."""
+    norm = re.sub(r"\s+", " ", summary.lower())[:100]
+    return "|".join(sorted(failed_checks)) + "::" + norm
+
+
+def retry_gate(prev_sig: str | None, new_sig: str) -> GateReport:
+    """PS5.2 — un retry DEVE differire: stessa firma di fallimento due volte di
+    fila = fotocopia vietata (il ritentare identico e' il thrashing di F3).
+    REVISIONE PS5 (dal piano): si confrontano le FIRME DI FALLIMENTO consecutive
+    (piu' forte del confronto tra istruzioni emendate: misura l'esito, non
+    l'intenzione)."""
+    identical = prev_sig is not None and prev_sig == new_sig
+    return GateReport(gate="retry", target=new_sig[:80], ok=not identical,
+                      checks=[CheckResult(
+                          name="failure_differs", ok=not identical,
+                          detail="identical failure twice in a row: retry would "
+                                 "be a photocopy" if identical
+                          else "new failure information present")])
 
 
 def _mutation_probe(scope: Scope, content: str, test_name: str) -> bool:

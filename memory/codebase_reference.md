@@ -307,6 +307,7 @@ class TaskLedger    # task_id, entries
 def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger
 def render_ledger(ledger: TaskLedger) -> str
 def project_for_phase(ledger: TaskLedger, plan: MacroPlan, phase_id: str, max_tokens: int, count: Callable[[str], int]) -> str
+def ablated(component: str) -> bool   # PS6.2: RG_PLANSYS_ABLATE="oracle,ledger,entry" (solo A/B)
 def dag_problems(pairs: list[tuple[str, list[str]]]) -> list[str]
 def normalize_macro(plan: MacroPlan) -> MacroPlan
 def macro_validation_gate(plan: MacroPlan) -> GateReport
@@ -339,7 +340,21 @@ class PhaseCompiler
     def author_tests(self, task_id: str, phase: MacroPhase, bp: PhaseBlueprint, vbp: VerificationBlueprint, projection: str, log) -> TestBundle
     def materialize_tests(self, bundle: TestBundle, log) -> None
     def compile_phase(self, task_id: str, plan: MacroPlan, phase: MacroPhase, log) -> tuple[PhaseBlueprint, VerificationBlueprint, TestBundle]
+def micro_gate(verdict_ok: bool, target: str, checks: list[CheckResult]) -> GateReport
+def failure_signature(failed_checks: list[str], summary: str) -> str
+def retry_gate(prev_sig: str | None, new_sig: str) -> GateReport
+def work_order(micro: MicroPhase, vbp: VerificationBlueprint) -> SubtaskSpec
+class PlanSysEngine
+    def run_task(self, task_id: str) -> TaskState
+    def _load_or_create_macro_plan(self, task_id: str, log: TaskLog) -> MacroPlan | TaskState
+    def _eligible_macro_phase(self, task_id: str, plan: MacroPlan) -> MacroPhase | None
+    def _phase_entry_gate(self, task_id: str, plan: MacroPlan, phase: MacroPhase) -> GateReport
+    def _phase_synthesis_gate(self, task_id: str, phase: MacroPhase, vbp: VerificationBlueprint) -> GateReport
+    def _register_proof_commands(self, vbp: VerificationBlueprint) -> None
+    def _run_micro(self, task_id: str, micro: MicroPhase, worker: Worker, tracker: BudgetTracker, log: TaskLog) -> TaskState | None
 ```
+
+**PS5 (Engine):** `PlanSysEngine` EREDITA dall'Orchestrator il collaudato di F1/F2 (`_reclaim_orphans`, `_execute_subtask` con resume in-place, `_handle_budget_exhaustion` = budget-consenso, `_finalize`). `work_order` = perimetro=verifica by design: `verification` della micro sono SOLO i suoi `proof:<obligation_id>` (comandi pytest `file::test` registrati dal control plane nel catalogo run_tests via `_register_proof_commands`) — mai la suite intera; la suite gira solo nel `phase_synthesis` gate. Fasi "done" = ps_gates ok (`phase_synthesis` o `phase_entry`); entry gate = ri-esecuzione delle prove dei criteri coperti (fase già provata → chiusa a zero LLM); coverage gate a fine piano (criterio provato = ≥1 obbligo verde ADESSO, ri-eseguito mai creduto). Retry gate: firme di fallimento consecutive identiche = fotocopia vietata → micro failed esplicita (niente replanning in v1). `NeedsDecision` → clarification sul canale approvals F2.3, task blocked. Accensione: `rg run --plansys`, `rg eval --plansys` (`run_eval(use_plansys=True)` fa `replace(cfg, plansys_enabled=True)`; report modalità `plansys` nel filename).
 
 **PS4 (M3–M4 + Oracle Qualification):** `oracle_qualification_gate` (PS-D5) qualifica L'ORACOLO prima che J esista — check: esistenza statica via AST, asserzioni reali (niente `assert True`), aggancio al contratto (CORPO+import, mai il nome del test: un `test_subtract` vuoto si aggancerebbe da solo), scope, **red-baseline** (un `new_behavior` che passa ORA non prova niente; import error su modulo mancante = rosso legittimo), green-baseline sui characterization, copertura criteri, mutation probe assert-flip opzionale. `materialize_tests` = control plane (mai J), Scope dedicato ai path del bundle + syntax gate, **guardia anti-perdita**: sovrascrivere un test file esistente non può far sparire test (i nomi vecchi devono sopravvivere) e M4 riceve `[EXISTING TEST FILE]` col sorgente per fonderli. `compile_phase` = M1→M4 + loop qualificazione (max 2 round; violazioni instradate: contenuto→M4, disegno→M3; patch invalida = round fallito loggato, mai crash). `_SingleShot` gestisce il TRONCAMENTO come dato: un retry con istruzione di produrre meno, poi l'errore sale. Smoke live PS4.3: compile_phase completa in 134s con qualificazione verde al primo colpo; nei run precedenti il ciclo patch/rigenerazione è scattato live su M2 e M4.
 
@@ -395,8 +410,8 @@ class EvalTask      # id, domain, prompt, repo_dir, plan_file, success_cmd, time
 class EvalResult    # task_id, completed, verified, skipped, total_tokens, useful_tokens,
                     # wall_s, llm_calls, tool_calls, retries
 def discover_tasks(tasks_dir: Path) -> list[EvalTask]
-def run_eval(profile: str, only: list[str] | None, out_dir: Path, use_planner: bool = False) -> Path
-def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path, use_planner: bool = False) -> Path
+def run_eval(profile: str, only: list[str] | None, out_dir: Path, use_planner: bool = False, use_plansys: bool = False) -> Path
+def write_report(results: list[EvalResult], profile: str, git_ref: str, out_dir: Path, use_planner: bool = False, use_plansys: bool = False) -> Path
 # F3.5: use_planner=True ignora plan.json (genera il Planner); False = statico o
 # piano "ingenuo" _naive_plan (baseline D11)
 ```
@@ -431,7 +446,7 @@ V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. N
 
 ## 7. Catalogo dei test
 
-`tests/unit/` — 72 test, nessuno tocca il modello (delta PS2 in `test_plansys_gates.py`: gate macro su copertura/id/grafo, normalize dei sentinelli, richiamata correttiva del Senior con [RULES] e MacroRejected; delta PS3 in `test_plansys_compiler.py`: anti-invenzione M1, ownership esclusiva M2, _apply_patch replace/add/remove con ValueError su target ignoto, flusso patch→rigenerazione→CompileFailed, NeedsDecision con analisi persistita) (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
+`tests/unit/` — 80 test, nessuno tocca il modello (delta PS4 in `test_plansys_gates.py`: validate_verification, oracle gate che qualifica l'oracolo buono e respinge tautologie/scollegati/new_behavior-che-passa, validate_bundle; delta PS5 in `test_plansys_compiler.py`: work_order con verification=proof:*, retry gate anti-fotocopia, bookkeeping fasi/eleggibilità/proof-commands) (delta PS2 in `test_plansys_gates.py`: gate macro su copertura/id/grafo, normalize dei sentinelli, richiamata correttiva del Senior con [RULES] e MacroRejected; delta PS3 in `test_plansys_compiler.py`: anti-invenzione M1, ownership esclusiva M2, _apply_patch replace/add/remove con ValueError su target ignoto, flusso patch→rigenerazione→CompileFailed, NeedsDecision con analisi persistita) (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
 | File | Dimostra |
 |---|---|

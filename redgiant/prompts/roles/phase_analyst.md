@@ -17,6 +17,8 @@ Rules:
    it influences how the work will be split, it must be written down.
 5. If neither the codebase nor the plan determines a choice, do NOT choose
    silently: fill "decision_required" with the question, 2-3 options and
-   your recommendation. The system will ask the user.
+   your recommendation. The system will ask the user. Use it ONLY for
+   genuinely open choices: if the task text already states the name, field
+   or behaviour, follow it and leave decision_required null.
 6. "objective" restates the phase intent operationally in at most two
    sentences. "risks" lists at most 4 concrete unknowns.

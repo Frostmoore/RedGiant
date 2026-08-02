@@ -20,7 +20,7 @@ CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
 def _analysis(**kw) -> PhaseAnalysis:
     base = dict(phase_id="P1", objective="o", involved=[],
-                artifacts=["mod.py", "test_mod.py"], decisions=[], risks=[])
+                artifacts=["mod.py", "helper.py"], decisions=[], risks=[])
     base.update(kw)
     return PhaseAnalysis(**base)
 
@@ -47,14 +47,38 @@ def test_validate_analysis_anti_invention():
 def test_validate_blueprint_exclusive_ownership():
     an = _analysis()
     good = PhaseBlueprint(phase_id="P1", micro=[_micro(), _micro("P1.S2",
-                                                                 ("test_mod.py",))])
+                                                                 ("helper.py",))])
     assert validate_blueprint(good, an, ["C1"]) == []
+    # PS-D4: una micro non puo' possedere file di test (li scrive il compiler)
+    tests_owned = PhaseBlueprint(phase_id="P1",
+                                 micro=[_micro(files=("test_mod.py",))])
+    assert any("FORBIDDEN" in p for p in validate_blueprint(tests_owned, an,
+                                                            ["C1"]))
     dup = PhaseBlueprint(phase_id="P1", micro=[_micro(), _micro("P1.S2")])
     assert any("EXCLUSIVE" in p for p in validate_blueprint(dup, an, ["C1"]))
     alien = PhaseBlueprint(phase_id="P1", micro=[_micro(files=("alien.py",))])
     assert any("neither in the" in p for p in validate_blueprint(alien, an, ["C1"]))
     wrong_c = PhaseBlueprint(phase_id="P1", micro=[_micro(proves=("C9",))])
     assert any("does not cover" in p for p in validate_blueprint(wrong_c, an, ["C1"]))
+
+
+def test_enum_schema_injection():
+    # batch20, strategia n.1: enum dinamici nei punti giusti dello schema
+    from redgiant.plansys.artifacts import (PhaseAnalysis as PA,
+                                            PhaseBlueprint as PB,
+                                            VerificationBlueprint as VB)
+    s = PhaseCompiler._enum_schema(PA, [(None, "involved", ["a.py"], True)])
+    assert s["properties"]["involved"]["items"]["enum"] == ["a.py"]
+    s2 = PhaseCompiler._enum_schema(PB, [
+        ("WorkContract", "files_owned", ["m.py"], True),
+        ("MicroPhase", "proves", ["C1"], True)])
+    assert s2["$defs"]["WorkContract"]["properties"]["files_owned"]["items"]["enum"] == ["m.py"]
+    assert s2["$defs"]["MicroPhase"]["properties"]["proves"]["items"]["enum"] == ["C1"]
+    s3 = PhaseCompiler._enum_schema(VB, [("ProofObligation", "cmd_id",
+                                          ["pytest"], False)])
+    assert s3["$defs"]["ProofObligation"]["properties"]["cmd_id"]["enum"] == ["pytest"]
+    # valori vuoti -> nessuna specializzazione
+    assert PhaseCompiler._enum_schema(PA, [(None, "involved", [], True)]) is None
 
 
 def test_apply_patch_replace_add_remove():
@@ -138,6 +162,81 @@ def test_analyze_patch_flow_and_needs_decision(tmp_path):
     with pytest.raises(NeedsDecision):
         comp2.analyze(tid2, plan, phase, "p", _Log())
     assert store2.load_ps_artifact(tid2, "phase_analysis", "P1")
+
+
+def test_work_order_scoped_verification():
+    # PS5.1: verification = SOLO le prove della micro (proof:*), mai la suite
+    from redgiant.plansys.artifacts import (ProofObligation,
+                                            VerificationBlueprint)
+    from redgiant.plansys.engine import work_order
+    micro = _micro()
+    vbp = VerificationBlueprint(phase_id="P1", synthesis_cmds=["pytest"],
+                                obligations=[ProofObligation(
+                                    id="P1.S1.O1", micro_id="P1.S1",
+                                    kind="new_behavior", behavior="beh",
+                                    test_file="test_mod.py", test_name="test_x",
+                                    cmd_id="pytest")])
+    spec = work_order(micro, vbp)
+    assert spec.id == "P1.S1" and spec.phase_id == "P1"
+    assert spec.verification == ["proof:P1.S1.O1"]
+    assert "BOUNDARY: b" in spec.objective and "test_mod.py::test_x" in spec.objective
+    assert spec.completion_criteria == ["beh"]
+
+
+def test_retry_gate_blocks_photocopy():
+    from redgiant.plansys.gates import failure_signature, retry_gate
+    s1 = failure_signature(["test:proof:P1.S1.O1"], "Tests   FAILED badly")
+    s2 = failure_signature(["test:proof:P1.S1.O1"], "tests failed BADLY")
+    assert s1 == s2                                   # normalizzazione
+    assert retry_gate(None, s1).ok                    # primo fallimento: retry lecito
+    assert not retry_gate(s1, s2).ok                  # fotocopia: vietato
+    s3 = failure_signature(["output:mod.py"], "different failure")
+    assert retry_gate(s1, s3).ok
+
+
+def test_engine_phase_bookkeeping(tmp_path):
+    # PS5.3: done set dai gate ok; eleggibilita' per dipendenze; proof commands
+    from redgiant.config import Config as _C
+    from redgiant.plansys.artifacts import (Criterion, MacroPhase, MacroPlan,
+                                            ProofObligation,
+                                            VerificationBlueprint)
+    from redgiant.plansys.engine import PlanSysEngine
+    from redgiant.prompts.assemble import PromptAssembler
+    from redgiant.state.models import Budget
+    from redgiant.state.store import StateStore
+    from redgiant.tools.base import Scope
+    from redgiant.tools.router import ToolRouter, default_catalog
+    cfg = _C.load("dev-fast", CONFIG_DIR)
+    store = StateStore(tmp_path / "t.db")
+    tid = store.create_task("t", str(tmp_path), "dev-fast",
+                            Budget(max_total_tokens=9, max_tool_calls=9,
+                                   max_retries_per_subtask=1, max_wall_s=9))
+    scope = Scope(tmp_path, ["*.py"])
+    router = ToolRouter(default_catalog(cfg, scope,
+                                        {"pytest": ["pytest", "-q"]}),
+                        scope, store)
+    asm = PromptAssembler(Path(__file__).resolve().parents[2] / "redgiant" / "prompts")
+    eng = PlanSysEngine(cfg, store, llm=None, router=router, assembler=asm)
+    plan = MacroPlan(goal="g", criteria=[Criterion(id="C1", text="t")],
+                     phases=[MacroPhase(id="P1", title="a", intent="i",
+                                        depends_on=[], covers=["C1"]),
+                            MacroPhase(id="P2", title="b", intent="i",
+                                       depends_on=["P1"], covers=["C1"])])
+    assert eng._eligible_macro_phase(tid, plan).id == "P1"   # P2 aspetta P1
+    store.log_ps_gate(tid, gate="phase_synthesis", target="P1", ok=True,
+                      checks_json="[]")
+    assert eng._eligible_macro_phase(tid, plan).id == "P2"
+    store.log_ps_gate(tid, gate="phase_entry", target="P2", ok=True,
+                      checks_json="[]")
+    assert eng._eligible_macro_phase(tid, plan) is None      # tutte chiuse
+    vbp = VerificationBlueprint(phase_id="P1", synthesis_cmds=["pytest"],
+                                obligations=[ProofObligation(
+                                    id="P1.S1.O1", micro_id="P1.S1",
+                                    kind="new_behavior", behavior="b",
+                                    test_file="test_m.py", test_name="test_x",
+                                    cmd_id="pytest")])
+    eng._register_proof_commands(vbp)
+    assert "proof:P1.S1.O1" in eng._test_cmd_ids()           # prova registrata
 
 
 def test_compile_failed_after_regeneration(tmp_path):

@@ -130,8 +130,8 @@ def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger:
     # 5. artefatti prodotti: sottofasi completate -> expected_outputs
     for r in store.list_subtasks(task_id):
         if r["status"] in ("completed", "completed_with_warnings"):
-            spec = json.loads(r["spec"])
-            for outp in spec.get("expected_outputs", []):
+            spec, _, _ = store.get_subtask(task_id, r["subtask_id"])
+            for outp in spec.expected_outputs:
                 entries.append(_entry("artifact", outp,
                                       f"produced by {r['subtask_id']}"))
 

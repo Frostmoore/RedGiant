@@ -82,7 +82,7 @@ def test_senior_corrective_recall_then_reject(tmp_path):
     assert "[PLAN REJECTED]" in llm.prompts[1]        # la richiamata cita le regole
     assert "[RULES]" in llm.prompts[1]
 
-    llm2 = _Llm([bad, bad])
+    llm2 = _Llm([bad, bad, bad])   # fast #4: 2 correttive -> 3 chiamate totali
     s2 = SeniorPlanner(llm=llm2, assembler=asm, router=None)
     try:
         s2.run(ctx)
