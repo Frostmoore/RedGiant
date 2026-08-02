@@ -381,7 +381,8 @@ class PhaseCompiler:
             def _val(b: TestBundle) -> list[str]:
                 self._dedup_bundle(subset, b, log)
                 self._reconcile_test_names(subset, b, log)
-                return validate_bundle(b, subset, bp)
+                return validate_bundle(b, subset, bp,
+                                       set(self._existing_files()))
 
             one: TestBundle = role.run(
                 ctx, max_tokens=self.cfg.plansys.test_author_max_tokens,
@@ -394,7 +395,7 @@ class PhaseCompiler:
 
         out = TestBundle(phase_id=vbp.phase_id, artifacts=artifacts)
         self._prune_unbound_tests(out, vbp, log)
-        probs = validate_bundle(out, vbp, bp)
+        probs = validate_bundle(out, vbp, bp, set(self._existing_files()))
         if probs:
             raise CompileFailed("M4", probs)
         self.store.save_ps_artifact(task_id, kind="test_bundle", ref=phase.id,
@@ -602,7 +603,8 @@ class PhaseCompiler:
                                             bundle.model_dump_json())
                 bundle = TestBundle.model_validate_json(self._apply_patch(
                     TestBundle, bundle.model_dump_json(), patch))
-                probs = validate_bundle(bundle, vbp, bp)
+                probs = validate_bundle(bundle, vbp, bp,
+                                        set(self._existing_files()))
                 if probs:
                     raise CompileFailed("M4-patch", probs)
                 self.store.save_ps_artifact(
@@ -689,7 +691,8 @@ class PhaseCompiler:
                                                 bundle.model_dump_json())
                     cand = TestBundle.model_validate_json(self._apply_patch(
                         TestBundle, bundle.model_dump_json(), patch))
-                    probs = validate_bundle(cand, vbp, bp)
+                    probs = validate_bundle(cand, vbp, bp,
+                                            set(self._existing_files()))
                     if probs:
                         raise ValueError("; ".join(probs)[:300])
                     bundle = cand

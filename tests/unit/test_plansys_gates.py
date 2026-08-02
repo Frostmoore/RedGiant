@@ -221,6 +221,22 @@ def test_validate_bundle_new_behavior_needs_toplevel_import(tmp_path):
     assert any("TOP-LEVEL import" in p for p in probs)
 
 
+def test_validate_bundle_ghost_import(tmp_path):
+    # PS5.5 tentativo 3: proof che importa un modulo che nessuna micro
+    # possiede -> sessione J invincibile by design
+    from redgiant.plansys.artifacts import TestArtifact, TestBundle
+    from redgiant.plansys.gates import validate_bundle
+    _, bp, vbp, _ = _fixture_repo(tmp_path)
+    ghost = ("import storage\nfrom mod import add\n\n"
+             "def test_add():\n    assert add(1, 1) == 2\n\n"
+             "def test_subtract():\n    from mod import subtract\n"
+             "    assert subtract(3, 1) == 2\n")
+    bundle = TestBundle(phase_id="P1", artifacts=[
+        TestArtifact(path="test_mod.py", content=ghost)])
+    probs = validate_bundle(bundle, vbp, bp, {"mod.py"})
+    assert any("will NOT exist" in p for p in probs)
+
+
 def test_config_still_loads():
     cfg = Config.load("dev-fast",
                       Path(__file__).resolve().parents[2] / "config")

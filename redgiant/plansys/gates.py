@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import re
+import sys
 
 from redgiant.core.verify import CheckResult
 from redgiant.plansys.artifacts import (GateReport, MacroPlan, PhaseAnalysis,
@@ -233,8 +234,21 @@ def _fn_identifiers(fn: "ast.FunctionDef", imports_src: str) -> set[str]:
     return used
 
 
+def _top_imports(imports_src: str) -> set[str]:
+    """Primo segmento dei moduli importati a livello top del file."""
+    out: set[str] = set()
+    for line in imports_src.splitlines():
+        if line.startswith("from "):
+            out.add(line.split()[1].split(".")[0])
+        elif line.startswith("import "):
+            for part in line[7:].split(","):
+                out.add(part.strip().split()[0].split(".")[0])
+    return out
+
+
 def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint,
-                    bp: PhaseBlueprint | None = None) -> list[str]:
+                    bp: PhaseBlueprint | None = None,
+                    existing: set[str] | None = None) -> list[str]:
     """PS4.1 — M4 validata in codice PRIMA della materializzazione: file giusti,
     sintassi che parsa, niente file fuori nomenclatura. Batch n.3: con `bp`
     anche l'AGGANCIO al bersaglio si valida QUI (riparazione nel loop giusto,
@@ -248,6 +262,18 @@ def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint,
     needed = {o.test_file for o in vbp.obligations}
     for miss in sorted(needed - set(paths)):
         problems.append(f"obligation test_file '{miss}' has no artifact in bundle")
+    # PS5.5 tentativo 3: il proof di P2.S1 importava 'storage' che NESSUNA
+    # micro possiede — sessione J invincibile by design. I moduli locali
+    # risolvibili al momento del proof sono un fatto del control plane.
+    cum: dict[str, set[str]] = {}
+    if bp is not None and existing is not None:
+        run = {f.rsplit("/", 1)[-1][:-3] for f in existing
+               if f.endswith(".py")}
+        for m in bp.micro:
+            run = run | {f.rsplit("/", 1)[-1][:-3]
+                         for f in m.work.files_owned if f.endswith(".py")}
+            cum[m.id] = run
+    _resolvable_base = set(sys.stdlib_module_names) | {"pytest"}
     # ogni obbligo deve trovare la SUA funzione nel file del bundle (pilota PS5:
     # M3 nomina test_X, M4 scrive test_Y — va beccato QUI, non al gate)
     by_path = {a.path: a.content for a in bundle.artifacts}
@@ -289,6 +315,15 @@ def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint,
                         f"({sorted(stems)}) — without it the file stays green "
                         f"while the module is missing and the red baseline "
                         f"cannot fail; never wrap this import in try/except")
+            if o.micro_id in cum:
+                ghost = {t for t in _top_imports(imports_src)
+                         if t not in _resolvable_base
+                         and t not in cum[o.micro_id]}
+                if ghost:
+                    problems.append(
+                        f"{o.test_file}: imports {sorted(ghost)} which will "
+                        f"NOT exist when proof {o.id} runs — use ONLY these "
+                        f"local modules: {sorted(cum[o.micro_id])}")
     for a in bundle.artifacts:
         if re.match(r"^[A-Za-z]:[\\/]|^[\\/]", a.path):
             problems.append(f"artifact '{a.path}': paths must be RELATIVE to "
