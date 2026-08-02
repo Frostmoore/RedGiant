@@ -235,6 +235,10 @@ def test_validate_bundle_ghost_import(tmp_path):
         TestArtifact(path="test_mod.py", content=ghost)])
     probs = validate_bundle(bundle, vbp, bp, {"mod.py"})
     assert any("will NOT exist" in p for p in probs)
+    # GPU dry-run PS6: 'import storage' e' legittimo se storage e' un PACKAGE
+    probs2 = validate_bundle(bundle, vbp, bp,
+                             {"mod.py", "storage/__init__.py"})
+    assert not any("will NOT exist" in p for p in probs2)
 
 
 def test_config_still_loads():

@@ -316,11 +316,14 @@ class PhaseCompiler:
         out: VerificationBlueprint = role.run(
             ctx, max_tokens=self.cfg.plansys.m_pass_max_tokens,
             grammar_schema=grammar)  # type: ignore
+        # GPU dry-run PS6: canonicalizzare PRIMA di validare — un test_file
+        # inventato da M3 ('test.php') muore in patch per un nome che il
+        # control plane sovrascrive comunque (normalizzazione, poi giudizio)
         out = self._repair_loop(
             "M3", role, ctx, out, VerificationBlueprint,
-            lambda v: validate_verification(_norm_kinds(v), bp, known), log,
+            lambda v: (self._canonical_names(_norm_kinds(v), log)
+                       or validate_verification(v, bp, known)), log,
             grammar_schema=grammar)
-        self._canonical_names(out, log)
         self.store.save_ps_artifact(task_id, kind="verification_blueprint",
                                     ref=phase.id,
                                     payload_json=out.model_dump_json(),

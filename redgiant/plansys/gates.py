@@ -180,22 +180,21 @@ def validate_blueprint(bp: PhaseBlueprint, analysis: PhaseAnalysis,
     # PS5.5 tentativo 4: il goal di P3.S1 ordinava "create both storage.py and
     # report.py" ma la micro possedeva solo report.py — J insegue la prosa
     # contro lo scope. La prosa puo' citare SOLO file del proprio perimetro.
+    # GPU dry-run PS6: SOLO il goal — il boundary nomina per mestiere cio' che
+    # NON si tocca ("does not touch hist.py"): li' la citazione e' legittima.
     for m in (bp.micro if existing is not None else []):
         reach = set(m.work.files_owned) | set(m.work.inputs) | existing
         reach_names = {f.rsplit("/", 1)[-1] for f in reach}
-        for field_name, txt in (("goal", m.work.goal),
-                                ("boundary", m.work.boundary)):
-            refs = {r.replace("\\", "/").lstrip("./")
-                    for r in re.findall(r"[\w./\\-]+\.py\b", txt)}
-            bad = sorted(r for r in refs if r not in reach
-                         and r.rsplit("/", 1)[-1] not in reach_names)
-            if bad:
-                problems.append(
-                    f"{m.id} {field_name} mentions {bad} which are neither "
-                    f"owned by this micro nor in its inputs — the junior "
-                    f"will chase files it cannot write; mention ONLY "
-                    f"files_owned/inputs, or move that work to the micro "
-                    f"that owns those files")
+        refs = {r.replace("\\", "/").lstrip("./")
+                for r in re.findall(r"[\w./\\-]+\.py\b", m.work.goal)}
+        bad = sorted(r for r in refs if r not in reach
+                     and r.rsplit("/", 1)[-1] not in reach_names)
+        if bad:
+            problems.append(
+                f"{m.id} goal mentions {bad} which are neither owned by "
+                f"this micro nor in its inputs — the junior will chase "
+                f"files it cannot write; mention ONLY files_owned/inputs, "
+                f"or move that work to the micro that owns those files")
     # fast #3: la CATENA di copertura deve chiudersi — ogni criterio coperto
     # dalla fase deve essere PROVATO da almeno una micro, o restera' orfano
     # fino al coverage gate finale (fallimento tardivo = fallimento caro)
@@ -253,6 +252,20 @@ def _fn_identifiers(fn: "ast.FunctionDef", imports_src: str) -> set[str]:
     return used
 
 
+def _module_names(paths) -> set[str]:
+    """Nomi importabili dai path .py: stem del file E primo segmento del path
+    (GPU dry-run PS6: 'import commands' con commands/__init__.py e' legittimo
+    — i package contano quanto i moduli piatti)."""
+    out: set[str] = set()
+    for f in paths:
+        if not f.endswith(".py"):
+            continue
+        out.add(f.rsplit("/", 1)[-1][:-3])
+        if "/" in f:
+            out.add(f.split("/", 1)[0])
+    return out
+
+
 def _top_imports(imports_src: str) -> set[str]:
     """Primo segmento dei moduli importati a livello top del file."""
     out: set[str] = set()
@@ -286,11 +299,9 @@ def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint,
     # risolvibili al momento del proof sono un fatto del control plane.
     cum: dict[str, set[str]] = {}
     if bp is not None and existing is not None:
-        run = {f.rsplit("/", 1)[-1][:-3] for f in existing
-               if f.endswith(".py")}
+        run = _module_names(existing)
         for m in bp.micro:
-            run = run | {f.rsplit("/", 1)[-1][:-3]
-                         for f in m.work.files_owned if f.endswith(".py")}
+            run = run | _module_names(m.work.files_owned)
             cum[m.id] = run
     _resolvable_base = set(sys.stdlib_module_names) | {"pytest"}
     # ogni obbligo deve trovare la SUA funzione nel file del bundle (pilota PS5:

@@ -23,8 +23,8 @@ from redgiant.plansys.artifacts import (GateReport, MacroPhase, MacroPlan,
                                         VerificationBlueprint)
 from redgiant.plansys.compiler import (CompileFailed, NeedsDecision,
                                        PhaseAlreadySatisfied, PhaseCompiler)
-from redgiant.plansys.gates import (_run_probe, failure_signature, micro_gate,
-                                    retry_gate)
+from redgiant.plansys.gates import (_module_names, _run_probe,
+                                    failure_signature, micro_gate, retry_gate)
 from redgiant.plansys.ledger import build_ledger, render_ledger
 from redgiant.plansys.render import render_macro_plan, write_plan_doc
 from redgiant.plansys.roles import MacroRejected, SeniorPlanner
@@ -153,12 +153,16 @@ class PlanSysEngine(Orchestrator):
 
             self._register_proof_commands(vbp)
             root = self.router.scope.root
-            avail = {p.stem for p in root.rglob("*.py") if p.is_file()
-                     and "tasks" not in p.relative_to(root).parts}
+            avail: set[str] = set()
+            for p in root.rglob("*.py"):
+                rel = p.relative_to(root)
+                if not p.is_file() or "tasks" in rel.parts:
+                    continue
+                avail.add(p.stem)
+                if len(rel.parts) > 1:  # package: 'commands/__init__.py'
+                    avail.add(rel.parts[0])
             for micro in bp.micro:
-                avail.update(f.rsplit("/", 1)[-1][:-3]
-                             for f in micro.work.files_owned
-                             if f.endswith(".py"))
+                avail |= _module_names(micro.work.files_owned)
                 self.store.upsert_subtask(
                     task_id, work_order(micro, vbp, sorted(avail)),
                     actor="plansys")

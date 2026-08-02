@@ -77,6 +77,11 @@ def test_validate_blueprint_prose_outside_perimeter():
     bp2 = PhaseBlueprint(phase_id="P1", micro=[m2])
     assert validate_blueprint(bp2, an, ["C1"],
                               existing={"helper.py"}) == []
+    # GPU dry-run PS6: il BOUNDARY nomina per mestiere cio' che non si tocca
+    m3 = _micro()
+    m3.work.boundary = "Does not touch storage.py or report.py"
+    bp3 = PhaseBlueprint(phase_id="P1", micro=[m3])
+    assert validate_blueprint(bp3, an, ["C1"], existing=set()) == []
 
 
 def test_enum_schema_injection():
