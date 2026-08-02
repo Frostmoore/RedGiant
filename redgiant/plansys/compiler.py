@@ -210,8 +210,10 @@ class PhaseCompiler:
             seen_files: set[str] = set()
             deduped: list = []
             for m in split:
-                m.work.files_owned = [f for f in m.work.files_owned
-                                      if f not in seen_files]
+                # batch n.4: dedup anche DENTRO la lista (files_owned poteva
+                # contenere lo stesso file due volte nella stessa micro)
+                m.work.files_owned = list(dict.fromkeys(
+                    f for f in m.work.files_owned if f not in seen_files))
                 seen_files.update(m.work.files_owned)
                 if m.work.files_owned:
                     deduped.append(m)
@@ -362,6 +364,7 @@ class PhaseCompiler:
             artifacts.extend(a for a in one.artifacts if a.path == tf)
 
         out = TestBundle(phase_id=vbp.phase_id, artifacts=artifacts)
+        self._prune_unbound_tests(out, vbp, log)
         probs = validate_bundle(out, vbp, bp)
         if probs:
             raise CompileFailed("M4", probs)
@@ -375,6 +378,36 @@ class PhaseCompiler:
                                     actor="phase_compiler")
         log.line("compiler", f"{phase.id} M4: {len(out.artifacts)} file di test")
         return out
+
+    def _prune_unbound_tests(self, bundle: TestBundle,
+                             vbp: VerificationBlueprint, log) -> None:
+        """Batch n.4: i test EXTRA di M4 non legati a obblighi non passano
+        dalla qualificazione — se rotti, esplodono in sintesi. Si potano via
+        AST prima della materializzazione (solo per i file CANONICI nuovi:
+        nei file esistenti i test forniti restano intoccabili)."""
+        import ast as _ast
+        bound = {(o.test_file, o.test_name) for o in vbp.obligations}
+        for a in bundle.artifacts:
+            if (self.scope.root / a.path).is_file():
+                continue  # file esistente: mai potare i test forniti
+            try:
+                tree = _ast.parse(a.content)
+            except SyntaxError:
+                continue
+            pruned = []
+            kept_body = []
+            for node in tree.body:
+                if (isinstance(node, _ast.FunctionDef)
+                        and node.name.startswith("test")
+                        and (a.path, node.name) not in bound):
+                    pruned.append(node.name)
+                    continue
+                kept_body.append(node)
+            if pruned:
+                tree.body = kept_body
+                a.content = _ast.unparse(_ast.fix_missing_locations(tree)) + "\n"
+                log.line("compiler", f"potati test non qualificati in "
+                                     f"{a.path}: {pruned}")
 
     @staticmethod
     def _dedup_bundle(vbp: VerificationBlueprint, bundle: TestBundle,
