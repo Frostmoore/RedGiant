@@ -203,6 +203,24 @@ def test_validate_bundle_rules(tmp_path):
     assert any("does not parse" in p for p in probs)
 
 
+def test_validate_bundle_new_behavior_needs_toplevel_import(tmp_path):
+    # batch n.7: import del bersaglio nascosto in try/except o dentro la
+    # funzione -> file verde a modulo assente -> red baseline exit=0
+    from redgiant.plansys.artifacts import TestArtifact, TestBundle
+    from redgiant.plansys.gates import validate_bundle
+    _, bp, vbp, _ = _fixture_repo(tmp_path)
+    sneaky = ("def test_add():\n    from mod import add\n"
+              "    assert add(1, 1) == 2\n\n"
+              "def test_subtract():\n"
+              "    try:\n        from mod import subtract\n"
+              "    except ImportError:\n        return\n"
+              "    assert subtract(5, 3) == 2\n")
+    bundle = TestBundle(phase_id="P1", artifacts=[
+        TestArtifact(path="test_mod.py", content=sneaky)])
+    probs = validate_bundle(bundle, vbp, bp)
+    assert any("TOP-LEVEL import" in p for p in probs)
+
+
 def test_config_still_loads():
     cfg = Config.load("dev-fast",
                       Path(__file__).resolve().parents[2] / "config")

@@ -272,6 +272,23 @@ def validate_bundle(bundle: TestBundle, vbp: VerificationBlueprint,
                                 f"NONE of {sorted(syms)}: import and call the "
                                 f"target module — a test that avoids the "
                                 f"target proves nothing")
+            # batch n.7: 5 run morti all'oracle con red baseline exit=0 —
+            # test new_behavior senza import top-level del modulo bersaglio
+            # restano verdi a file assente. Qui la violazione e' PATCHABILE.
+            if o.kind == "new_behavior":
+                m = next((m for m in bp.micro if m.id == o.micro_id), None)
+                stems = {f.rsplit("/", 1)[-1][:-3]
+                         for f in (m.work.files_owned if m else [])
+                         if f.endswith(".py")}
+                top = {t.strip(".").split(".")[0]
+                       for t in imports_src.replace(",", " ").split()}
+                if stems and not (stems & top):
+                    problems.append(
+                        f"{o.test_file}: kind=new_behavior requires a "
+                        f"TOP-LEVEL import of the module under test "
+                        f"({sorted(stems)}) — without it the file stays green "
+                        f"while the module is missing and the red baseline "
+                        f"cannot fail; never wrap this import in try/except")
     for a in bundle.artifacts:
         if re.match(r"^[A-Za-z]:[\\/]|^[\\/]", a.path):
             problems.append(f"artifact '{a.path}': paths must be RELATIVE to "
