@@ -72,6 +72,11 @@ def test_plan_normalization_repairs_dep_sentinels():
         PS(id="P2", title="b", depends_on=["P1", "NULL"], completion_criteria=[])])
     assert validate_plan_logic(normalize_plan(out)) == []
     assert out.phases[0].depends_on == [] and out.phases[1].depends_on == ["P1"]
+    # rerun A/B: auto-dipendenza ("P1 depends on P1") = sentinello, riparata
+    selfdep = PlannerOutput(goal="g", success_criteria=[], phases=[
+        PS(id="P1", title="a", depends_on=["P1"], completion_criteria=[])])
+    assert validate_plan_logic(normalize_plan(selfdep)) == []
+    assert selfdep.phases[0].depends_on == []
     halluc = PlannerOutput(goal="g", success_criteria=[], phases=[
         PS(id="P1", title="a", depends_on=["geometry.py"], completion_criteria=[])])
     assert any("unknown phase" in p for p in validate_plan_logic(normalize_plan(halluc)))
@@ -114,6 +119,20 @@ def test_identical_repeat_counts_into_cumulative_guard(env):
     rep = w.run(ctx, max_steps=30)
     assert rep.status == "blocked"
     assert "identical_repeat" in rep.summary  # abortito dal guard, non da max_steps
+
+    # rerun A/B: run_tests ESENTATO — rieseguire l'oracolo non e' degenere
+    # (il guard abortiva le sottofasi di sola analisi a 8 pytest identici)
+    step_tests = WorkerStep.model_validate({"thought": "t", "action": "tool",
+                                            "tool_call": {"tool": "run_tests",
+                                                          "args": {"cmd_id": "pytest"}}})
+
+    class _LlmTests:
+        def complete(self, parts, **kw):
+            return SimpleNamespace(parsed=step_tests)
+
+    w2 = Worker(llm=_LlmTests(), assembler=_Asm(), router=_Router())
+    rep2 = w2.run(ctx, max_steps=12)
+    assert rep2.summary == "step budget exhausted"  # nessun aborto anticipato
 
 
 def test_design_logic_validation():

@@ -26,7 +26,8 @@ class PlannerOutput(BaseModel):
 
 
 # A/B 2026-08-02: il modello scrive "none"/"null" per dire "nessuna dipendenza"
-# (due task morti in 15s). Il significato e' inequivoco: riparazione
+# (due task morti in 15s); il rerun ha aggiunto l'auto-dipendenza ("P1 depends
+# on P1", altri due task morti in 2 chiamate). Entrambi inequivoci: riparazione
 # deterministica, come la normalizzazione N-TAB negli editor.
 _DEP_SENTINELS = {"none", "null", "n/a", "-", ""}
 
@@ -35,7 +36,8 @@ def normalize_plan(out: PlannerOutput) -> PlannerOutput:
     """Ripara i sentinelli inequivoci; le vere allucinazioni restano al validatore."""
     for p in out.phases:
         p.depends_on = [d for d in p.depends_on
-                        if d.strip().lower() not in _DEP_SENTINELS]
+                        if d.strip().lower() not in _DEP_SENTINELS
+                        and d != p.id]
     return out
 
 

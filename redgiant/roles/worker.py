@@ -144,8 +144,11 @@ class Worker(Role):
                 # A/B 2026-08-02: la ripetizione identica consecutiva e' degenere
                 # anche quando la chiamata "riesce" (visto: 15 edit no-op di fila
                 # fino a esaurire gli step): entra nel guard cumulativo come un
-                # fallimento, non resta un semplice avviso.
-                counted.append((call.tool, "identical_repeat"))
+                # fallimento, non resta un semplice avviso. Rerun stesso giorno:
+                # run_tests ESENTATO (come per tests_failed) — rieseguire l'oracolo
+                # e' lecito, il guard abortiva le sottofasi di sola analisi.
+                if call.tool != "run_tests":
+                    counted.append((call.tool, "identical_repeat"))
             last_call_sig = sig
 
             # F2.5 (loop da 12 step) + retest D2: la ripetizione va contata in modo

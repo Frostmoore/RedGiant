@@ -229,7 +229,7 @@ class ToolRouter
 
 ### `redgiant/roles/base.py` + `redgiant/roles/worker.py` — Worker (F1.5, D20)
 
-ReAct a passo singolo vincolato: un `WorkerStep` per step, contesto in append puro (KV cache riusata). L'incoerenza action↔payload NON è un validator (la grammatica non può esprimerla): è un dato gestito nel loop. Il `finish` non chiude la sottofase: la chiude la verifica. Guard cumulativo per (tool, errore) nel tentativo: advice a 3/5, aborto a 8; esclusi i `run_tests`→`tests_failed` (l'oracolo che parla non è un tool rotto); le chiamate identiche consecutive contano come fallimento `identical_repeat` anche se "riuscite" (A/B 2026-08-02: 15 edit no-op di fila).
+ReAct a passo singolo vincolato: un `WorkerStep` per step, contesto in append puro (KV cache riusata). L'incoerenza action↔payload NON è un validator (la grammatica non può esprimerla): è un dato gestito nel loop. Il `finish` non chiude la sottofase: la chiude la verifica. Guard cumulativo per (tool, errore) nel tentativo: advice a 3/5, aborto a 8; esclusi i `run_tests`→`tests_failed` (l'oracolo che parla non è un tool rotto); le chiamate identiche consecutive contano come fallimento `identical_repeat` anche se "riuscite" (A/B 2026-08-02: 15 edit no-op di fila), con `run_tests` ESENTATO (rerun stesso giorno: rieseguire l'oracolo è lecito — il guard abortiva le sottofasi di sola analisi a 8 pytest identici).
 
 ```python
 class RoleContext   # task, subtask, volatile
@@ -248,7 +248,7 @@ class Worker
 
 ### `redgiant/roles/planner.py` + `redgiant/roles/phase_designer.py` — pianificazione (F3)
 
-Planner: mappa sintetica (≤7 fasi), la LOGICA validata deterministicamente (id univoci, dipendenze acicliche, root presente, fasi completate conservate al replanning) con UNA richiamata correttiva (che CITA le regole violate, non solo i sintomi — A/B 2026-08-02) poi `PlanRejected`. `normalize_plan` ripara i sentinelli inequivoci in `depends_on` ("none"/"null"/"n/a"/"-"/"" → rimossi) prima di ogni validazione; le allucinazioni vere (es. nomi di file) restano al validatore. PhaseDesigner: espande solo la fase corrente (≤6 sottofasi, id `P<x>.S<n>`); D10: ogni sottofase deve avere verifica eseguibile O expected_outputs (l'esistenza è un oracolo); i cmd di verifica devono essere registrati.
+Planner: mappa sintetica (≤7 fasi), la LOGICA validata deterministicamente (id univoci, dipendenze acicliche, root presente, fasi completate conservate al replanning) con UNA richiamata correttiva (che CITA le regole violate, non solo i sintomi — A/B 2026-08-02) poi `PlanRejected`. `normalize_plan` ripara i sentinelli inequivoci in `depends_on` ("none"/"null"/"n/a"/"-"/"" e l'auto-dipendenza `dep == p.id` → rimossi) prima di ogni validazione; le allucinazioni vere (es. nomi di file) restano al validatore. PhaseDesigner: espande solo la fase corrente (≤6 sottofasi, id `P<x>.S<n>`); D10: ogni sottofase deve avere verifica eseguibile O expected_outputs (l'esistenza è un oracolo); i cmd di verifica devono essere registrati.
 
 ```python
 class PlannerOutput      # goal<=300, success_criteria<=6, phases<=7
@@ -409,6 +409,14 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **⭐ Le run ufficiali si lanciano SOLO da working tree pulito**: l'A/B è partito con modifiche non committate — la run 2 ha misurato uno stato intermedio mai collaudato e l'hash git nel report mentiva. Prima si committa, poi si misura.
 - **`depends_on` spazzatura dal Planner** (`["none"]`, `["geometry.py"]`): i sentinelli inequivoci sono riparati da `normalize_plan`; la richiamata correttiva ora cita la regola (`depends_on` solo id di fasi del piano, root = `[]`), non solo i sintomi.
 - **Loop di edit no-op**: `edit_file` con old==new "riusciva" senza cambiare nulla → 15 ripetizioni identiche fino a esaurire gli step, invisibili al guard (ogni chiamata era un successo). Fix doppio: `no_op_edit` è un errore, e la chiamata identica consecutiva conta nel guard cumulativo come `identical_repeat` anche se ok.
+
+**Rerun A/B ufficiale (2026-08-02, @611d894 — Planner 2/10 vs baseline 9/10: verdetto D11):**
+
+- **Auto-dipendenza del Planner** (`P1 depends on P1`): altro sentinello dopo "none" — 2 task morti in 2 chiamate. Riparato in `normalize_plan` (dep == id → rimossa).
+- **Il guard `identical_repeat` mordeva l'oracolo**: contava anche i `run_tests` identici e abortiva le sottofasi di sola analisi ("esegui pytest e registra i fallimenti") a 8 esecuzioni. Esentato, coerente con l'esclusione esistente di `tests_failed`.
+- **Fasi ridondanti**: su task banali il Planner genera 3-4 fasi che ripetono lo stesso lavoro (P2 che ricerca ciò che P1 ha già trovato) — costo puro, nessun guadagno. È il volto strutturale dell'overhead di governance, non un bug puntuale.
+- **Sottofasi-analisi artificiali**: la revisione scoped spinge il Designer a creare sottofasi "analizza e produci report.txt" con output che il Worker non produce naturalmente → 3 tentativi bloccati → replan. Il perimetro giusto non basta: gli expected_outputs devono essere artefatti del lavoro vero, non compiti in classe.
+- **La verifica scoped sposta l'errore in avanti**: T009 rerun — P1.S1 "passa" sugli expected_outputs ma contiene `slugify` invece di `slug`; il falso positivo intermedio esplode solo sull'ultima sottofase. Trade-off accettato consapevolmente (F3.2-REVISIONE), ora con la sua prima evidenza di costo.
 
 ## 10. Debito tecnico aperto
 
