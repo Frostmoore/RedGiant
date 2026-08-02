@@ -34,7 +34,8 @@ from redgiant.state.models import SubtaskSpec, TaskState
 from redgiant.tools.base import Scope
 
 
-def work_order(micro: MicroPhase, vbp: VerificationBlueprint) -> SubtaskSpec:
+def work_order(micro: MicroPhase, vbp: VerificationBlueprint,
+               importable: list[str] | None = None) -> SubtaskSpec:
     """PS5.1 — MicroPhase+prove -> SubtaskSpec per il Worker ESISTENTE.
     verification = SOLO le prove della micro (comandi proof:*, registrati dal
     control plane): perimetro=verifica by design, mai la suite intera."""
@@ -51,6 +52,13 @@ def work_order(micro: MicroPhase, vbp: VerificationBlueprint) -> SubtaskSpec:
                       + ". The tests are ALREADY WRITTEN and immutable: never "
                         "create or edit test files. You can write ONLY: "
                       + ", ".join(micro.work.files_owned))
+    # PS5.5 tentativo 2: J importava 'storage' PRIMA che storage.py esistesse
+    # (ModuleNotFoundError al proof). I moduli locali importabili sono un fatto
+    # del control plane, non una deduzione del 2B.
+    if importable:
+        objective += ("\nIMPORTS: the ONLY local modules that exist are: "
+                      + ", ".join(importable) + ". Never import any other "
+                      "local module (it does not exist yet); stdlib is fine.")
     return SubtaskSpec(
         id=micro.id, phase_id=micro.id.split(".")[0], title=micro.title,
         objective=objective, inputs=micro.work.inputs,
@@ -144,9 +152,16 @@ class PlanSysEngine(Orchestrator):
                 return self.store.load_task(task_id)
 
             self._register_proof_commands(vbp)
+            root = self.router.scope.root
+            avail = {p.stem for p in root.rglob("*.py") if p.is_file()
+                     and "tasks" not in p.relative_to(root).parts}
             for micro in bp.micro:
-                self.store.upsert_subtask(task_id, work_order(micro, vbp),
-                                          actor="plansys")
+                avail.update(f.rsplit("/", 1)[-1][:-3]
+                             for f in micro.work.files_owned
+                             if f.endswith(".py"))
+                self.store.upsert_subtask(
+                    task_id, work_order(micro, vbp, sorted(avail)),
+                    actor="plansys")
 
             for micro in bp.micro:
                 out = self._run_micro(task_id, micro, vbp, worker, tracker, log)
