@@ -14,7 +14,7 @@
 
 *The model stays small. The **system** becomes large.*
 
-[Thesis](#-the-thesis) · [Decisions](#-key-technical-decisions) · [Findings](#-empirical-findings-so-far-phase-0) · [Pipeline](#-pipeline-at-a-glance) · [Hardware](#-target-hardware-severino) · [Roadmap](#-roadmap) · [Docs](#-repository-map) · [Quickstart](#-getting-started-development-windows)
+[Thesis](#-the-thesis) · [Niche](#-where-this-sits--the-niche-honestly) · [Decisions](#-key-technical-decisions) · [Findings](#-empirical-findings-so-far-phases-0-3) · [Pipeline](#-pipeline-at-a-glance) · [Hardware](#-target-hardware-severino) · [Roadmap](#%EF%B8%8F-roadmap--and-how-its-actually-going) · [Docs](#-repository-map) · [Quickstart](#-getting-started-development-windows)
 
 </div>
 
@@ -37,6 +37,21 @@ Small language models don't fail because they lack intelligence for a single ste
 | 3 | **Minimal context** | Each role receives the least sufficient context (~4–8K tokens per call), never the full history |
 | 4 | **Deterministic orchestration** | *The model proposes; the orchestrator decides.* Every state mutation is typed, attributed, persisted (SQLite). No success without recorded evidence |
 
+## 🧭 Where this sits — the niche, honestly
+
+The local-AI landscape splits into a few well-served categories, and Red Giant deliberately is none of them:
+
+- **Agent orchestration frameworks** give you graphs, crews and tool-calling loops — but they implicitly assume a *capable* model (a cloud API or a large local one) that can recover from its own mistakes. Point them at a 2B model on a CPU and they spiral: the retry loops, verbose prompts and long contexts they rely on are exactly what small models and slow prefill cannot afford.
+- **Local inference runners** solve *running* models on your hardware — quantization, serving, chat UIs. Essential plumbing (this project builds on one of them), but they stop where the hard problem starts: a served model is not a reliable agent.
+- **Structured-output libraries** solve format validity via constrained decoding. Also essential, also a component: format-valid output can still be semantically empty, truncated, or confidently wrong — this project's field notes document exactly how.
+- **Research on small-model agents** increasingly says the promising recipe is small models + strict specifications + external validators. Mostly papers and surveys; few end-to-end engineered systems exist, and fewer still target genuinely constrained hardware.
+
+**Red Giant is the intersection nobody serves**: a complete, engineered agentic *system* — not a library — purpose-built for ~2B-parameter models on watt-constrained, CPU-only consumer hardware (a 15W mini-PC, 4 cores), where token economy, KV-cache reuse, deterministic verification and human consent are the architecture, not afterthoughts. Every design decision is documented with the measurement that justifies it, and every failure mode found in the field is recorded with its technical cause.
+
+**What it is not, equally honestly:** not a drop-in framework you `pip install` around your own model (it is opinionated end-to-end); not validated beyond small synthetic repositories yet (the real-codebase exam is a planned phase); currently calibrated on one specific model and runtime build; and not an attempt to compete with big-model agents on capability — the bet is on raising the *floor* of what trivial hardware can do reliably, not the ceiling of what intelligence can do.
+
+If you are trying to make a small local model do real, verified work on hardware you already own — this is the problem space this repository lives in, traps and all.
+
 ## ⚙️ Key technical decisions
 
 | Decision | Rationale |
@@ -52,9 +67,9 @@ Small language models don't fail because they lack intelligence for a single ste
 | 🚫 **No external LLM APIs, ever** | A system that escapes to a big model under pressure proves nothing. Honest explicit failure is a valid result |
 | 🪶 **Stack: Python · FastAPI + HTMX + Jinja2 · SQLite · zero frontend build** | One process, one port, deployable as one container next to llama-server |
 
-## 🔬 Empirical findings so far (Phase 0)
+## 🔬 Empirical findings so far (Phases 0-3)
 
-Field notes from probing grammar-constrained decoding on Gemma 4 E2B — useful to anyone building on small models:
+Field notes from building on Gemma 4 E2B — useful to anyone working with small models. Every finding is tracked with its technical cause in the [codebase atlas, §9](memory/codebase_reference.md):
 
 1. **The grammar constrains, but does not inform.** With guided decoding active but the schema absent from the prompt, the model produces structurally valid JSON filled with literal placeholders (`"..."`, `"$id"`). The schema must be shown *in the prompt*; the grammar only guarantees shape.
 2. **Instruction-tuned models need their chat template even for raw completions.** Without Gemma's turn markers, output degenerates.
@@ -107,17 +122,57 @@ flowchart LR
 
 Development happens on a fast workstation, but **official numbers only come from CPU-capped profiles** (`severino-sim`: Docker, 2 workstation cores ≈ 4 target cores, 10 GB) and from the real box.
 
-## 🗺️ Roadmap
+## 🗺️ Roadmap — and how it's actually going
 
-- [x] **F0 — Foundations** *(done, `v1.1.0`)*: pinned runtime, model verification, constrained-decoding probe (60/60), resource-capped simulator, committed baselines
-- [x] **F1 — Deterministic core + worker** *(done, `v2.0.0`)*: walking skeleton, evaluator with 6 synthetic tasks — 4/6 verified on the capped profile, 0 false claims
-- [x] **F2 — Minimal web GUI** *(done, `v2.1.0`)*: async job queue, live tree, standing consent grants with override, budget-as-consent, guided relaunch — 15 defects fixed via live user testing + automated battery
-- [ ] **F3 — Planning**: planner + phase designer, dynamic versioned plans, replanning
-- [ ] **F4 — Continuous verification**: two-stage debugger, supervisor, anti-loop, git checkpoints/rollback
-- [ ] **F5 — Context & KV-cache engineering**: prefix reuse, slot save/restore, verified state compression
-- [ ] **F6 — Adaptive routing**: classifier/assessor, direct/short/full pipelines, calibration
-- [ ] **F7 — Non-coding domains**: local/web research with verified citations, advice
-- [ ] **F8 — Real-world benchmark + deployment**: a Laravel 13 chatbot codebase, deployed on the target box
+This is the project's state of the union: for every phase, how it went, what
+we learned, what's still owed. It is a *summary* — every phase, trap and test
+mentioned here lives in full detail in its own document:
+
+- 📐 [`plan_red_giant.md`](memory/plan_red_giant.md) — every phase with sub-phases, rationale, acceptance criteria and per-phase outcome blocks ("ESITO F*n*");
+- 🗺️ [`codebase_reference.md`](memory/codebase_reference.md) — §9 lists **every trap** with its technical cause, §10 the open debt with its destination phase, §7 the test catalog;
+- 📊 [`bench/results/`](bench/results/) — the committed measurement reports behind every number quoted below.
+
+### ✅ F0 — Foundations (`v1.1.0`)
+
+*Goal: pin the runtime, verify the model, measure the hardware — before writing any pipeline code.*
+
+- **How it went:** everything shipped, but probing the model produced three surprises that shaped the whole project. In short: forcing the output format (the "grammar") guarantees *shape*, not *content* — the model must also *see* the schema, must have enough token budget, and must use its chat template, or it produces well-formed nonsense.
+- **Key number:** on target-equivalent cores, reading a 16K-token context takes **3 minutes**. Small contexts are physics, not taste.
+- **Owed:** KV slot persistence is broken on the pinned llama.cpp build — re-check in F5.
+
+### ✅ F1 — Deterministic core + worker (`v2.0.0`)
+
+*Goal: a walking skeleton that solves real (tiny) coding tasks, and becomes the control group every future "smart" role must beat.*
+
+- **How it went:** 4 of 6 synthetic tasks solved and externally verified on the capped profile; zero false success claims.
+- **What we learned** (the lesson that defines the project): in almost every failure the model had *reasoned correctly* — the environment was lying to it. Unified diffs punished correct fixes over a blank line; file reads showed line numbers the model then faithfully copied into its edits. **Adapt the environment, don't fight the model** — e.g. switching from diffs to exact-string replacement turned 20-call failures into 5-call successes.
+- **Owed:** one task fails on pure reasoning (the model can't flip "that file is off-limits, so the bug must be in the caller") — it waits for the Supervisor (F4).
+
+### ✅ F2 — Web GUI (`v2.1.0`)
+
+*Goal: an interface comfortable enough that the user actually tests the system — before the pipeline gets complex.*
+
+- **How it went:** the hardest shakedown so far. Three rounds of live user testing plus an automated battery found **15 defects**. The most instructive: a single unescaped quote inside a JSON string derails a small model into a 60-call chaos loop — fixed *structurally*, by making the incoherent output branch impossible to generate (discriminated unions).
+- **What matured here:** the consent model. Approving a write grants that file for the whole task (revocable); running out of budget *asks you* instead of killing the task; approval requests show a readable diff of what would be written; after your approval the task resumes exactly where it stopped, with the cache still warm.
+- **A principle worth stealing:** verification is symmetric — if the tests are green, the work is done even when the model *believes* it failed. Claims never beat oracles, in either direction.
+- **Owed:** everything is proven on 2-4 file toy repos; several tolerances are calibrated on this exact model and build.
+
+### 🔄 F3 — Planning (in progress)
+
+*Goal: a Planner that maps the work into phases, expanded lazily, with replanning when reality disagrees.*
+
+- **Built and working:** plan generation, validation, lazy expansion, replanning (used correctly in live runs).
+- **Learned so far:** a planner that hasn't *seen* the tests invents function names the tests then reject; and a subtask judged by tests it's forbidden to fix will thrash forever (49 rewrites of one 5-line file). Both fixed: plans are now anchored to test excerpts, and verification is scoped to what each subtask owns.
+- **The honest open question:** on small tasks the planner is pure overhead (~10× the calls) — its value hypothesis lives on tasks too big for a single worker session, which our synthetic drawer doesn't contain yet. The A/B currently running measures the cost; the final verdict comes on the real codebase (F8), and *when* to use it is F6's routing question.
+
+### ⏭️ Next
+
+- **F3-bis — Multi-domain micro-slice** *(user-requested)*: prove the engine on everyday non-coding work — local document analysis, external API calls (never LLM APIs), document transforms — before designing the Supervisor, so F4 knows non-coding failure modes too.
+- **F4 — Continuous verification**: debugger, supervisor, anti-loop, git checkpoints. Two customers already waiting: the reasoning-trap task and a human protocol that evolves from answering machine to dialogue.
+- **F5 — Context & KV-cache engineering**: the cache already proved itself (88 calls cost only 82s of prefill on CPU); F5 makes it measured and engineered, and re-checks slot persistence.
+- **F6 — Adaptive routing**: small tasks go straight to the worker, big ones through the planner — where the "when is planning worth it" question gets its answer, and model-specific tolerances get A/B-ed as a system.
+- **F7 — Non-coding domains in full**: web search, verified citations, multi-source triangulation, advice with declared provenance.
+- **F8 — The real exam**: a Laravel 13 chatbot codebase on the target box — final numbers for the planner, the tolerances, and the whole thesis.
 
 ## 📚 Repository map
 
@@ -137,7 +192,8 @@ pip install -e ".[dev]"
 
 scripts\download-llama.ps1     # pinned llama.cpp binaries (CUDA + CPU)
 scripts\download-model.ps1     # Gemma 4 E2B QAT Q4 GGUF, SHA256-verified
-scripts\start-llama.ps1 -Profile dev-fast                 # GPU server for code iteration
+scripts\start-llama.ps1 -Profile dev-fast                 # CPU-bound dev server (24 threads
+                                                          # — the GPU is deliberately unused)
 docker compose -f docker\severino-sim\compose.yml up -d   # the honest 2-core profile
 
 python bench\schemas_probe.py --url http://127.0.0.1:8080   # constrained-decoding probe

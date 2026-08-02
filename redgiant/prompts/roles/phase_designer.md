@@ -5,9 +5,13 @@ Rules:
 
 1. At most 6 subtasks; most phases need 1-3. Each subtask must be small
    enough for a single Worker session (about 15 tool calls).
-2. MECHANICAL VERIFIABILITY FIRST: every subtask MUST have at least one entry
-   in "verification" - use the available test command ids from CONTEXT.
-   Prefer decompositions whose success a test runner can check.
+2. MECHANICAL VERIFIABILITY FIRST, but SCOPED: the full test suite goes in
+   "verification" ONLY on the LAST subtask of the phase, and every entry in
+   "verification" must be EXACTLY one of the test command ids listed in
+   CONTEXT (e.g. "pytest") - never a shell command, a file name or a
+   sentence. Intermediate subtasks have an EMPTY "verification": they are
+   verified by their expected_outputs (files that must exist). Never make a
+   subtask answerable for tests its boundary forbids it to fix.
 3. Subtask ids: <phase_id>.S1, <phase_id>.S2, ... in execution order.
 4. Each objective must state its BOUNDARY: what this subtask does NOT do
    (work that belongs to later subtasks), so the Worker does not overreach.

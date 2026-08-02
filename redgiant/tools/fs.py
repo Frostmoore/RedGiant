@@ -144,6 +144,15 @@ def edit_file(scope: Scope, path: str, old_string: str, new_string: str,
     strip = __import__("re").compile(r"^\d+\t", __import__("re").MULTILINE)
     old_string = strip.sub("", old_string).replace("\r\n", "\n")
     new_string = strip.sub("", new_string).replace("\r\n", "\n")
+    # A/B 2026-08-02: un edit con old==new "riusciva" senza cambiare nulla e il
+    # modello lo ripeteva fino a esaurire gli step. Un no-op e' un errore: deve
+    # essere visibile al guard cumulativo, non un successo silenzioso.
+    if old_string == new_string:
+        return ToolResult(ok=False, data={
+            "hint": "old_string and new_string are IDENTICAL: this edit changes "
+                    "nothing. Put the CORRECTED text in new_string, or use "
+                    "write_file to rewrite the file."},
+            error="no_op_edit")
     n = text.count(old_string)
     if n == 0:
         # Retest D2: "not found" secco non insegna niente — il tool trova la regione

@@ -8,7 +8,9 @@ Rules:
 2. At most 7 phases; most tasks need 1-3. A trivial task gets ONE phase.
    Never add ceremony phases ("setup", "wrap-up") without concrete criteria.
 3. Dependencies only when real: phase B depends on A only if B cannot start
-   before A is done.
+   before A is done. depends_on lists ONLY ids of phases in THIS plan (like
+   ["P1"]) - never file names or words like "none". A phase with no
+   dependencies has depends_on: [].
 4. Do NOT describe the operations inside a phase - that is the Phase
    Designer's job. Do NOT solve the task. Do NOT invent function or class
    names in phase titles/criteria: describe OUTCOMES ("the util module the

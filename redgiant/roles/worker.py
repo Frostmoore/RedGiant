@@ -137,9 +137,15 @@ class Worker(Role):
 
             sig = json.dumps({"t": call.tool, "a": call.args}, sort_keys=True)
             repeat_note = ""
+            counted: list[tuple] = []
             if sig == last_call_sig:
                 repeat_note = ("\n[NOTE] identical call repeated - change approach "
                                "or finish (blocked) instead of retrying it again.")
+                # A/B 2026-08-02: la ripetizione identica consecutiva e' degenere
+                # anche quando la chiamata "riesce" (visto: 15 edit no-op di fila
+                # fino a esaurire gli step): entra nel guard cumulativo come un
+                # fallimento, non resta un semplice avviso.
+                counted.append((call.tool, "identical_repeat"))
             last_call_sig = sig
 
             # F2.5 (loop da 12 step) + retest D2: la ripetizione va contata in modo
@@ -149,18 +155,19 @@ class Worker(Role):
                                       and result.error == "tests_failed"):
                 # i test ROSSI durante l'iterazione sono l'oracolo che parla, non
                 # un tool rotto: non contano per l'aborto (il tetto e' max_steps)
-                fk = (call.tool, result.error)
+                counted.append((call.tool, result.error))
+            for fk in counted:
                 fail_counts[fk] = fail_counts.get(fk, 0) + 1
                 n = fail_counts[fk]
                 if n >= 8:
                     return FinishReport(
                         status="blocked",
-                        summary=f"tool '{call.tool}' failed {n} times with "
-                                f"'{result.error}' in this attempt: aborting early",
+                        summary=f"tool '{fk[0]}' failed {n} times with "
+                                f"'{fk[1]}' in this attempt: aborting early",
                         evidence=[], verification_requested=[])
                 if n in (3, 5):
-                    repeat_note += (f"\n[ADVICE] '{call.tool}' has failed {n} times "
-                                    f"with '{result.error}' in this attempt. STOP "
+                    repeat_note += (f"\n[ADVICE] '{fk[0]}' has failed {n} times "
+                                    f"with '{fk[1]}' in this attempt. STOP "
                                     f"retrying it the same way: switch tool (e.g. "
                                     f"write_file to rewrite the whole file) or finish "
                                     f"blocked.")

@@ -6,6 +6,7 @@ import pytest
 
 from redgiant.config import Config
 from redgiant.core.verify import verify_subtask
+from redgiant.roles.base import RoleContext
 from redgiant.roles.worker import FinishReport, ToolCallSpec, WorkerStep
 from redgiant.state.models import Budget, SubtaskSpec
 from redgiant.state.store import StateStore
@@ -61,6 +62,60 @@ def test_plan_logic_validation_and_eligibility():
     assert any("dropped" in p for p in dropped)
 
 
+def test_plan_normalization_repairs_dep_sentinels():
+    # A/B 2026-08-02: il modello scrive depends_on ["none"] per dire "nessuna
+    # dipendenza" -> riparazione deterministica; le allucinazioni vere restano.
+    from redgiant.roles.planner import PlannerOutput, normalize_plan, validate_plan_logic
+    from redgiant.state.models import PhaseSpec as PS
+    out = PlannerOutput(goal="g", success_criteria=[], phases=[
+        PS(id="P1", title="a", depends_on=["none"], completion_criteria=[]),
+        PS(id="P2", title="b", depends_on=["P1", "NULL"], completion_criteria=[])])
+    assert validate_plan_logic(normalize_plan(out)) == []
+    assert out.phases[0].depends_on == [] and out.phases[1].depends_on == ["P1"]
+    halluc = PlannerOutput(goal="g", success_criteria=[], phases=[
+        PS(id="P1", title="a", depends_on=["geometry.py"], completion_criteria=[])])
+    assert any("unknown phase" in p for p in validate_plan_logic(normalize_plan(halluc)))
+
+
+def test_identical_repeat_counts_into_cumulative_guard(env):
+    # A/B 2026-08-02: 15 chiamate identiche "riuscite" di fila esaurivano gli
+    # step. La ripetizione identica consecutiva entra nel guard cumulativo.
+    from types import SimpleNamespace
+    from redgiant.roles.worker import Worker
+    from redgiant.tools.base import ToolResult
+    scope, router, tid = env
+    step = WorkerStep.model_validate({"thought": "t", "action": "tool",
+                                      "tool_call": {"tool": "read_file",
+                                                    "args": {"path": "a.py"}}})
+
+    class _Parts:
+        volatile_context = ""
+
+        def with_appended_context(self, s):
+            return self
+
+    class _Llm:
+        def complete(self, parts, **kw):
+            return SimpleNamespace(parsed=step)
+
+    class _Asm:
+        def build(self, *a, **k):
+            return _Parts()
+
+    class _Router:
+        def allowed_for(self, name, domain):
+            return []
+
+        def dispatch(self, tid_, sid, tool, args):
+            return ToolResult(ok=True, data={"content": "x"}, error=None)
+
+    w = Worker(llm=_Llm(), assembler=_Asm(), router=_Router())
+    ctx = RoleContext(task=router.store.load_task(tid), subtask=_spec(), volatile="")
+    rep = w.run(ctx, max_steps=30)
+    assert rep.status == "blocked"
+    assert "identical_repeat" in rep.summary  # abortito dal guard, non da max_steps
+
+
 def test_design_logic_validation():
     # F3.2: D10 — sottofase senza verifica NE' output = respinta
     from redgiant.roles.phase_designer import PhaseDesign, validate_design_logic
@@ -78,6 +133,19 @@ def test_design_logic_validation():
            expected_outputs=[], completion_criteria=[], verification=["ghost"])])
     assert any("not a known" in p for p in validate_design_logic(wrong_cmd, "P1", {"pytest"}))
     assert any("phase_id" in p for p in validate_design_logic(good, "P2", {"pytest"}))
+    # REVISIONE F3.2: suite di test solo sull'ULTIMA sottofase (perimetro=verifica)
+    multi = PhaseDesign(phase_id="P1", subtasks=[
+        SS(id="P1.S1", phase_id="P1", title="prep", objective="o", inputs=[], tools=[],
+           expected_outputs=["a.py"], completion_criteria=[], verification=["pytest"]),
+        SS(id="P1.S2", phase_id="P1", title="final", objective="o", inputs=[], tools=[],
+           expected_outputs=[], completion_criteria=[], verification=["pytest"])])
+    assert any("ONLY on the LAST" in p for p in validate_design_logic(multi, "P1", {"pytest"}))
+    multi_ok = PhaseDesign(phase_id="P1", subtasks=[
+        SS(id="P1.S1", phase_id="P1", title="prep", objective="o", inputs=[], tools=[],
+           expected_outputs=["a.py"], completion_criteria=[], verification=[]),
+        SS(id="P1.S2", phase_id="P1", title="final", objective="o", inputs=[], tools=[],
+           expected_outputs=[], completion_criteria=[], verification=["pytest"])])
+    assert validate_design_logic(multi_ok, "P1", {"pytest"}) == []
 
 
 def test_oracles_beat_claims_in_both_directions(env, tmp_path):

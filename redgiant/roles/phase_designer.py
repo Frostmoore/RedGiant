@@ -49,6 +49,18 @@ def validate_design_logic(out: PhaseDesign, current_phase_id: str,
             if v not in known_cmd_ids:
                 problems.append(f"subtask {s.id} verification '{v}' is not a known "
                                 f"test command (known: {sorted(known_cmd_ids)})")
+    # REVISIONE F3.2 (churn T009, concordata con l'utente): perimetro e verifica
+    # devono coincidere — in una fase multi-sottofase la suite di test va SOLO
+    # sull'ultima sottofase; le intermedie si verificano su cio' che possiedono
+    # (un worker punito da test rossi fuori dal suo confine riscrive all'infinito
+    # l'unico file che puo' toccare: 49 riscritture osservate).
+    if len(out.subtasks) > 1:
+        for s in out.subtasks[:-1]:
+            if s.verification:
+                problems.append(
+                    f"subtask {s.id}: full test-suite verification is allowed ONLY on "
+                    f"the LAST subtask of the phase; intermediate subtasks must be "
+                    f"checked by their expected_outputs")
     return problems
 
 

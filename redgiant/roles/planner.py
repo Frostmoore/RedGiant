@@ -25,6 +25,20 @@ class PlannerOutput(BaseModel):
     phases: list[PhaseSpec] = Field(max_length=7)  # D21: tetto duro
 
 
+# A/B 2026-08-02: il modello scrive "none"/"null" per dire "nessuna dipendenza"
+# (due task morti in 15s). Il significato e' inequivoco: riparazione
+# deterministica, come la normalizzazione N-TAB negli editor.
+_DEP_SENTINELS = {"none", "null", "n/a", "-", ""}
+
+
+def normalize_plan(out: PlannerOutput) -> PlannerOutput:
+    """Ripara i sentinelli inequivoci; le vere allucinazioni restano al validatore."""
+    for p in out.phases:
+        p.depends_on = [d for d in p.depends_on
+                        if d.strip().lower() not in _DEP_SENTINELS]
+    return out
+
+
 def validate_plan_logic(out: PlannerOutput,
                         required_phase_ids: list[str] | None = None) -> list[str]:
     """Check deterministici sulla LOGICA del piano. Ritorna i problemi (vuoto = ok)."""
@@ -77,18 +91,24 @@ class Planner(Role):
         out: PlannerOutput = self.llm.complete(
             parts, role=self.name, schema=PlannerOutput, max_tokens=max_tokens,
             task_id=ctx.task.id).parsed  # type: ignore[assignment]
-        problems = validate_plan_logic(out, required_phase_ids)
+        problems = validate_plan_logic(normalize_plan(out), required_phase_ids)
         if not problems:
             return out
         # una sola richiamata, con gli errori come dati (D3: la forma è garantita,
-        # qui si corregge la logica)
+        # qui si corregge la logica). A/B 2026-08-02: elencare i problemi non
+        # basta — il modello piccolo va istruito sulla regola violata, non solo
+        # sul sintomo.
         retry = parts.with_appended_context(
             "\n[PLAN REJECTED] your plan has logical problems, fix ALL of them: "
-            + "; ".join(problems))
+            + "; ".join(problems)
+            + "\n[RULES] depends_on may list ONLY ids of phases in THIS plan "
+              "(like \"P1\") - never file names or words like \"none\". A phase "
+              "with no dependencies has depends_on: []. At least one phase must "
+              "have depends_on: [].")
         out = self.llm.complete(
             retry, role=self.name, schema=PlannerOutput, max_tokens=max_tokens,
             task_id=ctx.task.id).parsed  # type: ignore[assignment]
-        problems = validate_plan_logic(out, required_phase_ids)
+        problems = validate_plan_logic(normalize_plan(out), required_phase_ids)
         if problems:
             raise PlanRejected(problems)
         return out

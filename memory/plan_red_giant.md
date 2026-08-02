@@ -574,6 +574,7 @@ Si esegue al completamento dell'ultima sottofase 🔎 di una fase. È una proced
 **Passo 2 — Aggiornare `memory/codebase_reference.md`.** Per ogni elemento nuovo o cambiato nella fase: classi con ogni metodo e firma completa, tabelle DB con ogni colonna, endpoint con input/output/errori, chiavi di config, test con cosa dimostra ciascuno. Aggiornare le sezioni: "Cosa NON esiste ancora" (rimuovere ciò che ora esiste), "Trappole già disinnescate" (aggiungere ogni problema incontrato, con la **causa tecnica**), "Debito tecnico aperto" (con il perché è rimandato e quando va affrontato), "Il perché delle scelte non ovvie".
 
 **Passo 2-bis — Rileggere e riscrivere `README.md`** (regola specifica di questo progetto, richiesta dall'utente il 2026-08-01). Il README è in inglese, pensato per essere trovato e capito da persone e agenti AI che fanno ricerca: a ogni fine fase va riletto per intero e aggiornato — stato, roadmap (checkbox), decisioni tecniche rilevanti aggiunte nella fase, findings empirici nuovi, comandi. Un README fermo a due fasi fa è un documento che mente.
+**Integrazione (richiesta utente, 2026-08-02):** la Roadmap del README porta, per OGNI fase, la **retrospettiva onesta**: com'è andata, cosa si è scoperto, cosa si è corretto, perché è stata fatta così, il debito, le prospettive. "Si deve capire di cosa stiamo parlando" — è lo stato dell'unione del progetto, e va tenuta aggiornata a ogni chiusura di fase.
 
 **Passo 3 — Verifica meccanica dell'atlante.** Eseguire:
 
@@ -607,6 +608,7 @@ Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i comm
 | Fine F1 | `v2.0.0` | grande |
 | Fine F2 | `v2.1.0` | media |
 | Fine F3 | `v3.0.0` | grande |
+| Fine F3-bis (micro-slice multi-dominio) | `v3.1.0` | media |
 | Fine F4 | `v4.0.0` | grande |
 | Fine F5 | `v5.0.0` | grande |
 | Fine F6 | `v5.1.0` | media |
@@ -1186,6 +1188,7 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
       def run(self, ctx: RoleContext) -> PhaseDesign
   ```
   Card: ogni sottofase deve stare in una sessione Worker (`worker.max_steps`); ogni sottofase DEVE avere almeno una voce di `verification` eseguibile (un `cmd_id` di test quando esiste); `tools` solo dal catalogo fornito in S3; vietato ridisegnare fasi già completate. Validazioni deterministiche: `phase_id` = fase corrente, id sottofasi `P<x>.S<n>` univoci, `verification` non vuota (il criterio D10 qui è *hard*: sottofase senza verifica = design respinto con richiamata singola, come F3.1).
+  **REVISIONE (2026-08-02, concordata con l'utente dopo lo smoke T009):** (a) la verifica è accettabile anche come `expected_outputs` non vuoto (l'esistenza è un oracolo) — serve per le sottofasi preparatorie; (b) **il perimetro e la verifica devono coincidere**: in una fase multi-sottofase, la verifica a suite intera (`cmd_id` di test) è ammessa SOLO sull'ultima sottofase — le intermedie si verificano su ciò che possiedono (49 riscritture di `util.py` nel churn T009: il Worker era punito da test rossi fuori dal suo confine, che gli era vietato toccare). Regola gemella nella card del Worker: test rossi fuori dal tuo perimetro → chiudi `done` con le evidenze dei TUOI criteri. (c) L'ancoraggio al contratto: Planner, replanning e Designer ricevono gli estratti dei file di test ("copia gli identificatori, non inventarli").
 - **Casi limite:** fase che non si riesce a decomporre (il modello produce 0 sottofasi) → escalation: in F3 = task `failed` esplicito; da F4 = decisione del Supervisor.
 - **Accettazione:** su un piano di T007, ogni sottofase generata ha verifica eseguibile e il Worker le esegue senza modifiche manuali.
 
@@ -1211,11 +1214,28 @@ L'ordine di esecuzione è strettamente sequenziale (F2 prima di F3 anche se conc
 - **Implementazione:** nuovi task multi-step: **T007** refactoring 3-file con test · **T008** feature cross-module · **T009** fix con migrazione dati fittizia (ordine obbligato: prima lo script, poi il codice) · **T010** piano-trappola per il replanning. Eval su tutto il set (T001–T010) in due configurazioni: `--ab no-planner` (piano ingenuo) vs pipeline F3, stesso profilo, stesso commit. Report di confronto per le 5 metriche.
 - **Accettazione:** report A/B committato e nell'atlante con la conclusione scritta (resta / esce / resta con riserva su X).
 
+#### F3.5-nota — Decisioni utente sul verdetto (2026-08-02)
+
+Concordato prima dei numeri ufficiali: (1) il fix perimetro/verifica di F3.2-REVISIONE si applica comunque; (2) **quando usare il Planner è materia di F6** (routing) — in F3 conta solo che *funzioni*; (3) **il test vero del Planner è il chatbot Laravel (F8)**: il cassetto attuale non contiene task che superino una singola sessione Worker, quindi l'A/B locale misura bene il costo ma può sottostimare il valore — il verdetto D11 definitivo sul ruolo si firma in F8.
+
 #### F3.6 — 🔎 Verifica di fase
 
 - [ ] T007–T009 `verified` con piano generato; T010 replanning corretto; A/B documentato; nessun piano oltre budget; forbice completed/verified ancora zero.
 
 **Rituale di fine fase** → `v3.0.0`.
+
+---
+
+## Fase 3-bis — Micro-slice multi-dominio → `v3.1.0` (aggiunta su richiesta utente, 2026-08-02)
+
+📎 **Specsheet:** §5 (pipeline per dominio), anticipo leggero di F7 · **Decisioni:** D16, D17
+🎯 **Scope:** una fetta verticale SOTTILE dei domini non-coding, prima di F4: analisi di documenti locali, una chiamata HTTP a un servizio esterno (**mai LLM** — snaturerebbe il progetto, parole dell'utente), verifica meccanica degli esiti. NON è F7 (che resta la fase completa con citazioni/triangolazione/web search): è lo smoke che dimostra che l'engine non è un coding assistant.
+🧭 **Perché qui:** (motivazione utente) "l'agentic engine deve lavorare anche negli altri domini di uso quotidiano". E perché *prima* di F4: Supervisor e Debugger vanno progettati conoscendo anche i modi di fallire non-coding, non solo pytest-rosso.
+
+- [ ] **F3b.1** 🤖 Tool `http_get(url) -> ToolResult` minimale (anticipo di F7.2): GET con timeout e size-cap, **whitelist di domini in config** (`security.http_allowed_domains`, default vuota = niente rete), cache su disco per task (la verifica rilegge LA copia vista dal modello), solo http(s). Niente web search (quella è F7).
+- [ ] **F3b.2** 🤖 Task sintetici multi-dominio, numerati **T030+** (serie dedicata: T011-T022 restano riservate a F4/F6/F7 come da piano): **T030** analisi documenti locali (cartella di .md/.txt con fatti sparsi; domanda con risposta verificabile scritta in `answer.txt`, giudice = script che controlla i fatti) · **T031** chiamata API esterna deterministica (servizio HTTP locale avviato dall'harness come "esterno" — determinismo prima di tutto; l'endpoint reale arriva in F7) · **T032** trasformazione documento (es. estrarre campi da un .md in un .csv verificato da script).
+- [ ] **F3b.3** 🤖 Plumbing di dominio: i task portano `domain` ∈ {research_local, api, docs}; card Worker invariata (le card per-dominio sono F7.4); verifica = giudici meccanici come nel coding.
+- [ ] **F3b.4** 🔎 **Verifica di fase:** i 3 task girano su severino-sim in modalità baseline con giudice esterno verde; nessuna chiamata di rete fuori whitelist (test); il report entra nell'Evaluator come le altre serie.
 
 ---
 

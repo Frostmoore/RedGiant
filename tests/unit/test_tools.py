@@ -119,6 +119,16 @@ def test_edit_file_strips_lineno_prefixes(scope, root):
     assert "return 9" in (root / "src" / "a.py").read_text(encoding="utf-8")
 
 
+def test_edit_file_rejects_noop(scope, root):
+    # A/B 2026-08-02: old==new "riusciva" senza cambiare nulla -> loop degenere
+    # da 15 step. Un no-op e' un errore visibile al guard cumulativo.
+    r = fs.edit_file(scope, "src/a.py", "return 1", "return 1")
+    assert not r.ok and r.error == "no_op_edit"
+    # anche dopo la normalizzazione dei prefissi N-TAB
+    r = fs.edit_file(scope, "src/a.py", "1\treturn 1", "return 1")
+    assert not r.ok and r.error == "no_op_edit"
+
+
 def test_edit_file_rejects_ambiguous_and_missing(scope, root):
     (root / "src" / "dup.py").write_text("x = 1\nx = 1\n", encoding="utf-8")
     r = fs.edit_file(scope, "src/dup.py", "x = 1", "x = 2")

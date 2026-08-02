@@ -168,7 +168,7 @@ class ToolSpec      # name, description, risk, reversible, requires_approval, ti
 
 ### `redgiant/tools/fs.py` — filesystem (F1.4 + F1.11)
 
-`edit_file` è lo strumento di editing PRIMARIO (i diff unificati sono ostili agli E2B — evidenza F1.11); normalizza i prefissi `N<TAB>` che i modelli copiano da `read_file`. `write_file` crea file nuovi. `write_patch` resta per edit multi-punto, con matching tollerante (prefissi numerici, whitespace, code `-` vuote spurie).
+`edit_file` è lo strumento di editing PRIMARIO (i diff unificati sono ostili agli E2B — evidenza F1.11); normalizza i prefissi `N<TAB>` che i modelli copiano da `read_file`; un edit con `old_string == new_string` (post-normalizzazione) è respinto con `no_op_edit` (A/B 2026-08-02: il no-op "riusciva" e il modello lo ripeteva fino a esaurire gli step). `write_file` crea file nuovi. `write_patch` resta per edit multi-punto, con matching tollerante (prefissi numerici, whitespace, code `-` vuote spurie).
 
 **Syntax gate (post-F1, richiesta utente):** ogni writer verifica la sintassi del contenuto risultante PRIMA della scrittura atomica (`.py` ast.parse, `.php` php -l se disponibile, `.json`, `.toml`); sintassi rotta = scrittura rifiutata con `syntax_error` + dettaglio riga — un file rotto non esiste mai su disco.
 
@@ -229,7 +229,7 @@ class ToolRouter
 
 ### `redgiant/roles/base.py` + `redgiant/roles/worker.py` — Worker (F1.5, D20)
 
-ReAct a passo singolo vincolato: un `WorkerStep` per step, contesto in append puro (KV cache riusata). L'incoerenza action↔payload NON è un validator (la grammatica non può esprimerla): è un dato gestito nel loop. Il `finish` non chiude la sottofase: la chiude la verifica.
+ReAct a passo singolo vincolato: un `WorkerStep` per step, contesto in append puro (KV cache riusata). L'incoerenza action↔payload NON è un validator (la grammatica non può esprimerla): è un dato gestito nel loop. Il `finish` non chiude la sottofase: la chiude la verifica. Guard cumulativo per (tool, errore) nel tentativo: advice a 3/5, aborto a 8; esclusi i `run_tests`→`tests_failed` (l'oracolo che parla non è un tool rotto); le chiamate identiche consecutive contano come fallimento `identical_repeat` anche se "riuscite" (A/B 2026-08-02: 15 edit no-op di fila).
 
 ```python
 class RoleContext   # task, subtask, volatile
@@ -248,10 +248,11 @@ class Worker
 
 ### `redgiant/roles/planner.py` + `redgiant/roles/phase_designer.py` — pianificazione (F3)
 
-Planner: mappa sintetica (≤7 fasi), la LOGICA validata deterministicamente (id univoci, dipendenze acicliche, root presente, fasi completate conservate al replanning) con UNA richiamata correttiva poi `PlanRejected`. PhaseDesigner: espande solo la fase corrente (≤6 sottofasi, id `P<x>.S<n>`); D10: ogni sottofase deve avere verifica eseguibile O expected_outputs (l'esistenza è un oracolo); i cmd di verifica devono essere registrati.
+Planner: mappa sintetica (≤7 fasi), la LOGICA validata deterministicamente (id univoci, dipendenze acicliche, root presente, fasi completate conservate al replanning) con UNA richiamata correttiva (che CITA le regole violate, non solo i sintomi — A/B 2026-08-02) poi `PlanRejected`. `normalize_plan` ripara i sentinelli inequivoci in `depends_on` ("none"/"null"/"n/a"/"-"/"" → rimossi) prima di ogni validazione; le allucinazioni vere (es. nomi di file) restano al validatore. PhaseDesigner: espande solo la fase corrente (≤6 sottofasi, id `P<x>.S<n>`); D10: ogni sottofase deve avere verifica eseguibile O expected_outputs (l'esistenza è un oracolo); i cmd di verifica devono essere registrati.
 
 ```python
 class PlannerOutput      # goal<=300, success_criteria<=6, phases<=7
+def normalize_plan(out: PlannerOutput) -> PlannerOutput
 def validate_plan_logic(out: PlannerOutput, required_phase_ids: list[str] | None = None) -> list[str]
 class Planner
     def run(self, ctx: RoleContext, *, max_tokens: int = 1536, required_phase_ids: list[str] | None = None) -> PlannerOutput
@@ -401,6 +402,13 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **Ripresa da zero post-approvazione**: ora IN-PLACE — il contesto volatile è salvato al blocco (`resume_<subtask>.ctx`) e si riparte dallo step esatto con la KV calda.
 - **Troncamento che bruciava il tentativo**: gestito in-loop come dato; `worker.step_max_tokens` 512→768.
 - **Doppio submit dal form, task queued muti, unreachable da processo morto**: anti doppio-submit, banner coda/avvio-server/ripresa con pulse e ultima attività dal log, `start-gui.ps1`, riaccodamento automatico al riavvio.
+
+**Batch A/B ufficiale (2026-08-02 — run Planner 0/10, autopsia):**
+
+- **⭐ Prompt e validatore devono muoversi INSIEME**: la revisione scoped-verification ha riscritto la regola 2 del Designer cancellando l'istruzione "i valori di `verification` sono ESATTAMENTE i cmd id noti". Il validatore (rimasto giusto) respingeva tutto; il modello non può indovinare una regola che nessuno gli dice: 6 task su 10 morti senza una tool call. Corollario: ogni regola del validatore deve avere la sua frase nel prompt del ruolo, e viceversa.
+- **⭐ Le run ufficiali si lanciano SOLO da working tree pulito**: l'A/B è partito con modifiche non committate — la run 2 ha misurato uno stato intermedio mai collaudato e l'hash git nel report mentiva. Prima si committa, poi si misura.
+- **`depends_on` spazzatura dal Planner** (`["none"]`, `["geometry.py"]`): i sentinelli inequivoci sono riparati da `normalize_plan`; la richiamata correttiva ora cita la regola (`depends_on` solo id di fasi del piano, root = `[]`), non solo i sintomi.
+- **Loop di edit no-op**: `edit_file` con old==new "riusciva" senza cambiare nulla → 15 ripetizioni identiche fino a esaurire gli step, invisibili al guard (ogni chiamata era un successo). Fix doppio: `no_op_edit` è un errore, e la chiamata identica consecutiva conta nel guard cumulativo come `identical_repeat` anche se ok.
 
 ## 10. Debito tecnico aperto
 

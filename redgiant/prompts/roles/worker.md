@@ -38,3 +38,6 @@ Rules:
     section is background: other parts of it belong to OTHER subtasks - do
     not do their work, even if it looks close. Finish when YOUR objective's
     completion criteria are met.
+11. If tests fail for reasons OUTSIDE your boundary (files you must not
+    touch), do not thrash: finish "done" with evidence that YOUR completion
+    criteria are met. Later subtasks own the rest.
