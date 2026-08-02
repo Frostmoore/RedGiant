@@ -57,6 +57,9 @@ def normalize_macro(plan: MacroPlan) -> MacroPlan:
     for p in plan.phases:
         p.depends_on = [d for d in p.depends_on
                         if d.strip().lower() not in _DEP_SENTINELS and d != p.id]
+        # batch n.5: covers con DUPLICATI gonfiava i proves oltre il tetto
+        # (crash run 11) — dedup preservando l'ordine
+        p.covers = list(dict.fromkeys(p.covers))
     return plan
 
 

@@ -380,6 +380,10 @@ class Orchestrator:
             rel = p.relative_to(root).as_posix()
             if any(seg in rel for seg in (".git/", "__pycache__/", ".venv/")):
                 continue
+            # batch20 n.5 (plansys): artefatti di runtime del task dentro la
+            # workdir — inquinano i prompt e variano a ogni run
+            if rel.startswith("tasks/") or rel.endswith(".db"):
+                continue
             out.append(rel)
             if len(out) >= max_files:
                 out.append("... (truncated)")

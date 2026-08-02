@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import os
 
+from pydantic import ValidationError
+
 from redgiant.core.budget import BudgetTracker
 from redgiant.core.orchestrator import Orchestrator, TaskLog
 from redgiant.core.verify import CheckResult, verify_subtask
@@ -133,7 +135,8 @@ class PlanSysEngine(Orchestrator):
                           f"{e.choice.question}"[:400])
                 log.line("compiler", f"{phase.id} choice point -> blocked")
                 return self.store.load_task(task_id)
-            except (CompileFailed, LlmError, LlmTruncated) as e:
+            except (CompileFailed, LlmError, LlmTruncated,
+                    ValidationError) as e:
                 self.store.set_task_status(
                     task_id, "failed", actor="phase_compiler",
                     error=f"compile of {phase.id} failed: {e}"[:400])

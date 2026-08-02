@@ -108,11 +108,23 @@ class PhaseCompiler:
         return proj
 
     def _existing_files(self) -> list[str]:
+        # batch n.5: la tasks_dir (log, plan renderizzati, ULID) puo' vivere
+        # DENTRO la workdir — va ESCLUSA o inquina i prompt E li rende diversi
+        # a ogni run (varianza selvaggia a parita' di seed)
+        try:
+            tasks_rel = self.cfg.paths.tasks_dir.resolve().relative_to(
+                self.scope.root.resolve()).as_posix()
+        except ValueError:
+            tasks_rel = None
         out: list[str] = []
         for p in sorted(self.scope.root.rglob("*")):
-            if p.is_file() and ".git" not in p.parts and p.suffix not in (
+            if not p.is_file() or ".git" in p.parts or p.suffix in (
                     ".db", ".rgedit", ".rgwrite"):
-                out.append(p.relative_to(self.scope.root).as_posix())
+                continue
+            rel = p.relative_to(self.scope.root).as_posix()
+            if tasks_rel and (rel == tasks_rel or rel.startswith(tasks_rel + "/")):
+                continue
+            out.append(rel)
             if len(out) >= 60:
                 break
         return out
@@ -226,8 +238,8 @@ class PhaseCompiler:
             # Con piu' micro resta una scelta di design -> violazione a M2.
             if len(b.micro) == 1:
                 only = b.micro[0]
-                for c in phase.covers:
-                    if c not in only.proves:
+                for c in dict.fromkeys(phase.covers):
+                    if c not in only.proves and len(only.proves) < 8:
                         only.proves.append(c)
             return b
 

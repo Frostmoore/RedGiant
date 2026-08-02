@@ -82,6 +82,10 @@ def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger:
         if p.is_dir() or ".git" in p.parts or p.suffix in (".db", ".rgedit"):
             continue
         rel = p.relative_to(scope.root).as_posix()
+        # batch n.5: gli artefatti di runtime del task (tasks/<ULID>/...)
+        # inquinano i prompt e cambiano a ogni run — mai nel ledger
+        if rel.startswith("tasks/") or "/plan/" in rel:
+            continue
         entries.append(_entry("fact", rel, "exists"))
         listed += 1
         if listed >= 40:
