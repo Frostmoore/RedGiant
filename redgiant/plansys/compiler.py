@@ -205,7 +205,17 @@ class PhaseCompiler:
                                            if o in keep] or [nf])
                     clone.title = f"{m.title} ({nf})"[:80]
                     split.append(clone)
-            b.micro = split[:6]
+            # batch n.3: DEDUP di ownership — un file conteso resta alla PRIMA
+            # micro; le successive lo perdono; micro svuotate -> eliminate
+            seen_files: set[str] = set()
+            deduped: list = []
+            for m in split:
+                m.work.files_owned = [f for f in m.work.files_owned
+                                      if f not in seen_files]
+                seen_files.update(m.work.files_owned)
+                if m.work.files_owned:
+                    deduped.append(m)
+            b.micro = deduped[:6]
             # id ri-numerati dal control plane (identita' canonica)
             for i, m in enumerate(b.micro, 1):
                 m.id = f"{phase.id}.S{i}"
@@ -412,7 +422,10 @@ class PhaseCompiler:
             claimed = {o.test_name for o in here if o.test_name in fns}
             orphans = [o for o in here if o.test_name not in fns]
             free = [n for n in fns if n not in claimed]
-            if orphans and len(orphans) == len(free):
+            # batch n.3: binding in ORDINE quando orfani <= libere — M4 che
+            # scrive test EXTRA e' un bene, non una violazione (l'uguaglianza
+            # stretta strozzava 11 run su 20)
+            if orphans and len(orphans) <= len(free):
                 for o, name in zip(orphans, free):
                     log.line("compiler", f"riconciliato {o.id}: "
                                          f"'{o.test_name}' -> '{name}'")
