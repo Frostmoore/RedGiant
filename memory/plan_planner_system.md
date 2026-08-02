@@ -6,6 +6,12 @@
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
 **Stato:** 🟢 **PS5 completata** (2026-08-02, `v3.6.0`) — pilota PS5.5 VERDE su severino-sim (3 fasi, coverage totale, giudice esterno pytest exit=0, 7.845 token, 569s). Prossima azione: **PS6** (Evaluator: T040+ e A/B con ablation).
 
+**Nota di condizione sperimentale (2026-08-02, decisione utente):** TUTTE le misure del progetto —
+F0→PS6 incluso — girano col thinking mode di Gemma 4 E2B **strutturalmente disattivato** (template
+manuale S1→S7 + endpoint raw `/completion` + GBNF che obbliga il JSON dal primo token). PS6 si
+chiude in questa condizione storica; il thinking si misura DOPO con l'esperimento dedicato e
+comparabile: `memory/plan_thinking_ab.md` (fasi TH0–TH3, decision rule fissata a priori).
+
 > **La regola che comanda questo documento:**
 > *The Senior defines what must be achieved. The Mid decides how to decompose it and how
 > correctness will be demonstrated. The Junior implements one proven contract at a time.

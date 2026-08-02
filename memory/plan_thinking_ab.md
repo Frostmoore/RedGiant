@@ -1,0 +1,201 @@
+# Piano: A/B Thinking Mode su Gemma 4 E2B (esperimento TH)
+
+**Stato:** 📋 pianificato — prerequisito: PS6 chiusa (il braccio di controllo è il suo run B ufficiale).
+**Decisione utente (2026-08-02):** PS6 si chiude nella condizione storica no-thinking; POI il thinking
+si misura con un batch dedicato comparabile, per determinare la differenza di prestazioni e di
+token/tempo. Questo documento è la specsheet di quell'esperimento.
+
+---
+
+## 0. Il fatto di partenza (da mettere a verbale, era implicito)
+
+**In tutto Red Giant, dal F0 a PS6 incluso, il thinking mode NON è mai stato attivo — per
+costruzione, non per scelta documentata:**
+
+1. `redgiant/prompts/assemble.py` costruisce il prompt A MANO con i marcatori di turno Gemma
+   (`_TURN_OPEN = "<start_of_turn>user\n"`, `_TURN_CLOSE = "\n<end_of_turn>\n<start_of_turn>model\n"`)
+   e `LlamaClient.complete` chiama l'endpoint raw `/completion`: qualunque attivazione del thinking
+   che passi dal chat template del server non viene mai emessa.
+2. Ogni chiamata è grammar-constrained (GBNF da JSON Schema): il primo token generato DEVE aprire
+   il JSON. Un preambolo di pensiero è grammaticalmente irrappresentabile.
+
+**Perché è coerente col progetto** (e quindi il default resta no-thinking anche dopo l'esperimento,
+salvo verdetto contrario): su Severino la generazione corre a 35,8 tok/s — una traccia di pensiero
+da N token costa N/35,8 secondi PER CHIAMATA; la specsheet §3 impone "la verbosità non è
+ragionamento" (il `thought` di J è cappato a 300 caratteri per questo).
+
+**Perché comunque va misurato**: il muro F18 (J che non riproduce i formati esatti richiesti dai
+proof, ~metà delle morti residue) è esattamente la classe di problema in cui il reasoning esplicito
+potrebbe pagare. Crederci o non crederci è vietato dal metodo: si misura (D-metodo di F3: "le run
+ufficiali solo da codice committato", "ogni ruolo si guadagna il posto con un A/B").
+
+---
+
+## Rituale di fine fase (OBBLIGATORIO, prima del tracking)
+
+Alla fine di OGNI fase TH*n*:
+1. Aggiornare QUESTO documento (checkbox + esiti numerici nella fase).
+2. Aggiornare `memory/codebase_reference.md` (nuove firme/colonne/trappole) e far passare
+   `python scripts/check_reference.py`.
+3. Messaggio ESTREMAMENTE dettagliato: stato, checkbox di fase e sottofasi, commento generale.
+4. Commit e push su branch versionato (origin=Gitea E github), tabella versioni sotto.
+
+| Fine fase | Branch | Entità |
+|---|---|---|
+| TH0 (meccanica) | +0.1.0 dalla versione corrente al momento dello scheduling | media |
+| TH1 (compliance GPU) | +0.0.1 | piccola |
+| TH2 (A/B ufficiale severino-sim) | +0.0.1 | piccola |
+| TH3 (verdetto + docs) | +0.1.0 | media |
+
+(La numerazione assoluta si fissa quando l'esperimento viene schedulato — dipende da dove sarà
+arrivato il piano padre; la regola è la tabella d'entità qui sopra.)
+
+---
+
+## Tracking
+
+- [ ] **TH0 — Meccanica del thinking (two-call protocol)**
+  - [ ] TH0.1 client: `complete()` con `think: int | None`
+  - [ ] TH0.2 store: colonna `thinking_tokens` su `llm_calls`
+  - [ ] TH0.3 leva d'esperimento `RG_THINKING_ROLES`
+  - [ ] TH0.4 unit (5 test nuovi) + smoke GPU singolo
+- [ ] **TH1 — Compliance GPU (famiglie, non numeri)**
+- [ ] **TH2 — A/B ufficiale severino-sim (i numeri)**
+- [ ] **TH3 — Verdetto, decision rule, documentazione**
+
+---
+
+## TH0 — Meccanica: il protocollo a due chiamate
+
+### TH-D1 (decisione architetturale): il thinking NON entra nella grammatica — due chiamate
+
+**Scelta:** thinking e output strutturato restano due generazioni separate, in sequenza, sulla
+stessa sessione di cache:
+
+1. **Chiamata di pensiero** — stesso prompt del ruolo + istruzione S7 sostituita da una variante
+   "reason step by step about the task; be brief and factual" — SENZA grammatica, con
+   `n_predict = think_budget` e stop al marcatore di chiusura del template thinking del modello.
+2. **Chiamata di output** — prompt = stesso prefisso + `[THINKING]\n<testo di 1>` appeso al
+   volatile + istruzione S7 originale — CON la grammatica di sempre.
+
+**Alternative scartate e perché:**
+- *Grammatica che ammette un prefisso libero poi il JSON* (`<think> .* </think> json`): un loop
+  di caratteri liberi dentro il GBNF indebolisce il vincolo proprio dove serve (F4: le derive si
+  eliminano per costruzione) e non dà un budget separato per il pensiero — un derail penserebbe
+  all'infinito dentro una chiamata sola, invisibile.
+- *Chat template del server con thinking nativo*: butterebbe la convenzione S1→S7 e la stabilità
+  byte-a-byte dei prefissi (F10: un byte cambiato = ~120× di prefill), cioè l'architettura di cache.
+
+**Perché il two-call è KV-friendly**: la chiamata 2 condivide con la 1 l'intero prefisso
+(append-only) — il costo aggiuntivo di prefill è SOLO il testo di pensiero (F10). Il costo vero è
+la generazione del pensiero: `think_budget/35,8 s` per chiamata su severino-sim — ed è esattamente
+una delle due grandezze che l'esperimento deve misurare.
+
+### TH0.1 — Client
+
+`redgiant/llm/client.py`:
+
+```python
+def complete(self, parts: PromptParts, *, role: str,
+             schema: type[BaseModel] | None = None,
+             max_tokens: int, temperature: float | None = None,
+             task_id: str | None = None, subtask_id: str | None = None,
+             cache_prompt: bool = True,
+             grammar_schema: dict | None = None,
+             think: int | None = None) -> LlmResult
+```
+
+- `think=None` (default): comportamento IDENTICO a oggi, byte per byte — il braccio di controllo
+  non deve cambiare di un token.
+- `think=N`: esegue il two-call protocol. La chiamata 1 usa
+  `payload = {prompt, n_predict=N, seed=42, cache_prompt, temperature}` SENZA `json_schema`,
+  con `"stop": [cfg.think_close]`; troncamento a N NON è errore (il pensiero troncato si usa
+  com'è: è un budget, non un contratto). La chiamata 2 è l'attuale `complete`, con
+  `parts.volatile_context + "\n[THINKING]\n" + testo1` e stessa firma di logging.
+- `LlmResult` guadagna: `thinking_tokens: int = 0`, `thinking_ms: float = 0.0`,
+  `thinking_text: str = ""` (il testo si logga per l'analisi qualitativa dei fallimenti, mai
+  ri-iniettato altrove: il pensiero è usa-e-getta per non sporcare i prefissi stabili).
+- Config `[llm]` per-profilo: `think_open: str`, `think_close: str` (i marcatori del template
+  thinking di Gemma 4 E2B — da verificare in TH0.4 contro il GGUF pinnato: PRIMA si stampa il
+  chat template del modello via `/props` del server, POI si cablano; mai fidarsi della memoria).
+
+### TH0.2 — Store
+
+`redgiant/state/store.py`: migrazione additiva `ALTER TABLE llm_calls ADD COLUMN thinking_tokens
+INTEGER NOT NULL DEFAULT 0` (+ `thinking_ms REAL NOT NULL DEFAULT 0`). `budget_used` conta i
+thinking token nel totale (sono costo vero); il report eval li espone come colonna separata.
+
+### TH0.3 — La leva d'esperimento
+
+Come `RG_PLANSYS_ABLATE` (leva di solo-A/B, mai contratto config):
+`RG_THINKING_ROLES` ∈ sottoinsiemi di `{worker, senior, phase_analyst, work_decomposer,
+verification_designer, test_author}` + `RG_THINKING_BUDGET` (default 256).
+Helper `redgiant/plansys/ablate.py::thinking_roles() -> set[str]`. I ruoli la leggono nel punto
+UNICO in cui chiamano `complete` (Worker: `redgiant/core/worker.py`; M/S: `roles.py::_SingleShot.run`
+e `SeniorPlanner.run`) passando `think=budget if role in thinking_roles() else None`.
+
+### TH0.4 — Accettazione TH0
+
+- Unit: (1) `think=None` produce payload identico a oggi (spia sul transport); (2) two-call con
+  stop e budget; (3) troncamento del pensiero non alza `LlmTruncated`; (4) `[THINKING]` appeso al
+  volatile della chiamata 2; (5) migrazione DB idempotente. Suite intera verde.
+- Smoke GPU: 1 task pilota con `RG_THINKING_ROLES=worker` — nel log si vedono le coppie di
+  chiamate, i thinking_tokens nel DB, e il template markers verificati contro `/props`.
+
+---
+
+## TH1 — Compliance GPU (famiglie, non numeri)
+
+Protocollo BATCH20 identico ai batch n.1–8 (stesso `pilot_ps5_batch20.py`, stesso task, codice
+committato, snapshot): **20 run con `RG_THINKING_ROLES=worker`, budget 256**. Confronto di
+FAMIGLIE contro i batch storici (la GPU non dà numeri, dà tassonomie — F17):
+- Le morti J sui proof (photocopy/retries) calano, crescono o cambiano forma?
+- Compaiono famiglie nuove (pensiero che avvelena il contesto della chiamata 2, derive S7)?
+- Costo: token e wall per run vs batch n.8.
+Esito TH1 = tabella famiglie prima/dopo + le trappole nuove fixate (se di control plane).
+
+## TH2 — A/B ufficiale (severino-sim, codice committato)
+
+Bracci, in quest'ordine (il controllo esiste già):
+- **T-0 (controllo)**: il run B di PS6.2 — plansys no-thinking sui 13 task. NON si riesegue: si
+  riusa il report committato (stesso commit-range, stessa condizione — se nel frattempo il codice
+  plansys è cambiato, si riesegue T-0 sul commit nuovo: comparabilità > risparmio).
+- **T-J**: plansys + `RG_THINKING_ROLES=worker`, 13 task. (L'ipotesi F18: il thinking serve a J.)
+- **T-M**: plansys + `RG_THINKING_ROLES=phase_analyst,work_decomposer,verification_designer,test_author`,
+  SOLO T040–T042 (l'ipotesi secondaria: il thinking serve alle decisioni di M; sui micro-task
+  M quasi non sbaglia già).
+- **T-JM** (solo se T-J e T-M migliorano entrambi): tutti i ruoli, T040–T042.
+Budget: 256 di default; se TH1 mostra troncamenti sistematici del pensiero, UNA sola variante di
+budget (512) su T-J, dichiarata nel report.
+
+Metriche (per braccio, nel report `bench/results/`): verified/13, token totali, **thinking token**
+(colonna separata), wall clock, useful%, e la tassonomia per stadio delle morti. La metrica di
+paragone chiave: **Δverified vs Δcosto** (token E secondi) rispetto a T-0.
+
+## TH3 — Verdetto e decision rule
+
+Decision rule FISSATA PRIMA di vedere i numeri (anti-cherry-picking):
+- Il thinking entra in produzione per un ruolo SOLO se nel suo braccio: `verified ≥ T-0 + 2`
+  (su 13) E `wall ≤ 2× T-0` E forbice completed≠verified = 0.
+- Se migliora ma sotto soglia → resta leva sperimentale documentata, OFF di default.
+- Se non migliora → si documenta il numero e si chiude (come il Planner in F3: un verdetto
+  negativo onesto è un risultato).
+Documentazione: questo piano aggiornato, atlante (firme + trappole), README (nuova finding F19
+"thinking mode misurato" qualunque sia il verdetto — coi numeri), memoria di progetto.
+
+---
+
+## Trappole prevedibili (da vegliare in TH0/TH1)
+
+1. **I marcatori del template thinking sono modello-specifici**: verificarli contro il GGUF
+   pinnato via `/props`, MAI dai docs generici (lezione F0.3: il template sbagliato produce
+   nonsense ben formato).
+2. **Il pensiero nel volatile sposta i byte**: `[THINKING]` va SEMPRE in coda al volatile (S6),
+   mai prima — il prefisso stabile S1→S5 non deve cambiare di un byte (F10).
+3. **Seed e two-call**: la chiamata 1 consuma stato del sampler? No (seed per-richiesta, F1.11),
+   ma va provato nello smoke: due run identiche → stesso pensiero, stesso output.
+4. **Il thinking troncato che finisce a metà frase** può indurre la chiamata 2 a completarlo
+   invece di produrre il JSON: la grammatica lo impedisce strutturalmente, ma la QUALITÀ può
+   soffrire — osservarlo in TH1, eventualmente chiudere il blocco con "\n[END THINKING]".
+5. **Doppio conteggio budget**: i thinking token entrano UNA volta in `budget_used` (dalla
+   chiamata 1), la chiamata 2 conta solo il proprio delta di prefill (già clampato, F9).
