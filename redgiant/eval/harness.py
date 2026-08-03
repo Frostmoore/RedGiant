@@ -52,6 +52,12 @@ class EvalTask(BaseModel):
     test_commands: dict[str, list[str]] = {}
     requires: list[str] = []          # eseguibili esterni necessari (es. "php")
     expected_outcome: str = "verified"  # F4: anche "failed" | "blocked"
+    # F3b.2: whitelist http PER-TASK (override della config, che di default e'
+    # vuota) e servizio locale "esterno" avviato dall'harness (determinismo:
+    # l'endpoint reale arriva in F7). Path relativo alla dir del task, NON al
+    # repo: il modello non deve vederne il sorgente.
+    http_allowed_domains: list[str] = []
+    service_script: Path | None = None
 
 
 class EvalResult(BaseModel):
@@ -82,7 +88,10 @@ def discover_tasks(tasks_dir: Path) -> list[EvalTask]:
             writable_globs=data.get("writable_globs", []),
             test_commands={k: list(v) for k, v in data.get("test_commands", {}).items()},
             requires=data.get("requires", []),
-            expected_outcome=data.get("expected_outcome", "verified")))
+            expected_outcome=data.get("expected_outcome", "verified"),
+            http_allowed_domains=data.get("http_allowed_domains", []),
+            service_script=(base / data["service_script"]
+                            if data.get("service_script") else None)))
     return tasks
 
 
@@ -154,6 +163,20 @@ def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
     workdir = Path(tempfile.mkdtemp(prefix=f"rgeval_{task.id}_"))
     shutil.copytree(task.repo_dir, workdir, dirs_exist_ok=True)
 
+    # F3b.2: whitelist http per-task (la config di default resta VUOTA) e
+    # servizio locale avviato dall'harness come "esterno" deterministico
+    if task.http_allowed_domains:
+        from dataclasses import replace
+        cfg = replace(cfg, security=replace(
+            cfg.security,
+            http_allowed_domains=tuple(task.http_allowed_domains)))
+    service = None
+    if task.service_script is not None:
+        service = subprocess.Popen(
+            [sys.executable, str(task.service_script)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1.0)  # il servizio e' un http.server: pronto in <1s
+
     scope = Scope(workdir, task.writable_globs)
     router = ToolRouter(default_catalog(cfg, scope, task.test_commands), scope, store)
     if use_plansys:
@@ -185,7 +208,12 @@ def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
             p.unlink()
 
     t0 = time.monotonic()
-    state = orch.run_task(tid)
+    try:
+        state = orch.run_task(tid)
+    finally:
+        if service is not None:
+            service.terminate()  # il giudice NON usa il servizio: verifica
+            # gli artefatti scritti, coi valori attesi cablati nello script
     wall = time.monotonic() - t0
 
     verified = False

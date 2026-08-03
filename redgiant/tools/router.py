@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from redgiant.config import Config
 from redgiant.state.models import ToolCallRow
 from redgiant.state.store import StateStore
-from redgiant.tools import fs, proc, search
+from redgiant.tools import fs, proc, search, web
 from redgiant.tools.base import Scope, ToolResult, ToolSpec
 
 
@@ -75,6 +75,11 @@ def default_catalog(cfg: Config, scope: Scope,
                  "(cmd_id + argv, e.g. ['pytest','-q']) after discovering it from the "
                  "project files. The executable must be whitelisted.",
                  "medium", True, False, 5.0, proc.RegisterTestCommandArgs, _register),
+        ToolSpec("http_get", "Fetch a small http(s) page from a whitelisted "
+                 "domain (per-task cache: the same URL returns the same copy).",
+                 "medium", True, False, 30.0, web.HttpGetArgs,
+                 partial(web.http_get, scope,
+                         cfg.security.http_allowed_domains)),
         ToolSpec("git_status", "Show changed paths in the task repo (porcelain).",
                  "low", True, False, 30.0, proc.GitStatusArgs, partial(proc.git_status, scope)),
         ToolSpec("git_diff", "Show the unified diff against a ref (default HEAD).",

@@ -27,7 +27,7 @@ _KNOWN_KEYS: dict[str, set[str]] = {
     "plansys": {"enabled", "max_phases", "max_micro_per_phase", "projection_max_tokens",
                 "m_pass_max_tokens", "test_author_max_tokens", "mutation_probe"},
     "web": {"host", "port"},
-    "security": {"writable_globs", "shell_whitelist"},
+    "security": {"writable_globs", "shell_whitelist", "http_allowed_domains"},
     "eval": {"tasks_dir"},
 }
 
@@ -73,6 +73,8 @@ class WebCfg:
 class SecurityCfg:
     writable_globs: tuple[str, ...]
     shell_whitelist: tuple[str, ...]
+    # F3b.1: whitelist di domini per http_get — default VUOTA = niente rete
+    http_allowed_domains: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -151,6 +153,8 @@ class Config:
             security=SecurityCfg(
                 writable_globs=tuple(security["writable_globs"]),
                 shell_whitelist=tuple(security["shell_whitelist"]),
+                http_allowed_domains=tuple(
+                    security.get("http_allowed_domains", ())),
             ),
             worker_max_steps=int(worker["max_steps"]),
             worker_step_max_tokens=int(worker.get("step_max_tokens", 768)),

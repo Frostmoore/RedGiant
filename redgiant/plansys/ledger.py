@@ -84,7 +84,9 @@ def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger:
         rel = p.relative_to(scope.root).as_posix()
         # batch n.5: gli artefatti di runtime del task (tasks/<ULID>/...)
         # inquinano i prompt e cambiano a ogni run — mai nel ledger
-        if rel.startswith("tasks/") or "/plan/" in rel:
+        # (F3b.1: idem la cache http)
+        if (rel.startswith("tasks/") or "/plan/" in rel
+                or rel.startswith(".rg_http_cache/")):
             continue
         entries.append(_entry("fact", rel, "exists"))
         listed += 1

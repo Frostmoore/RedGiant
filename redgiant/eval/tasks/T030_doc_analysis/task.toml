@@ -1,0 +1,13 @@
+id = "T030"
+domain = "research_local"
+prompt = "Read the documents in docs/ and answer from the FACTS written there (do not guess). Write a file answer.txt containing exactly two lines, nothing else: 'staging_port=<the port the staging server listens on>' and 'project_start=<the year the project started>'. Verify your answer with the 'check' command; it must pass."
+success_cmd = "python judge.py"
+timeout_s = 1800
+tags = ["research_local", "f3bis"]
+writable_globs = ["answer.txt"]
+
+# F3b.2: analisi di documenti LOCALI — i fatti sono sparsi su tre file, uno
+# dei quali e' rumore; il giudice (fuori dai writable) controlla i fatti.
+
+[test_commands]
+check = ["python", "judge.py"]

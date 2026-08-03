@@ -382,7 +382,9 @@ class Orchestrator:
                 continue
             # batch20 n.5 (plansys): artefatti di runtime del task dentro la
             # workdir — inquinano i prompt e variano a ogni run
-            if rel.startswith("tasks/") or rel.endswith(".db"):
+            # (F3b.1: idem la cache http — e' runtime, non repo)
+            if (rel.startswith("tasks/") or rel.endswith(".db")
+                    or rel.startswith(".rg_http_cache/")):
                 continue
             out.append(rel)
             if len(out) >= max_files:

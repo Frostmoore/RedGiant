@@ -1,0 +1,12 @@
+id = "T032"
+domain = "docs"
+prompt = "The file records.md lists people in sections. Extract them into a CSV file out.csv with EXACTLY this header line 'name,email,role' followed by one row per person, in the same order as records.md. No extra spaces, no quotes, no trailing blank lines beyond the final newline. Verify with the 'check' command; it must pass."
+success_cmd = "python judge.py"
+timeout_s = 1800
+tags = ["docs", "f3bis"]
+writable_globs = ["out.csv"]
+
+# F3b.2: trasformazione documento -> dato strutturato, giudicata da script.
+
+[test_commands]
+check = ["python", "judge.py"]

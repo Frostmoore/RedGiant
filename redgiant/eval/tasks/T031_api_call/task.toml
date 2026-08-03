@@ -1,0 +1,16 @@
+id = "T031"
+domain = "api"
+prompt = "A monitoring service exposes its status at http://127.0.0.1:8765/status (JSON). Fetch it with the http_get tool and write a file report.txt containing exactly two lines, nothing else: 'version=<the version field>' and 'uptime_days=<the uptime_days field>'. Verify with the 'check' command; it must pass."
+success_cmd = "python judge.py"
+timeout_s = 1800
+tags = ["api", "f3bis"]
+writable_globs = ["report.txt"]
+http_allowed_domains = ["127.0.0.1"]
+service_script = "service.py"
+
+# F3b.2: chiamata API "esterna" deterministica — il servizio lo avvia
+# l'harness (determinismo prima di tutto; l'endpoint reale arriva in F7).
+# service.py vive nella dir del task, NON nel repo: il modello non lo vede.
+
+[test_commands]
+check = ["python", "judge.py"]
