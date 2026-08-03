@@ -122,7 +122,19 @@ class ToolRouter:
         t0 = time.monotonic()
         spec = self.catalog.get(name)
         if spec is None:
-            result = ToolResult(ok=False, data={"known": sorted(self.catalog)},
+            # F2 (errore ATTUABILE): la sola lista non basta — misurato sulla
+            # ladder, 13 task su 43 sprecavano meta' dei passi chiamando
+            # 'tool_name_placeholder' e simili. Si suggerisce il piu' vicino.
+            import difflib
+            near = difflib.get_close_matches(name, self.catalog, n=1,
+                                             cutoff=0.4)
+            hint = (f"'{name}' is not a tool"
+                    + (f" — did you mean '{near[0]}'?" if near else
+                       " (it looks like a placeholder, not a real name)")
+                    + " Use one of the exact names in the TOOLS section.")
+            result = ToolResult(ok=False,
+                                data={"known": sorted(self.catalog),
+                                      "hint": hint},
                                 error="unknown_tool")
             return self._done(task_id, subtask_id, name, args, result, t0)
         # tolleranza F1.11: i modelli piccoli echeggiano il nome del tool negli args

@@ -39,6 +39,25 @@ def test_calc_is_in_catalog_and_ablatable(tmp_path, monkeypatch):
     assert "calc" not in default_catalog(cfg, scope, {})
 
 
+def test_unknown_tool_error_is_actionable(tmp_path):
+    """Ladder: 13 task su 43 sprecavano passi chiamando 'tool_name_placeholder'
+    e simili. L'errore deve suggerire il nome vicino (F2)."""
+    from redgiant.state.store import StateStore
+    from redgiant.tools.router import ToolRouter
+    cfg = Config.load("dev-fast", CONFIG_DIR)
+    scope = Scope(tmp_path, ["*.txt"])
+    store = StateStore(tmp_path / "t.db")
+    router = ToolRouter(default_catalog(cfg, scope, {}), scope, store)
+    tid = store.create_task("r", str(tmp_path), "test", __import__(
+        "redgiant.state.models", fromlist=["Budget"]).Budget(
+        max_total_tokens=100, max_tool_calls=10,
+        max_retries_per_subtask=1, max_wall_s=60))
+    r = router.dispatch(tid, "s1", "read_fil", {"path": "x"})
+    assert not r.ok and "did you mean 'read_file'" in r.data["hint"]
+    r2 = router.dispatch(tid, "s1", "tool_name_placeholder", {})
+    assert not r2.ok and "placeholder" in r2.data["hint"]
+
+
 def test_ladder_step_budget_scales_with_size():
     from redgiant.eval.harness import discover_tasks
     tasks = {t.id: t for t in discover_tasks(
