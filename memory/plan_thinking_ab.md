@@ -96,11 +96,30 @@ piano padre si fa al rituale TH3.)
      questo GGUF sono i token di controllo `<|turn>`/`<turn|>` (105/106) — il nostro
      `<start_of_turn>` tokenizza come 7 token NON speciali. Funziona (misurato da F0 in
      poi), ma il protocollo nativo è un altro: A/B futuro, registrato nell'atlante §10.
-- [ ] **TH1 — Compliance GPU (famiglie, non numeri)**
+- [x] **TH1 — Compliance GPU (famiglie, non numeri)** ✅ 2026-08-03, `v4.1.1` (esito in fondo alla sezione)
   - [x] TH1 round 1 (T-SM): **0/20** @`a2076ab` — famiglia nuova "phase_id drift di M2 pensante" (5/20, fixata: identità imposta in `_norm`); **amplificazione delle morti J** (M3 pensante progetta obblighi O1-O3 per micro, J non pensante ne fallisce di più: onestà su, conversione giù); costo 2,4× token / 2,3× wall.
   - [ ] TH1 round 2 (T-SM post-fix phase_id): in corsa @`4dfc05f`.
   - [x] **TH1 round 3 (T-J, decisione utente 2026-08-03): pensiero SOLO a J** — **4/20** @`0c42560`, il miglior round thinking: **morti J DIMEZZATE (5/20 vs 10-11/20 storiche)**, due verdi a 4 fasi (profondità record GPU), costo 1,6× (8.5K tok/run) contro il 3,2× di T-SM. Le morti residue sono tornate sul lato M (che non pensa).
-  - [ ] **TH1 round 4 (T-SMJ) — REVISIONE del criterio** (era "solo se T-SM e T-J migliorano entrambi", scritto prima di conoscere il dato): i round 1 e 3 mostrano un pattern di **migrazione del muro verso chi non pensa** (M pensa → muore J; J pensa → muore M). Il combinato è l'esperimento che il pattern impone; il costo (~4×?) si misura insieme al beneficio.
+  - [x] **TH1 round 4 (T-SMJ) — REVISIONE del criterio** (era "solo se T-SM e T-J migliorano entrambi", scritto prima di conoscere il dato): i round 1 e 3 mostrano un pattern di **migrazione del muro verso chi non pensa** (M pensa → muore J; J pensa → muore M). Il combinato è l'esperimento che il pattern impone; il costo (~4×?) si misura insieme al beneficio. **ESITO: 1/20 @`e6866cc`** — le morti J risalgono a 7-8/20: M pensante alza l'asticella degli oracoli (O2/O3) e nemmeno J pensante la regge. I due pensieri si annullano, a 4× il costo.
+
+**ESITO TH1 (2026-08-03, 4 round × 20 run GPU, `v4.1.1`):**
+
+| Round | Config | Verdi | Morti J | Fasi verdi | Token/run | Wall |
+|---|---|---|---|---|---|---|
+| rif. n.8 | nessuno | 3/20 | 10/20 | 0.9 | 5.4K | 33s |
+| r.1 | T-SM | 0/20 | 11/20 | 0.9 | 13.2K | 70s |
+| r.2 | T-SM+fix | 2/20 | ~10/20 | 1.4 | 17.4K | 95s |
+| **r.3** | **T-J** | **4/20** | **5/20** | 1.3 | 8.5K | 50s |
+| r.4 | T-SMJ | 1/20 | 7-8/20 | 1.1 | 16.9K | 88s |
+
+**Verdetto di compliance (famiglie, non numeri fini):** (1) il pensiero all'ESECUTORE
+funziona — morti J dimezzate, unico braccio sopra il riferimento, costo contenuto (1,6×);
+(2) il pensiero al PIANIFICATORE non converte — produce piani/oracoli più esigenti che
+spostano il muro su J, +3× costo (e una regola permanente: phase_id drift → identità dal
+control plane); (3) il combinato somma i costi e annulla i benefici. **Braccio candidato
+per TH2: T-J** (contro il controllo T-0). Trappola nuova a catalogo: "il muro migra verso
+chi non pensa" — ogni potenziamento di un ruolo va misurato sull'INTERA catena, mai sul
+ruolo isolato.
 - [ ] **TH2 — A/B ufficiale severino-sim (i numeri)**
 - [ ] **TH3 — Verdetto, decision rule, documentazione**
 
