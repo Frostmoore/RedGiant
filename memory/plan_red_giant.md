@@ -622,18 +622,44 @@ Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i comm
 routing di **F6** userà i dati di PS6 come input (quando pianificare: i micro-task NON si
 pianificano — misurato due volte; i task larghi solo se il plansys converte post-thinking).
 
-**REGOLA DI METODO PERMANENTE — LA TRIADE DI OGNI MISURA (decisione utente, 2026-08-03):**
-un verde non vale nulla da solo. Ogni batteria di task, da qui in avanti, si misura su TRE
-bracci, sempre:
-1. **NUDO** (`bench/naked_probe.py`, `bench/ladder/run_naked.py`): materiali inline, una
-   completion, zero tool/loop/retry, stesso giudice → dice quanto è merito del **modello**.
-   Se il nudo passa, il task NON misura il workflow: va reso più largo (ladder).
-2. **WORKFLOW COMPLETO**: dice quanto sale il pavimento.
-3. **ABLAZIONI del workflow** (leva `RG_WORKER_ABLATE` ∈ {search, verify, retry}, stile
-   `RG_PLANSYS_ABLATE`): dicono **QUALE PEZZO** ha pagato. Senza queste, "il workflow
-   funziona" è una frase, non una misura: il delta va attribuito al componente, sennò
-   stiamo solo dicendo "il nostro insieme di cose fa qualcosa".
-Vale per ladder, F4, F6, F7, F8 e per i benchmark pubblici finali.
+## 🔬 LA MATRICE DI MISURA — regola di metodo PERMANENTE e NON NEGOZIABILE
+
+**(decisione utente, 2026-08-03: "da adesso in poi tutti i test dovranno essere svolti come
+quelli del coding")** — un verde non vale nulla da solo. **Ogni** batteria di task, in
+**ogni** fase futura (F4, F6, F7, F8, ladder, benchmark pubblici, retest dei verdetti
+aperti), si misura sulla matrice completa a DUE ASSI:
+
+| | **senza thinking** | **con thinking** |
+|---|---|---|
+| **NUDO** (materiali inline, 1 completion, zero tool/loop/retry) | **B1** — quanto è merito del *modello* | **B3** — quanto è merito del *ragionamento puro* |
+| **WORKFLOW** (+ ablazioni) | **B2** — quanto sale il *pavimento*, e per merito di *quale pezzo* | **B4** — se ragionamento e impalcatura si sommano, si annullano o si ostacolano |
+
+**Le sotto-varianti sono obbligatorie, non facoltative:**
+- **B2 — ablazioni** (`RG_WORKER_ABLATE` ∈ {search, verify, retry}; per il plan compiler
+  `RG_PLANSYS_ABLATE` ∈ {oracle, ledger, entry}): senza, "il workflow funziona" è una frase,
+  non una misura — il delta va attribuito al **componente**.
+- **B4 — collocazione del thinking** (`RG_THINKING_ROLES`): TUTTE le varianti pertinenti al
+  percorso in prova. Percorso diretto: solo Giano. Plan compiler: almeno solo-Giano,
+  solo-pianificazione, tutti, e le combinazioni che i dati suggeriscono (TH1 ha mostrato che
+  la *collocazione* conta più della quantità, F20).
+- **B4 porta le ABLAZIONI come B2** (precisazione utente): il blocco col thinking si esegue
+  anche `-search`, `-verify`, `-retry` — **simmetria obbligatoria**. Serve a rispondere alla
+  domanda che nessun altro braccio pone: *il ragionamento SOSTITUISCE un componente
+  mancante?* (es. un Giano che pensa compensa l'assenza di verifica, o di ricerca?). Senza
+  la simmetria si può solo dire "col thinking va meglio/peggio", mai *perché*.
+
+**Le tre letture che solo la matrice completa consente:** (a) **B2−B1** = valore
+dell'impalcatura; (b) **B3−B1** = valore del ragionamento a parità di impalcatura (zero);
+(c) **B4−B2 vs B3−B1** = se il ragionamento paga *di più* dentro o fuori dal workflow.
+Nessuna di queste è deducibile da un braccio solo.
+
+**Corollario di disegno (ladder):** se **B1 passa**, il task non misura niente di nostro e va
+reso più largo finché il nudo non cade (asse dell'ampiezza: materiali oltre il contesto,
+aggregazione, catene). Si misurano col workflow SOLO i gradini dove il nudo è caduto.
+
+**Strumenti:** `bench/ladder/generate.py` (corpus a difficoltà crescente, seed fisso) ·
+`bench/ladder/run_naked.py [--think]` (B1/B3) · `bench/ladder/run_agentic.py` (B2/B4, bracci
+e ablazioni da CLI) · `bench/naked_probe.py` (braccio nudo dei task non-ladder).
 
 **RETEST OBBLIGATORI A FINE PERCORSO (decisione utente, 2026-08-03 — i verdetti D11 e TH3
 sono APERTI, non tombali):**
