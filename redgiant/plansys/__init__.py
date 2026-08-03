@@ -18,8 +18,11 @@ def thinking_roles() -> set[str]:
 
 
 def thinking_budget() -> int:
-    """TH0.3 — budget del canale di pensiero (default 256, ~7s su severino)."""
-    return int(os.environ.get("RG_THINKING_BUDGET", "256"))
+    """TH0.3 — FUSIBILE del canale di pensiero, non bersaglio (decisione
+    utente 2026-08-03): misurato sul GGUF, il modello chiude il canale da
+    solo a 322-543 token; 1536 non scatta mai in condizioni normali e limita
+    il caso patologico a ~43s su severino (F12: l'uscita esiste sempre)."""
+    return int(os.environ.get("RG_THINKING_BUDGET", "1536"))
 
 
 def ablated(component: str) -> bool:

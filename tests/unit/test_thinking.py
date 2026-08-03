@@ -111,6 +111,18 @@ def test_db_migration_and_budget(tmp_path: Path):
     assert used.tokens == (100 - 90) + 20 + 64   # il pensiero conta UNA volta
 
 
+def test_think_clamped_to_context_room(monkeypatch):
+    # decisione utente: fusibile, non bersaglio — ma la risposta ha SEMPRE
+    # il suo spazio: think si clampa a ctx - prompt - max_tokens - 64
+    from dataclasses import replace
+    captured: list[dict] = []
+    c = _client(monkeypatch, [_resp("t"), _resp("out")], captured)
+    c.cfg = replace(CFG, ctx_size=200)
+    c.complete(PARTS, role="worker", max_tokens=100, think=99999)
+    room = 200 - (len(PARTS.render()) // 4) - 100 - 64
+    assert captured[0]["n_predict"] == room > 0
+
+
 def test_thinking_roles_lever(monkeypatch):
     from redgiant.plansys import thinking_budget, thinking_roles
     monkeypatch.delenv("RG_THINKING_ROLES", raising=False)
@@ -119,3 +131,5 @@ def test_thinking_roles_lever(monkeypatch):
     monkeypatch.setenv("RG_THINKING_BUDGET", "128")
     assert thinking_roles() == {"senior_planner", "worker"}
     assert thinking_budget() == 128
+    monkeypatch.delenv("RG_THINKING_BUDGET")
+    assert thinking_budget() == 1536          # fusibile, non bersaglio

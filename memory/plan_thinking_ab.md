@@ -84,10 +84,14 @@ piano padre si fa al rituale TH3.)
      la rispetta per costruzione.
   4. **Valori della leva = nomi ruolo reali del DB** (`senior_planner`, non `senior`):
      T-SM = `RG_THINKING_ROLES=senior_planner,phase_analyst,work_decomposer,verification_designer,test_author`.
-  5. **Osservazione per TH1**: nello smoke il modello non chiude quasi mai il canale da
-     solo — tutte le chiamate sbattono sul budget (256/256). Il troncamento si usa com'è
-     (by design), ma la qualità del pensiero troncato a metà frase va osservata nelle
-     famiglie di TH1 (eventuale chiusura con "[END THINKING]" — trap TH-4).
+  5. **REVISIONE (decisione utente, 2026-08-03): il budget è un FUSIBILE, non un
+     bersaglio.** L'osservazione iniziale ("il modello non chiude mai il canale") era un
+     artefatto del budget 256 troppo stretto: misurato con budget largo, il modello
+     **chiude da solo, sempre** — 322 tok (piano semplice), 543 (piano largo), 506
+     (debug). Default alzato a 1536 (non scatta mai in condizioni normali; caso
+     patologico ≤ ~43s su severino — F12: l'uscita esiste sempre) e il client clampa il
+     pensiero allo spazio reale del contesto riservando SEMPRE i max_tokens della
+     risposta. Costo atteso reale su severino: ~9-15s di pensiero per chiamata pensante.
   6. **Scoperta collaterale (a debito, NON si tocca ora)**: i marcatori di turno nativi di
      questo GGUF sono i token di controllo `<|turn>`/`<turn|>` (105/106) — il nostro
      `<start_of_turn>` tokenizza come 7 token NON speciali. Funziona (misurato da F0 in

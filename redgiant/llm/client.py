@@ -93,10 +93,15 @@ class LlamaClient:
             if not self.cfg.think_close:
                 raise LlmError("thinking markers not configured "
                                "([llm] think_open/think_close)")
-            if self.count_tokens(prompt) + think > self.cfg.ctx_size:
-                raise ContextOverflow(self.count_tokens(prompt) + think,
-                                      self.cfg.ctx_size,
+            # decisione utente (TH0): il budget e' un FUSIBILE, non un
+            # bersaglio — ma la risposta (max_tokens) deve avere SEMPRE il suo
+            # spazio: il pensiero si clampa a cio' che il contesto concede
+            n_base = self.count_tokens(prompt)
+            room = self.cfg.ctx_size - n_base - max_tokens - 64
+            if room <= 0:
+                raise ContextOverflow(n_base + max_tokens, self.cfg.ctx_size,
                                       parts.section_tokens(self.count_tokens))
+            think = min(think, room)
             p1 = {"prompt": prompt + self.cfg.think_open, "n_predict": think,
                   "temperature": (self.cfg.temperature if temperature is None
                                   else temperature),
