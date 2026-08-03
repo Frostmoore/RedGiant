@@ -202,16 +202,23 @@ What the grid says, taxonomy-backed: (a) a thinking Giano **halves his own failu
 
 The honest problem with any green result: *how much of it is the model, and how much is the workflow?* If a one-shot naked model passes a task, that task measures nothing about the harness. So the tasks were rebuilt as a **difficulty ladder** — deterministic, seeded, regenerable ([`bench/ladder/generate.py`](bench/ladder/generate.py)) — climbing a single axis: **breadth**, at constant per-fact cognition. Every rung asks the same trivial thing ("service X's `listen_port` is N"); only the haystack grows, plus distractors, more facts, and finally aggregation.
 
-Every rung is then measured on the full **2×2 matrix, ablations included in both workflow blocks** — the project's permanent method rule:
+Every rung is then measured on the full **2×2 matrix, ablations included in both workflow blocks** — the project's permanent method rule. The four blocks (**B** = *block*, one measurement arm each):
 
 | | **without thinking** | **with thinking** |
 |---|---|---|
-| **Naked** (materials inline, 1 completion, no tools/loop/retry) | **B1** — credit to the *model* | **B3** — credit to *reasoning alone* |
-| **Workflow** | **B2** — full · −search · −verify · −retry | **B4** — same four arms, thinking on |
+| **Naked** (materials inline, 1 completion, no tools/loop/retry) | **B1** | **B3** |
+| **Workflow** (agent loop, tools, verification) | **B2** (+ablations) | **B4** (+same ablations) |
+
+- **B1 — naked model.** Everything the task needs is pasted into one prompt; the model answers once; its output *is* the artifact; the task's real judge grades it. No tools, no loop, no retries, no verification. When materials exceed the context they are truncated and the truncation is declared — that is the physical limit of a one-shot system, not an imposed handicap. **Isolates: the model's own capability.** Run by [`bench/ladder/run_naked.py`](bench/ladder/run_naked.py).
+- **B2 — full workflow, plus one ablation per arm.** The real agent: it finds files, searches, reads, writes, runs the checker, retries. Four arms, each removing exactly one component (`RG_WORKER_ABLATE`): `full` (nothing removed) · `−search` (no `search_code`: it must list and read blindly) · `−verify` (deterministic verification off — the system is *believed* when it says "done") · `−retry` (one attempt only, but with tools). **Isolates: how much the harness raises the floor, and which component pays for it.** Run by [`bench/ladder/run_agentic.py`](bench/ladder/run_agentic.py).
+- **B3 — naked model + thinking.** Identical to B1, but the model's native reasoning channel opens before it answers (two-call protocol, F19). **Isolates: what explicit reasoning buys with zero scaffolding.**
+- **B4 — workflow + thinking, with the same four ablations.** The symmetry is deliberate and mandatory: only by ablating *inside* the thinking block can you ask the question no other arm poses — **does reasoning substitute for a missing component?** (Can a thinking agent compensate for having no verification? no search?)
+
+The comparisons this makes possible: **B2−B1** = value of the scaffolding · **B3−B1** = value of reasoning with no scaffolding · **(B4−B2) vs (B3−B1)** = whether reasoning pays more inside or outside the workflow · **full−(ablated arm)** = the price of each individual component.
 
 **Results so far** (severino-sim, external judges; naked arms 3 runs/rung, workflow arms 1 run/rung/arm):
 
-| Rung | Corpus | Facts | B1 naked | B3 +think | B2 full | B2 −search | B2 −verify | B2 −retry |
+| Rung | Corpus | Facts | **B1**<br/>naked | **B3**<br/>naked+think | **B2** full<br/>workflow | **B2** −search | **B2** −verify | **B2** −retry |
 |---|---|---|---|---|---|---|---|---|
 | L1 | 5 docs · 0.3K tok | 2 | **3/3** | **3/3** | — | — | — | — |
 | L2 | 15 docs · 1K tok | 3 | **3/3** | **3/3** | — | — | — | — |
