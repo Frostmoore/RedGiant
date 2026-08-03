@@ -29,7 +29,7 @@
   - [🔧 Tool design](#-tool-design-how-a-small-model-edits-files-reliably) (F1–F2) · [🔒 Constrained decoding](#-constrained-decoding-the-grammar-gives-you-shape-not-meaning) (F3–F4) · [🧨 Small-model failure modes](#-failure-modes-of-small-models-in-agent-loops) (F5–F7)
   - [🪙 Token economy](#-token-economy-on-cpu-only-inference) (F8–F9) · [📏 **The scoreboard — every official A/B**](#-the-scoreboard--every-official-ab-in-numbers)
   - [♻️ KV-cache & prefill](#%EF%B8%8F-kv-cache-reuse-and-prefill-engineering) (F10–F11) · [🎛️ Orchestration](#%EF%B8%8F-orchestration-running-an-unreliable-proposer-safely) (F12) · [✅ Verification design](#-verification-design-trusting-an-agent-you-cannot-trust) (F13) · [🤝 Consent UX](#-consent-ux-humans-in-the-loop-without-losing-the-cache) (F14)
-  - [🧭 Planner rebuild](#-planner-rebuild-smj-reference-coherence-is-the-control-planes-job) (F15–F18) · [🧠 **Thinking mode, role by role**](#-thinking-mode-measured-role-by-role) (F19–F20)
+  - [🧭 Planner rebuild](#-planner-rebuild-smj-reference-coherence-is-the-control-planes-job) (F15–F18) · [🧠 **Thinking mode, role by role**](#-thinking-mode-measured-role-by-role) (F19–F20) · [🪜 **The ladder: model vs workflow, component by component**](#-the-ladder-where-the-naked-model-actually-breaks-and-who-fixes-it)
 - **[🌟 The cast](#-the-cast)** — Sirio, Mira, Mizar, Vega, Altair, Giano: who does what
 - **[🏭 How the assembly line actually works](#-how-the-assembly-line-actually-works)** — no agent talks to another; the three separations; the flow in one line
 - **[🔁 Pipeline at a glance](#-pipeline-at-a-glance)** — the diagram and the four domains
@@ -197,6 +197,42 @@ Gemma 4 E2B has a native reasoning channel (`<|channel>thought … <channel|>` �
 What the grid says, taxonomy-backed: (a) a thinking Giano **halves his own failure rate** against standard proofs — the single cheapest win (1.6× cost); (b) thinking on the *verification* side (Vega/Altair) designs **richer, more demanding proofs** (three obligations per micro instead of one) — honesty up, conversion down, and it poisons even the everyone-thinks arm; (c) with verification kept sober, a thinking **Sirio buys execution depth** — both Sirio-arms hit a record **1.9 average green phases**, double the reference — making Sirio+Mizar+Giano the depth champion at equal best conversion; (d) **no arm breaks the ~4/20 conversion ceiling**: the last mile is still the wall.
 
 **The official CPU verdict (pre-registered decision rule, applied without mercy — and deliberately left open):** two batteries per arm on the reference profile — executor-thinking **1.5/13 mean vs control 1.5/13 mean**, Δverified = 0 (rule required ≥+2), at ~1.4× tokens and ~1.9× clean wall. Full-time thinking **stays off by default** — with an explicit caveat written into the plan: this was measured on *synthetic coding without routing*; reasoning may well pay on everyday, research or math workloads, and a mandatory retest with size-based routing active (post-F6/F7) plus public-benchmark runs at project end will reopen the question with data. One battery did produce a historic scalp — the reasoning-trap task that had never passed in the project's entire history (the model must flip "that library is off-limits, so the bug must be in the caller") fell to a thinking Giano — but it did not reproduce in the second battery: real, and inside the noise band. The identified next lever (unmeasured): *selective* thinking — only on retry, after a proof has already failed once, where the grid shows the benefit concentrates and the cost collapses. The general lesson — likely worth stealing for any multi-role agent system: **upgrading one role's intelligence moves the bottleneck, it does not dissolve it; placement beats quantity; measure every role upgrade on the whole chain, never on the role in isolation — and a scalp that doesn't reproduce is noise, however good it feels.**
+
+### 🪜 The ladder: where the naked model actually breaks, and who fixes it
+
+The honest problem with any green result: *how much of it is the model, and how much is the workflow?* If a one-shot naked model passes a task, that task measures nothing about the harness. So the tasks were rebuilt as a **difficulty ladder** — deterministic, seeded, regenerable ([`bench/ladder/generate.py`](bench/ladder/generate.py)) — climbing a single axis: **breadth**, at constant per-fact cognition. Every rung asks the same trivial thing ("service X's `listen_port` is N"); only the haystack grows, plus distractors, more facts, and finally aggregation.
+
+Every rung is then measured on the full **2×2 matrix, ablations included in both workflow blocks** — the project's permanent method rule:
+
+| | **without thinking** | **with thinking** |
+|---|---|---|
+| **Naked** (materials inline, 1 completion, no tools/loop/retry) | **B1** — credit to the *model* | **B3** — credit to *reasoning alone* |
+| **Workflow** | **B2** — full · −search · −verify · −retry | **B4** — same four arms, thinking on |
+
+**Results so far** (severino-sim, external judges; naked arms 3 runs/rung, workflow arms 1 run/rung/arm):
+
+| Rung | Corpus | Facts | B1 naked | B3 +think | B2 full | B2 −search | B2 −verify | B2 −retry |
+|---|---|---|---|---|---|---|---|---|
+| L1 | 5 docs · 0.3K tok | 2 | **3/3** | **3/3** | — | — | — | — |
+| L2 | 15 docs · 1K tok | 3 | **3/3** | **3/3** | — | — | — | — |
+| L3 | 40 docs · 2.5K tok | 4 | **3/3** | **3/3** | — | — | — | — |
+| L4 | 90 docs · 5.8K tok | 5 | **3/3** | **3/3** | — | — | — | — |
+| **L5** | 90 docs (= L4) | 5 **+ sum** | **0/3** | **0/3**¹ | ✗ | ✗ | ✗ | ✗ |
+| **L6** | 200 docs · 12.7K tok | 6 | **0/3** | **0/3** | **✓** | ✗ | ✗ **(lied)** | ✗ |
+| **L7** | 400 docs · 25.3K tok | 8 + sum | **0/3** | *running* | ✗ | ✗ | ✗ | ✗ |
+
+*Rungs L1–L4 are not run through the workflow by design: where the naked model passes, the task measures nothing about the harness.* ¹ Confounded and being re-run: the thinking budget eats 1536 tokens of context, so on near-limit rungs the thinking arm sees **less material** (6.0K vs 7.5K) — a real trade-off the matrix itself exposed, disambiguated by repeating L5 with a 256-token thinking budget.
+
+**Cost and honesty per arm** (the three failing rungs, aggregate):
+
+| Arm | Verified | **Honesty gap** | Tokens | Wall | What it attributes |
+|---|---|---|---|---|---|
+| **full** | **1/3** | 0 | 376K | 744s | the workflow flips the rung the naked model physically cannot see |
+| −search | 0/3 | 0 | **508K** | 916s | **search is the engine of capability**: remove it and L6 is lost while spending **35% more** (reading files blindly) |
+| −verify | 0/3 | **1** ⚠️ | 346K | 675s | **verification buys honesty, not throughput**: the only arm in the whole campaign that ever claimed "done" on an unfinished task — and it did so precisely on L6 |
+| −retry | 0/3 | 0 | **154K** | 297s | retry is fuel, not engine: without it the system dies **fast and cheap** (−59% tokens) |
+
+**What this measures, stated plainly:** the naked 2B's ceiling on this axis is **~5.8K tokens of material, 5 facts, no aggregation** — above that, zero. The workflow's contribution is **not** cognition: it is *selective retrieval* (the only component whose removal loses the won rung) and *honesty* (the only component whose removal produces a false claim). And it is **not enough yet**: two rungs out of three stay red in every arm — aggregation (L5) and extreme volume (L7) remain beyond reach, workflow or not.
 
 Every countermeasure above ships as working code in this repository; the [codebase atlas §9](memory/codebase_reference.md) maps each of the 27 underlying observations to its exact file, signature and technical cause (the F15–F18 observations join the atlas at PS5 closure).
 
