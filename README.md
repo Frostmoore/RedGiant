@@ -224,11 +224,11 @@ The comparisons this makes possible: **B2−B1** = value of the scaffolding · *
 | L2 | 15 docs · 1K tok | 3 | **3/3** | **3/3** | — | — | — | — |
 | L3 | 40 docs · 2.5K tok | 4 | **3/3** | **3/3** | — | — | — | — |
 | L4 | 90 docs · 5.8K tok | 5 | **3/3** | **3/3** | — | — | — | — |
-| **L5** | 90 docs (= L4) | 5 **+ sum** | **0/3** | **0/3**¹ | ✗ → **5/5**² | ✗ | ✗ | ✗ |
+| **L5** | 90 docs (= L4) | 5 **+ sum** | **0/3** | **0/3**¹ | ✗ → **18/20**² | ✗ | ✗ | ✗ |
 | **L6** | 200 docs · 12.7K tok | 6 | **0/3** | **0/3** | **✓** | ✗ | ✗ **(lied)** | ✗ |
 | **L7** | 400 docs · 25.3K tok | 8 + sum | **0/3** | *running* | ✗ | ✗ | ✗ | ✗ |
 
-*Rungs L1–L4 are not run through the workflow by design: where the naked model passes, the task measures nothing about the harness.* ¹ Confounded and being re-run: the thinking budget eats 1536 tokens of context, so on near-limit rungs the thinking arm sees **less material** (6.0K vs 7.5K) — a real trade-off the matrix itself exposed, disambiguated by repeating L5 with a 256-token thinking budget. ² L5 was **flipped after the fact**: see *An instruction does not produce obedience* below — the ✗ is the pre-guard measurement on severino-sim, the 5/5 is the post-guard GPU smoke awaiting official confirmation.
+*Rungs L1–L4 are not run through the workflow by design: where the naked model passes, the task measures nothing about the harness.* ¹ Confounded and being re-run: the thinking budget eats 1536 tokens of context, so on near-limit rungs the thinking arm sees **less material** (6.0K vs 7.5K) — a real trade-off the matrix itself exposed, disambiguated by repeating L5 with a 256-token thinking budget. ² L5 was **flipped after the fact**: see *An instruction does not produce obedience* below — the ✗ is the pre-guard measurement on severino-sim, the 18/20 is the post-guard GPU A/B (p = 0.0057 against the ablated arm) awaiting official confirmation on CPU.
 
 **Cost and honesty per arm** (the three failing rungs, aggregate):
 
@@ -255,20 +255,29 @@ L5 is L4 plus one sum. The model finds **5 facts out of 5** and then gets the to
 
 So the operation was **taken out of the model's hands**. A total is not meaning; it is **identity derived** from values the model already wrote — and identity belongs to the control plane. [`redgiant/tools/coherence.py`](redgiant/tools/coherence.py) checks, *before* the bytes reach the disk, that a declared total matches the values in the same artifact; if it does not, the write is **refused** and the correct number is returned in the error. This is the project's F4 principle (*make incoherent output impossible to emit, rather than validating it afterwards*) applied to **content** for the first time instead of syntax. It is deliberately conservative — text files only, never code or config; the total must be the last numeric assignment; at least two addends — because a false positive here blocks legitimate work, which is far worse than a missed catch. And it is **not an oracle on the task**: it sums what the model wrote, not what is true, so wrong facts still yield a wrong total. Internal coherence, not correctness.
 
-| Configuration | L5 verified | Wall | Refusals converted |
-|---|---|---|---|
-| workflow, rule in the prompt only | 2/5 | — | — |
-| + write-time coherence guard | 3/5 | 140s | 2 of 4 |
-| + refusal declares the state of the world | **5/5** | **134s** | **4 of 4** |
-| guard ablated (`−coherence`) | 1/5 | 214s | — |
+| Arm (20 runs each, GPU) | L5 verified | Wall |
+|---|---|---|
+| **`full`** — guard active | **18/20 (90%)** | 500s |
+| **`−coherence`** — guard ablated | **9/20 (45%)** | 797s |
 
-The middle row taught more than the last one. The guard fired in **4 runs out of 5** — the arithmetic error was near-universal, far more common than the score suggested — but only half the refusals converted. The tool log showed why, and it had nothing to do with arithmetic: **a refused write never told the model the file did not exist.** One run called `edit_file` on a file that was never created (twice); another went straight to `run_tests` to verify an artifact it had never written. The model treated a refusal as a success and reasoned on a world that did not exist. The fix ([`fs.refusal_state`](redgiant/tools/fs.py)) makes every refusal state what is actually on disk — *"answer.txt does NOT exist: nothing was written… edit_file cannot work, there is no file to edit yet"* — and it was applied to `syntax_error` too, which had carried the same trap unnoticed since F1.
+**45 points apart, Fisher exact two-sided p = 0.0057** — and the guarded arm is **37% faster**, because an immediate refusal costs one rewrite while an incoherent artifact costs a full failed verification plus a restart of the search. This is a rung the naked model does not pass in **any** configuration (B1 0/3, B3 0/3): the 90% is entirely the scaffolding's doing. And the detail that sharpens the point: in the passing runs the model frequently **never invokes the calculator at all**. The total comes out right because the control plane refuses the incoherence and hands back the number; transcription is all that is left to the model.
+
+> **A method lesson paid for in public.** The first blocks of this A/B were run at n=5 and produced, on functionally identical code, `−coherence` = **1/5** and then **5/5**. An attribution was written into three documents on that basis and had to be retracted. The cause: this model's behaviour swings in whole blocks (the calculator went unused across five consecutive runs, then was used constantly across the next five), so the real variance is far wider than the hardware noise band. **Standing rule: no conclusion on the ladder below 20 runs per arm, and the number ships with an exact test, not an impression.**
+
+The path there taught as much as the destination. At n=5 the guard fired in **4 runs out of 5** — the arithmetic error was near-universal, far more common than any score suggested — yet only half the refusals converted. The tool log showed why, and it had nothing to do with arithmetic: **a refused write never told the model the file did not exist.** One run called `edit_file` on a file that was never created (twice); another went straight to `run_tests` to verify an artifact it had never written. The model treated a refusal as a success and reasoned about a world that did not exist. [`fs.refusal_state`](redgiant/tools/fs.py) now makes every refusal state what is actually on disk — *"answer.txt does NOT exist: nothing was written… edit_file cannot work, there is no file to edit yet"* — applied to `syntax_error` too, which had carried the same trap unnoticed since F1.
 
 **The generalizable lesson:** an error that says *what was wrong* but not *how the world was left* leaves the model reasoning about a state that does not exist. That holds for every gate that refuses an action.
 
-And the detail that makes the point sharpest: **in none of the five passing runs did the model invoke the calculator.** Zero. The rung was solved without the model ever performing the arithmetic correctly — because it was no longer asked to.
+#### What the full logs showed that no score did
 
-Still, the ladder is **not conquered**: L7 (25K tokens, 8 facts, aggregation) remains red, and these numbers are GPU smoke tests (5 runs, noise band 2↔7 of 20) awaiting confirmation on the reference CPU profile.
+Reading the complete step-by-step logs of the last 40 runs surfaced **two failure modes larger than the arithmetic problem** we had been chasing:
+
+- **The phantom finish — 31 attempts out of 78 (40%).** The worker declares `done` having called **no** write tool at all. In one attempt it locates all five facts, computes the sum correctly through the calculator step by step (`693+228=921 → 1117 → 1545 → 1792`), and then finishes — with no file on disk. 17 of those happen on the *first* attempt; 6 runs out of 40 do it twice or more. The system already tells it: the judge's `FAIL: answer.txt missing` is propagated into the next attempt's `[PREVIOUS ATTEMPT FAILED]` block. It reads it and repeats. That is the **third independent confirmation** that instruction does not produce obedience — the worker card has forbidden exactly this since F1 ("claiming an action in thought or summary does not make it happen"). The cost is the sharp part: a phantom finish burns an **entire attempt** — 90 files re-listed, five searches redone — where one step would have sufficed with the context still warm.
+- **The calculator fails at the interface, not at the arithmetic — 27 of 67 calls (40%) arrive with `expression=None`.** The router answers `bad_args` with a raw pydantic dump; the model loops on it for five consecutive steps and gives up: *"I have exhausted all attempts to use the calculator tool correctly."* This partly **rewrites the obedience table above**: not all of that 60% was refusal to use the tool — part of it was a model *trying* to use it and being turned away by an error that never named the missing argument. When the call goes through, the answer is always right.
+
+Both are being addressed with the principle these measurements keep validating: structure instead of instruction, and errors that say what to do next and how the world was left.
+
+The ladder is **not conquered**: L7 (25K tokens, 8 facts, aggregation) remains red, and these are GPU numbers awaiting confirmation on the reference CPU profile.
 
 Every countermeasure above ships as working code in this repository; the [codebase atlas §9](memory/codebase_reference.md) maps each of the 27 underlying observations to its exact file, signature and technical cause (the F15–F18 observations join the atlas at PS5 closure).
 

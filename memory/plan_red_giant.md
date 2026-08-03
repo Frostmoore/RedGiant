@@ -1386,6 +1386,25 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   mondo lascia il modello a ragionare su uno stato inesistente.* Applicato anche a
   `syntax_error`, che portava la stessa trappola da F1. **Regola generale per ogni gate
   futuro che rifiuta un'azione.**
+- [ ] **LAD.9** 🤖 **Gate sul finish, DENTRO il loop** (scoperto leggendo i log integrali,
+  `data.md` §7.6.5): il Worker dichiara `done` senza aver scritto nulla nel **40% dei
+  tentativi** (31 su 78), e ripete l'errore anche quando il retry gli riporta letteralmente
+  `FAIL: answer.txt missing`. Regola 8 della card lo vieta dal F1 — terza conferma che
+  l'istruzione non basta. **Intervento:** in `redgiant/roles/worker.py::Worker.run`, prima di
+  ritornare su `WorkerFinishStep` con `status=="done"`, eseguire l'oracolo deterministico che
+  girerebbe comunque subito dopo; se l'artefatto promesso non esiste, il finish è **rifiutato**
+  e diventa uno step con lo stato reale del mondo. **Non cambia chi decide** (la verifica resta
+  il trust boundary, D10): cambia *dove*, convertendo un tentativo intero sprecato — 90 file
+  rilistati, 5 ricerche rifatte — in **un passo** con la KV ancora calda. Ablabile
+  (`RG_WORKER_ABLATE=finishgate`), con tetto ai rifiuti in-loop per non sostituire un loop
+  degenere con un altro.
+- [ ] **LAD.10** 🤖 **`bad_args` che insegna** (stessa fonte): `calculator` riceve
+  `expression=None` in **27 chiamate su 67 (40%)**; il router risponde col dump grezzo di
+  pydantic e il modello ci cicla 5 step prima di arrendersi. **Riscrive in parte LAD.4:** parte
+  di quel "60% calcola a mente" era il modello che *provava* a usare lo strumento e veniva
+  respinto da un errore che non nominava l'argomento mancante. **Intervento:** in
+  `ToolRouter.dispatch`, l'errore `bad_args` nomina i campi obbligatori mancanti e mostra una
+  chiamata d'esempio derivata dall'`input_model`, invece di `e.errors()`.
 - [ ] **LAD.7** 🔎 **Verifica di campagna:** L5/L6/L7 su `severino-sim` col codice finale,
   bracci B2 completi (`full`, `−search`, `−verify`, `−retry`, `−calc`, `−coherence`) e B4
   simmetrico, run multiple. Sono **questi** i numeri destinati al README e a `data.md`; gli
@@ -1393,13 +1412,23 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
 - [ ] **LAD.8** 🔎 Diagnosi di L7: quando arriva a scrivere produce **8 fatti su 8 e la somma
   esatta**, ma di norma non ci arriva. Il problema è di **completamento**, non di correttezza.
 
-**ESITO PARZIALE (2026-08-03, GPU, 5 run per braccio — `data.md` §7.6):** L5 passa da **2/5**
-(solo la regola nel prompt) a **3/5** (guardia) a **5/5** (guardia + stato del rifiuto), con
-`−coherence` a 1/5 e il braccio con la guardia anche **più veloce** (134s vs 214s: un rifiuto
-immediato costa una riscrittura, un artefatto incoerente costa un giro di verifica fallita).
-**In nessuna delle 5 run vincenti il modello ha invocato la calcolatrice**: il gradino è stato
-risolto senza che il modello eseguisse mai l'operazione, perché non gliela si chiede più.
-È il primo gradino che il modello nudo non vede in nessuna configurazione (B1 0/3, B3 0/3).
+**ESITO (2026-08-03, GPU, `@da8df90`, **20 run per braccio** — `data.md` §7.6):**
+`full` **18/20 (90%)** contro `−coherence` **9/20 (45%)** — 45 punti, **Fisher esatto
+bilaterale p = 0.0057** — e il braccio con la guardia è anche **il 37% più veloce** (500s vs
+797s: un rifiuto immediato costa una riscrittura, un artefatto incoerente costa un giro di
+verifica fallita più il rientro nella ricerca da zero). È il primo gradino che il modello nudo
+non vede in **nessuna** configurazione (B1 0/3, B3 0/3): il 90% è tutto merito
+dell'impalcatura. **Nei blocchi vincenti il modello spesso non invoca mai la calcolatrice**: il
+totale esce giusto perché il control plane rifiuta l'incoerenza e restituisce il numero.
+
+**⚠️ REGOLA NUOVA E NON NEGOZIABILE — nessuna conclusione sulla ladder sotto le 20 run per
+braccio, e il numero si accompagna a un test esatto, non a un'impressione.** Pagata sul campo:
+i primi blocchi erano a n=5 e hanno prodotto, **su codice funzionalmente identico**,
+`−coherence` = 1/5 e poi 5/5 (`full` = 2/5, 3/5, 5/5). Su quella base avevo scritto
+un'attribuzione in tre documenti e ho dovuto ritirarla. Causa: il comportamento del modello
+oscilla **per blocchi interi** (calcolatrice mai usata in 5 run consecutive, poi usata di
+continuo nelle 5 successive), quindi la varianza reale è molto più larga della banda di rumore
+hardware di `data.md` §1.3. La regola vale per la ladder e per ogni A/B futuro di pari natura.
 
 ---
 

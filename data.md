@@ -453,20 +453,33 @@ correttezza: nessun leak come quello del giudice (§7.5).
 menzione della guardia nella card — così il delta è attribuibile solo al meccanismo, e il
 confronto con le tornate di §7.5 resta pulito.
 
-### 7.6.1 Smoke A/B su L5 (`@6409487`, dev-fast, 5 run per braccio)
+### 7.6.1 A/B su L5 (`@da8df90`, dev-fast, **20 run per braccio**)
 
-| Braccio | L5 verificati | Tempo totale | Totale scritto |
-|---|---|---|---|
-| `full` (guardia attiva) | **3/5** | 140 s | 1792 corretto in 3 run |
-| `−coherence` (guardia ablata) | **1/5** | 214 s | 1492 / 1492 / 1592 accettati senza obiezioni |
+| Braccio | L5 verificati | Tempo totale |
+|---|---|---|
+| `full` (guardia attiva) | **18/20 = 90%** | 500 s |
+| `−coherence` (guardia ablata) | **9/20 = 45%** | 797 s |
 
-Riferimento di §7.5, stesso gradino e stesso hardware: `full` era **2/5**, `−calc` 1/5.
+**45 punti di differenza, Fisher esatto bilaterale p = 0.0057.** Riferimento di §7.5, stesso
+gradino e stesso hardware, prima della guardia: 2/5.
 
-Il braccio con la guardia è anche **il 35% più veloce**: un rifiuto immediato costa una
+Il braccio con la guardia è anche **il 37% più veloce**: un rifiuto immediato costa una
 riscrittura, mentre un artefatto incoerente costa un giro completo di verifica fallita più il
-rientro nella ricerca.
+rientro nella ricerca da zero.
+
+**⚠️ Lezione di metodo, pagata sul campo — 5 run non bastano su questo gradino.** I primi
+blocchi erano a n=5 e hanno prodotto, su codice funzionalmente identico, `−coherence` = **1/5**
+e poi **5/5**; `full` = 2/5, 3/5, 5/5. Su quella base avevo scritto un'attribuzione che i dati
+non sostenevano, e l'ho ritirata. La causa è che il comportamento del modello oscilla per
+blocchi interi (l'uso della calcolatrice è stato 0 volte in 5 run e poi continuo nelle 5
+successive), quindi la varianza reale è molto più larga della banda di rumore hardware di §1.3.
+**Regola operativa: sulla ladder, nessuna conclusione sotto le 20 run per braccio**, e il
+numero va accompagnato da un test esatto, non da un'impressione.
 
 ### 7.6.2 Il meccanismo, run per run (log dei tool, braccio `full`)
+
+*(blocco a n=5: la meccanica è osservata direttamente sui log dei tool e non dipende dalla
+statistica, ma i punteggi di questa tabella sì — v. l'avvertenza in §7.6.1.)*
 
 | Run | Morsi della guardia | Cosa è successo dopo | Esito |
 |---|---|---|---|
@@ -497,36 +510,64 @@ trappola senza che nessuno l'avesse notata.
 sbagliato* ma non *com'è rimasto il mondo* lascia il modello a ragionare su uno stato che non
 esiste. Vale per ogni gate che rifiuta un'azione, non solo per questo.
 
-### 7.6.4 Dopo il fix (`@63f55eb`, dev-fast, 5 run)
+### 7.6.4 Progressione dell'intervento
 
-| Configurazione | L5 verificati | Tempo | Morsi convertiti |
-|---|---|---|---|
-| workflow, solo la regola nel prompt (§7.5) | 2/5 | — | — (lo strumento non veniva invocato) |
-| + guardia di coerenza in scrittura | 3/5 | 140 s | 2 su 4 |
-| + il rifiuto dichiara lo stato del disco | **5/5** | **134 s** | **4 su 4** |
-| guardia ablata (`−coherence`) | 1/5 | 214 s | — |
+| Configurazione | L5 verificati | Note |
+|---|---|---|
+| workflow, solo la regola nel prompt (§7.5) | 2/5 | lo strumento non veniva invocato |
+| + guardia di coerenza in scrittura | 3/5 *(n=5, non concludente)* | 2 morsi convertiti su 4 |
+| + il rifiuto dichiara lo stato del disco | 5/5 *(n=5, non concludente)* | 4 su 4 |
+| **misura vera, n=20:** `full` | **18/20** | p = 0.0057 vs ablato |
+| **misura vera, n=20:** `−coherence` | **9/20** | |
 
-**La guardia ha morso in 4 run su 5 e tutte e 4 si sono riprese** scrivendo `total=1792` alla
-chiamata immediatamente successiva; la quinta aveva il totale giusto al primo colpo. Il gradino
-passa **5 volte su 5** — ed è il primo gradino che il modello nudo non vede in nessuna
-configurazione (B1 0/3, B3 0/3).
+Il gradino resta il primo che il modello nudo non vede in **nessuna** configurazione
+(B1 0/3, B3 0/3): il 90% è interamente merito dell'impalcatura.
 
-**Il dato più istruttivo di tutta la tornata:** in nessuna delle 5 run il modello ha invocato la
-calcolatrice. Zero. Il gradino è stato risolto **senza** che l'operazione fosse eseguita
-correttamente dal modello, perché non gli è più stata chiesta: il control plane la esegue,
-rifiuta l'incoerenza e restituisce il numero: al modello resta la trascrizione. È la conferma
-operativa di PS-D11 — *il modello crea il significato, il control plane crea l'identità* —
-applicata all'aritmetica.
+**Il dato più istruttivo:** nei blocchi in cui il gradino passa, il modello spesso **non invoca
+mai la calcolatrice**. Il totale finisce corretto perché il control plane rifiuta l'incoerenza
+e restituisce il numero — al modello resta la trascrizione. È PS-D11 applicato all'aritmetica:
+*il modello crea il significato, il control plane crea l'identità.*
 
-**Riserve dichiarate:** 5 run per braccio su GPU (`dev-fast`), non su `severino-sim`; la banda
-di rumore GPU misurata è 2↔7 su 20 (§1.3), quindi 5/5 contro 1/5 è indicativo e va confermato
-sul profilo ufficiale. Il **meccanismo**, invece, è osservato direttamente sui log dei tool
-(rifiuto → riscrittura corretta → giudice verde), e non dipende dalla statistica.
+**Riserve dichiarate:** GPU (`dev-fast`), non `severino-sim`; il numero ufficiale è LAD.7.
+
+### 7.6.5 Cosa dicono i log integrali (e non i punteggi)
+
+Letti i log completi delle ultime 40 run, emergono **due modi di fallire che nessun punteggio
+mostrava**, entrambi più grossi del problema aritmetico che stavamo inseguendo.
+
+**(a) Il finish fantasma — 31 tentativi su 78 (40%).** Il Worker dichiara `done` **senza aver
+mai chiamato `write_file`, `edit_file` o `write_patch`**. Esempio integrale: trova tutti e 5 i
+fatti, calcola col tool passo per passo (`693+228=921`, `921+196=1117`, `1117+428=1545`,
+`1545+247=1792`, esatto) e allo step 12 chiude `done`. Il file non esiste. Il tentativo prima
+aveva fatto lo stesso, con il *thought* che diceva *"Now I need to compile the results into
+answer.txt"*. Di questi 31, **17 al primo tentativo**; 6 run su 40 lo fanno due o più volte.
+
+Il sistema **glielo dice già**: `verify` propaga lo stdout del giudice (`FAIL: answer.txt
+missing`) nel blocco `[PREVIOUS ATTEMPT FAILED]` del tentativo successivo. Il modello lo legge
+e ripete. **Terza conferma indipendente che l'istruzione non produce obbedienza** (le prime
+due: §7.5 e la regola 8 della card, che dice esattamente questo dal F1).
+
+Il costo è la parte peggiore: un finish fantasma brucia un **tentativo intero** — si rilistano
+90 file e si rifanno tutte e 5 le ricerche — quando al modello sarebbe bastato **un passo**,
+con il contesto ancora caldo.
+
+**(b) La calcolatrice fallisce sull'interfaccia, non sull'aritmetica — 27 chiamate su 67
+(40%) con `expression=None`.** Il router risponde `bad_args` col dettaglio pydantic grezzo e il
+modello ci cicla dentro: cinque step consecutivi, poi *"I have exhausted all attempts to use the
+calculator tool correctly"* → `blocked`. **Questo riscrive in parte §7.5:** non tutto quel "60%
+calcola a mente" era rifiuto dello strumento — una fetta era il modello che *provava* a usarlo e
+veniva respinto da un errore che non nominava l'argomento mancante. Quando la chiamata passa, il
+risultato è sempre giusto.
+
+**Conseguenza operativa:** entrambi si affrontano con lo stesso principio già validato due
+volte (guardia di coerenza, `refusal_state`) — struttura invece di istruzione, ed errori che
+dicono cosa fare e com'è rimasto il mondo. Vedi LAD.9 e LAD.10 nel piano.
 
 ## 8. Cosa manca (aggiornamento previsto)
 
-- [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto: §7.6.4; mancano L6 e L7)
-- [ ] L5 con la guardia su `severino-sim` (il 5/5 di §7.6.4 è GPU, va confermato sul profilo ufficiale)
+- [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
+- [ ] L5 con la guardia su `severino-sim` (il 18/20 è GPU, va confermato sul profilo ufficiale)
+- [ ] Gate sul finish in-loop (LAD.9) e `bad_args` che insegna (LAD.10) — i due modi di fallire di §7.6.5
 - [ ] Ladder B4 post-fix (workflow + thinking, con le stesse ablazioni) — il blocco pre-fix è da buttare
 - [ ] **Ladder ufficiale su severino-sim**: B2 + B4 col codice fixato, run multiple → i numeri che andranno nel README
 - [ ] Diagnosi di L7 (perché 60 passi non bastano)
