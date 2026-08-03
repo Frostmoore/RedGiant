@@ -97,6 +97,9 @@ piano padre si fa al rituale TH3.)
      `<start_of_turn>` tokenizza come 7 token NON speciali. Funziona (misurato da F0 in
      poi), ma il protocollo nativo è un altro: A/B futuro, registrato nell'atlante §10.
 - [ ] **TH1 — Compliance GPU (famiglie, non numeri)**
+  - [x] TH1 round 1 (T-SM): **0/20** @`a2076ab` — famiglia nuova "phase_id drift di M2 pensante" (5/20, fixata: identità imposta in `_norm`); **amplificazione delle morti J** (M3 pensante progetta obblighi O1-O3 per micro, J non pensante ne fallisce di più: onestà su, conversione giù); costo 2,4× token / 2,3× wall.
+  - [ ] TH1 round 2 (T-SM post-fix phase_id): in corsa @`4dfc05f`.
+  - [ ] **TH1 round 3 (T-J, decisione utente 2026-08-03): pensiero SOLO a J** (`RG_THINKING_ROLES=worker`), stesso protocollo. Razionale: le morti dominanti sono di J e sono "di testa" (formati esatti); il round 1 mostra che migliorare solo il verificatore peggiora la conversione — prima di TH2 va misurato il braccio dell'esecutore. Attenzione al costo: J pensa A OGNI STEP (10-30 per micro) — su GPU è tollerabile, il numero severino si stima dai token.
 - [ ] **TH2 — A/B ufficiale severino-sim (i numeri)**
 - [ ] **TH3 — Verdetto, decision rule, documentazione**
 
