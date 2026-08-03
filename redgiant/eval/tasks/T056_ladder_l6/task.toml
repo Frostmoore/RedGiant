@@ -1,0 +1,14 @@
+id = "T056"
+domain = "research_local"
+prompt = "The folder docs/ contains 200 service notes. Find these facts, reading ONLY what you need: the listen_port of service lyra; the retention_days of service vela; the worker_count of service aquila; the max_connections of service hydra; the cache_size_mb of service atlas; the listen_port of service cygnus. Write answer.txt with one line per fact, exactly 'lyra_listen_port=<value>', 'vela_retention_days=<value>', 'aquila_worker_count=<value>', 'hydra_max_connections=<value>', 'atlas_cache_size_mb=<value>', 'cygnus_listen_port=<value>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
+success_cmd = "python judge.py"
+timeout_s = 3600
+tags = ["ladder", "l6", "research_local"]
+writable_globs = ["answer.txt"]
+naked_materials = ["docs/*.md"]
+naked_instruction = "The folder docs/ contains 200 service notes. Find these facts, reading ONLY what you need: the listen_port of service lyra; the retention_days of service vela; the worker_count of service aquila; the max_connections of service hydra; the cache_size_mb of service atlas; the listen_port of service cygnus. Write answer.txt with one line per fact, exactly 'lyra_listen_port=<value>', 'vela_retention_days=<value>', 'aquila_worker_count=<value>', 'hydra_max_connections=<value>', 'atlas_cache_size_mb=<value>', 'cygnus_listen_port=<value>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
+
+# LADDER L6: 200 documenti, 6 fatti — generato da bench/ladder/generate.py (seed fisso).
+
+[test_commands]
+check = ["python", "judge.py"]

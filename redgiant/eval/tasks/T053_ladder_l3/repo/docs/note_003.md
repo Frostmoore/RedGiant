@@ -1,0 +1,8 @@
+# Service note 003
+
+Service grus: the max_connections is 291.
+Service grus: the cache_size_mb is 117.
+
+Alerts are routed to the on-call rotation; escalation happens after fifteen minutes.
+Configuration lives in the central repository and is applied by CI.
+Backups are taken hourly and pruned by the retention policy.

@@ -1,0 +1,14 @@
+id = "T055"
+domain = "research_local"
+prompt = "The folder docs/ contains 90 service notes. Find these facts, reading ONLY what you need: the listen_port of service fornax; the retention_days of service draco; the worker_count of service sagitta; the max_connections of service dorado; the cache_size_mb of service hydra. Write answer.txt with one line per fact, exactly 'fornax_listen_port=<value>', 'draco_retention_days=<value>', 'sagitta_worker_count=<value>', 'dorado_max_connections=<value>', 'hydra_cache_size_mb=<value>'. Then add a final line 'total=<sum of all the values above>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
+success_cmd = "python judge.py"
+timeout_s = 3600
+tags = ["ladder", "l5", "research_local"]
+writable_globs = ["answer.txt"]
+naked_materials = ["docs/*.md"]
+naked_instruction = "The folder docs/ contains 90 service notes. Find these facts, reading ONLY what you need: the listen_port of service fornax; the retention_days of service draco; the worker_count of service sagitta; the max_connections of service dorado; the cache_size_mb of service hydra. Write answer.txt with one line per fact, exactly 'fornax_listen_port=<value>', 'draco_retention_days=<value>', 'sagitta_worker_count=<value>', 'dorado_max_connections=<value>', 'hydra_cache_size_mb=<value>'. Then add a final line 'total=<sum of all the values above>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
+
+# LADDER L5: 90 documenti, 5 fatti, totale calcolato — generato da bench/ladder/generate.py (seed fisso).
+
+[test_commands]
+check = ["python", "judge.py"]

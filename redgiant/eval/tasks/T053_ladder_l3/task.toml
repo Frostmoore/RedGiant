@@ -1,0 +1,14 @@
+id = "T053"
+domain = "research_local"
+prompt = "The folder docs/ contains 40 service notes. Find these facts, reading ONLY what you need: the listen_port of service phoenix; the retention_days of service hydra; the worker_count of service norma; the max_connections of service volans. Write answer.txt with one line per fact, exactly 'phoenix_listen_port=<value>', 'hydra_retention_days=<value>', 'norma_worker_count=<value>', 'volans_max_connections=<value>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
+success_cmd = "python judge.py"
+timeout_s = 3600
+tags = ["ladder", "l3", "research_local"]
+writable_globs = ["answer.txt"]
+naked_materials = ["docs/*.md"]
+naked_instruction = "The folder docs/ contains 40 service notes. Find these facts, reading ONLY what you need: the listen_port of service phoenix; the retention_days of service hydra; the worker_count of service norma; the max_connections of service volans. Write answer.txt with one line per fact, exactly 'phoenix_listen_port=<value>', 'hydra_retention_days=<value>', 'norma_worker_count=<value>', 'volans_max_connections=<value>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
+
+# LADDER L3: 40 documenti, 4 fatti — generato da bench/ladder/generate.py (seed fisso).
+
+[test_commands]
+check = ["python", "judge.py"]

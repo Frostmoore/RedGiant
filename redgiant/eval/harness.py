@@ -58,6 +58,11 @@ class EvalTask(BaseModel):
     # repo: il modello non deve vederne il sorgente.
     http_allowed_domains: list[str] = []
     service_script: Path | None = None
+    # LADDER: braccio di controllo "modello nudo" (bench/naked_probe.py) —
+    # glob dei materiali da inlineare e istruzione one-shot. Se assenti, il
+    # task non ha braccio nudo (es. serve tool-use per costruzione).
+    naked_materials: list[str] = []
+    naked_instruction: str = ""
 
 
 class EvalResult(BaseModel):
@@ -91,7 +96,9 @@ def discover_tasks(tasks_dir: Path) -> list[EvalTask]:
             expected_outcome=data.get("expected_outcome", "verified"),
             http_allowed_domains=data.get("http_allowed_domains", []),
             service_script=(base / data["service_script"]
-                            if data.get("service_script") else None)))
+                            if data.get("service_script") else None),
+            naked_materials=data.get("naked_materials", []),
+            naked_instruction=data.get("naked_instruction", "")))
     return tasks
 
 

@@ -64,6 +64,45 @@ def test_t031_service_serves_expected_payload():
         svc.terminate()
 
 
+def test_ladder_judges_are_satisfiable_and_scale():
+    """LADDER: ogni gradino ha un giudice soddisfacibile (ricavo le attese
+    dal judge stesso: il generatore le cabla) e la scala e' MONOTONA in
+    ampiezza — se questa proprieta' si rompe, il confronto nudo/agentico
+    non misura piu' l'ampiezza."""
+    import ast
+    import shutil
+    import subprocess
+    import sys
+    import tempfile
+
+    from redgiant.eval.harness import discover_tasks
+    tasks = sorted((t for t in discover_tasks(TASKS)
+                    if "ladder" in t.tags), key=lambda t: t.id)
+    assert len(tasks) >= 5, "ladder non generata (bench/ladder/generate.py)"
+    sizes = []
+    for t in tasks:
+        judge_src = (t.repo_dir / "judge.py").read_text(encoding="utf-8")
+        expected = ast.literal_eval(
+            judge_src.split("EXPECTED = ", 1)[1].split("\n", 1)[0])
+        tmp = Path(tempfile.mkdtemp(prefix=f"ladder_{t.id}_"))
+        shutil.copytree(t.repo_dir, tmp, dirs_exist_ok=True)
+        (tmp / "answer.txt").write_text(
+            "".join(f"{k}={v}\n" for k, v in expected.items()),
+            encoding="utf-8")
+        proc = subprocess.run([sys.executable, "judge.py"], cwd=tmp,
+                              capture_output=True, text=True, timeout=60)
+        assert proc.returncode == 0, f"{t.id}: {proc.stdout}{proc.stderr}"
+        sizes.append(sum(len(p.read_text(encoding="utf-8").split())
+                         for p in (t.repo_dir / "docs").glob("*.md")))
+    # monotona a meno del 5% (L5 ha la stessa ampiezza di L4 per costruzione:
+    # e' la variante col calcolo, non un gradino di ampiezza) e almeno 4x
+    # dal primo all'ultimo, con l'ultimo che SFONDA il contesto da 8192
+    for a, b in zip(sizes, sizes[1:]):
+        assert b >= a * 0.95, sizes
+    assert sizes[-1] > 4 * sizes[0], sizes
+    assert sizes[-1] * 1.35 > 8192, "l'ultimo gradino deve eccedere il ctx"
+
+
 def test_harness_parses_f3bis_keys():
     from redgiant.eval.harness import discover_tasks
     tasks = {t.id: t for t in discover_tasks(TASKS)}
