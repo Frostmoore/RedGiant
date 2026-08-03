@@ -85,6 +85,11 @@ def default_catalog(cfg: Config, scope: Scope,
         ToolSpec("git_diff", "Show the unified diff against a ref (default HEAD).",
                  "low", True, False, 30.0, proc.GitDiffArgs, partial(proc.git_diff, scope)),
     ]
+    # ablazione di SOLO A/B (mai in produzione): senza search_code il modello
+    # deve listare e leggere file per file — misura il valore della ricerca
+    from redgiant.core.ablate import worker_ablated
+    if worker_ablated("search"):
+        specs = [s for s in specs if s.name != "search_code"]
     return {s.name: s for s in specs}
 
 

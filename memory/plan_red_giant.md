@@ -622,6 +622,19 @@ Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i comm
 routing di **F6** userà i dati di PS6 come input (quando pianificare: i micro-task NON si
 pianificano — misurato due volte; i task larghi solo se il plansys converte post-thinking).
 
+**REGOLA DI METODO PERMANENTE — LA TRIADE DI OGNI MISURA (decisione utente, 2026-08-03):**
+un verde non vale nulla da solo. Ogni batteria di task, da qui in avanti, si misura su TRE
+bracci, sempre:
+1. **NUDO** (`bench/naked_probe.py`, `bench/ladder/run_naked.py`): materiali inline, una
+   completion, zero tool/loop/retry, stesso giudice → dice quanto è merito del **modello**.
+   Se il nudo passa, il task NON misura il workflow: va reso più largo (ladder).
+2. **WORKFLOW COMPLETO**: dice quanto sale il pavimento.
+3. **ABLAZIONI del workflow** (leva `RG_WORKER_ABLATE` ∈ {search, verify, retry}, stile
+   `RG_PLANSYS_ABLATE`): dicono **QUALE PEZZO** ha pagato. Senza queste, "il workflow
+   funziona" è una frase, non una misura: il delta va attribuito al componente, sennò
+   stiamo solo dicendo "il nostro insieme di cose fa qualcosa".
+Vale per ladder, F4, F6, F7, F8 e per i benchmark pubblici finali.
+
 **RETEST OBBLIGATORI A FINE PERCORSO (decisione utente, 2026-08-03 — i verdetti D11 e TH3
 sono APERTI, non tombali):**
 1. **Retest planner+thinking col router attivo (dopo F6/F7):** entrambi i verdetti negativi

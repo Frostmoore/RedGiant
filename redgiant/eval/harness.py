@@ -196,9 +196,13 @@ def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
     else:
         orch = Orchestrator(cfg, store, llm, router, assembler)
 
+    # ablazione "retry": un colpo solo coi tool (braccio A/B, mai produzione)
+    from redgiant.core.ablate import worker_ablated
     budget = Budget(max_total_tokens=cfg.budget.max_total_tokens,
                     max_tool_calls=cfg.budget.max_tool_calls,
-                    max_retries_per_subtask=cfg.budget.max_retries_per_subtask,
+                    max_retries_per_subtask=(
+                        0 if worker_ablated("retry")
+                        else cfg.budget.max_retries_per_subtask),
                     max_wall_s=min(cfg.budget.max_wall_s, task.timeout_s))
     tid = store.create_task(task.prompt, str(workdir), cfg.profile_name, budget)
     # F3.5 A/B: con use_planner il piano lo genera il Planner (si IGNORA il

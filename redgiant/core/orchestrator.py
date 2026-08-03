@@ -234,6 +234,16 @@ class Orchestrator:
             return None
 
         log.line("worker", f"{spec.id} finished: {report.status} - {report.summary[:120]}")
+        # ablazione di SOLO A/B (mai in produzione): senza verifica si CREDE al
+        # report del Worker — e' il braccio che misura quanto vale l'oracolo
+        from redgiant.core.ablate import worker_ablated
+        if worker_ablated("verify"):
+            from redgiant.core.verify import CheckResult, Verdict
+            log.line("gate", f"{spec.id} verifica ABLATA: si crede al worker")
+            return Verdict(
+                verdict="pass" if report.status == "done" else "fail",
+                checks=[CheckResult(name="ablated:verify", ok=True,
+                                    detail="verification disabled (A/B arm)")])
         verdict = verify_subtask(spec, report, self.router.scope, self.router, task_id)
         return verdict
 
