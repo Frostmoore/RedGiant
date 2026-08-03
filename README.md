@@ -4,7 +4,7 @@
 
 **A verification-first agentic system that makes *tiny* local language models<br>reliably useful on non-prosumer hardware.**
 
-[![Status](https://img.shields.io/badge/status-v4.0.0_·_S%2FM%2FJ_plan_compiler_integrated,_gated_by_A%2FB_verdict-brightgreen)](memory/plan_planner_system.md)
+[![Status](https://img.shields.io/badge/status-v4.1.x_·_thinking_campaign_running_·_plan_compiler_gated_by_A%2FB-brightgreen)](memory/plan_thinking_ab.md)
 [![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Model](https://img.shields.io/badge/model-Gemma_4_E2B_·_Q4_QAT_·_GGUF-8A2BE2)](https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF)
 [![Runtime](https://img.shields.io/badge/runtime-llama.cpp_(pinned)-555555)](docker/severino-sim/compose.yml)
@@ -41,7 +41,7 @@ Red Giant wraps a **~2B-effective-parameter model** — Gemma 4 E2B, Q4 QAT, GGU
 
 > Most agentic projects chase the biggest model they can reach. Red Giant goes the opposite way: the smallest usable model, on the kind of machine a non-prosumer actually owns — a 15W mini-PC with 4 CPU cores and no usable GPU. Anyone can build agents on a workstation-class GPU box; the interesting problem is closing the gap between local inference on consumer hardware and the inevitable scarcity of that scenario.
 
-**Status:** early development — **the planner-system rebuild (S/M/J compiler behind deterministic gates) is built, piloted and officially measured**: a full vertical slice runs end-to-end on the CPU reference profile (plan → per-phase compilation → qualified tests → scoped junior execution → synthesis and coverage gates), ~50 permanent deterministic rules were distilled from over 250 instrumented runs, and the official A/B keeps it honest — **2/13 verified vs the naive baseline's 6/13**, with failures costing 44% fewer tokens and every ablated component proving its keep in failure containment (+51–76% cost without). Verdict: **still gated off by default**; it reopens after five identified control-plane fixes and a controlled thinking-mode experiment (both fully specified in the repo's plans). The earlier in-loop planner had already lost its own A/B (**2/10 vs 9/10**) and remains deprecated behind the same gate. Behind it, the Phase 2 single-process web GUI (async job queue, live execution tree, consent-based approvals with standing per-file grants, budget-extension prompts, guided relaunch of failed tasks) was live-tested through 3 rounds of user testing plus an automated 5-task battery: **15 defects found and fixed**, zero false claims in either direction. This README is refreshed at the end of every development phase.
+**Status:** early development, `v4.1.x` — **the thinking-mode campaign is running now.** The plan compiler (the cast below: Sirio → Mira/Mizar/Vega/Altair → Giano, behind a deterministic control plane) is **built, integrated into the product and gated off by its own A/B verdict** (`v4.0.0`, merged to `main`): 2/13 vs the naive baseline's 6–8/13 on micro-tasks, 0/3 both arms on the wide tasks it was built for — but its failures cost **44% fewer tokens**, its one honesty gap in 35 official runs was diagnosed and closed the same day, and every ablated gate proved its keep (+50–76% failure cost without). ~50 permanent deterministic rules were distilled from **over 400 instrumented end-to-end runs**. The current campaign measures Gemma 4's **native thinking mode role by role** (F19–F20): the executor's failures *halve* when he thinks — including the first-ever solve of the project's oldest reasoning-trap task — the planner's thinking buys record execution depth, and verification-side thinking raises the bar for everyone; the official CPU A/B is in progress, with a pre-registered decision rule. The earlier in-loop planner (2/10 vs 9/10) remains deprecated behind its own gate. Behind all of it, the Phase-2 single-process web GUI (async job queue, live execution tree, consent-based approvals with standing per-file grants, budget-extension prompts, guided relaunch, plan-document tabs and gate tables for compiler tasks) was live-tested through 3 rounds of user testing plus an automated battery: **15 defects found and fixed**, zero false claims in either direction. This README is refreshed at the end of every development phase.
 
 ## 🧠 The thesis
 
@@ -86,7 +86,7 @@ If you are trying to make a small local model do real, verified work on hardware
 
 ## 🔬 Engineering findings — measured lessons from a 2B local agent
 
-This section records the engineering findings produced while building Red Giant. Most are **not claimed as novel principles in isolation**: several confirm established practice, but quantify its impact in an unusually constrained regime — a ~2B model, grammar-constrained JSON tool calls, CPU-only inference. Others document stack-specific failure modes or design patterns that emerged during implementation. Each finding states what was observed, the measured evidence, the countermeasure that now ships as working code, and how far the evidence reaches; findings may be revised, narrowed or retired as testing expands to other models, runtimes and real codebases. The **20 findings** below rest on **27 recorded observations** plus **over 330 instrumented end-to-end runs** of the planner-system rebuild and the thinking-mode campaign, culminating in the official PS6 A/B (F8, F15–F18) and the role-by-role thinking measurements (F19–F20) — the full set, each mapped to its file and technical cause, lives in the [codebase atlas §9](memory/codebase_reference.md), with raw reports in [`bench/results/`](bench/results/).
+This section records the engineering findings produced while building Red Giant. Most are **not claimed as novel principles in isolation**: several confirm established practice, but quantify its impact in an unusually constrained regime — a ~2B model, grammar-constrained JSON tool calls, CPU-only inference. Others document stack-specific failure modes or design patterns that emerged during implementation. Each finding states what was observed, the measured evidence, the countermeasure that now ships as working code, and how far the evidence reaches; findings may be revised, narrowed or retired as testing expands to other models, runtimes and real codebases. The **20 findings** below rest on **27 recorded observations** plus **over 400 instrumented end-to-end runs** of the planner-system rebuild and the thinking-mode campaign, culminating in the official PS6 A/B (F8, F15–F18) and the role-by-role thinking grid (F19–F20) — the full set, each mapped to its file and technical cause, lives in the [codebase atlas §9](memory/codebase_reference.md), with raw reports in [`bench/results/`](bench/results/).
 
 *Labels:* **measured confirmation** — known principle, quantified in this regime · **implementation finding** — behaviour that emerged building the system · **stack-specific** — tied to Gemma 4 E2B / the pinned llama.cpp build (the lesson may transfer; the numbers won't) · **engineering safeguard** — ordinary robustness, listed because its absence measurably hurt · **open hypothesis** — preliminary, awaiting larger-scale tests.
 
@@ -179,18 +179,21 @@ Reading: at the *step* level the workflow demonstrably turns an unreliable 2B in
 Gemma 4 E2B has a native reasoning channel (`<|channel>thought … <channel|>` — markers extracted from the chat template *embedded in the pinned GGUF*, since neither `/props` nor `/tokenize` exposes them on this build). Red Giant drives it with a **two-call protocol**: one ungrammared call opens the channel and captures the thought, then the usual grammar-constrained call runs with the thought in context — and the thought is **disposable by construction**: it never enters the ledger, later steps, or the stable KV prefixes (which matches the model's own embedded template, whose `strip_thinking` macro deletes past reasoning from history).
 
 - **F19 — Let the model finish the thought: budgets are fuses, not targets.** *(measured)* Capped at 256 tokens, every single thought hit the cap mid-sentence — which read as "the model never closes the channel". Given room, it **closes the channel by itself, every time, at 322–543 tokens** (simple plan / wide plan / debugging). The thinking budget is now a circuit-breaker (1536, never trips in normal operation, caps the pathological case at ~43s on target hardware) and the answer's token budget is always reserved — a thought that starves its own answer would be the dumbest possible failure.
-- **F20 — Reasoning helps the *executor*; given to the *planner* it raises the bar instead; given to everyone it cancels out. The wall migrates to whoever is not thinking.** *(measured on 4×20 instrumented end-to-end runs, GPU compliance profile — official CPU A/B in progress)*
+- **F20 — Where reasoning pays is a *placement* problem: the wall migrates to whoever is not thinking, and not all thinking is equal.** *(measured on a 7-arm × 20-run grid, GPU compliance profile — official CPU A/B in progress)*
 
-| 20-run batch (same task, same code, same seed policy) | Verified | Giano's deaths | Tokens/run | Wall/run |
-|---|---|---|---|---|
-| No thinking (reference) | 3/20 | 10/20 | 5.4K | 33s |
-| Thinking on the planning side (Sirio + Mira→Altair) | 0→2/20¹ | 10–11/20 | 13–17K | 70–95s |
-| **Thinking on the executor only (Giano)** | **4/20** | **5/20 (halved)** | 8.5K (1.6×) | 50s |
-| Thinking on everyone | 1/20 | 7–8/20 | 16.9K (3.1×) | 88s |
+| 20-run batch (same task, same code, same seed policy) | Verified | Giano's deaths | Avg green phases | Tokens/run | Wall/run |
+|---|---|---|---|---|---|
+| No thinking (reference) | 3/20 | 10/20 | 0.9 | 5.4K | 33s |
+| Planning side thinks (Sirio + Mira→Altair) | 0→2/20¹ | 10–11/20 | 0.9–1.4 | 13–17K | 70–95s |
+| **Executor thinks (Giano only)** | **4/20** | **5/20 (halved)** | 1.3 | **8.5K (1.6×)** | 50s |
+| Everyone thinks | 1/20 | 7–8/20 | 1.1 | 16.9K | 88s |
+| Sirio + Giano think | 2/20 | — | **1.9 (record)** | 14.1K | 87s |
+| **Sirio + Mizar + Giano think** (verification sober) | **4/20** | — | **1.9 (record)** | 16.5K | 95s |
+| Mizar + Giano think | 2/20 | — | 0.8 | 10.8K | 62s |
 
 ¹ Round 1 exposed a new thinking-induced failure family: Mizar, having *reasoned about the whole plan*, copied the wrong phase id into its output (5/20 runs) — fixed permanently by making phase identity control-plane-owned, one more F15 rule.
 
-The mechanism, visible in the failure taxonomies: with Vega and Altair thinking, the qualified proofs get **richer and more demanding** (three obligations per micro-task instead of one) — honesty up, conversion down, because Giano now faces harder proofs; a thinking Giano **halves his own failure rate** against standard proofs; both together re-raise the bar and re-fail it, at 3× cost. The general lesson — likely worth stealing for any multi-role agent system: **upgrading one role's intelligence moves the bottleneck, it does not dissolve it; measure every role upgrade on the whole chain, never on the role in isolation.**
+What the grid says, taxonomy-backed: (a) a thinking Giano **halves his own failure rate** against standard proofs — the single cheapest win (1.6× cost); (b) thinking on the *verification* side (Vega/Altair) designs **richer, more demanding proofs** (three obligations per micro instead of one) — honesty up, conversion down, and it poisons even the everyone-thinks arm; (c) with verification kept sober, a thinking **Sirio buys execution depth** — both Sirio-arms hit a record **1.9 average green phases**, double the reference — making Sirio+Mizar+Giano the depth champion at equal best conversion; (d) **no arm breaks the ~4/20 conversion ceiling**: the last mile is still the wall. First official CPU battery (executor-thinking): 2/13 with a historic scalp — **the reasoning-trap task that had never passed in the project's entire history (the model must flip "that library is off-limits, so the bug must be in the caller") finally fell to a thinking Giano** — at ~2.9× wall (partially contaminated by parallel load; clean battery in progress, pre-registered decision rule pending). The general lesson — likely worth stealing for any multi-role agent system: **upgrading one role's intelligence moves the bottleneck, it does not dissolve it; placement beats quantity; measure every role upgrade on the whole chain, never on the role in isolation.**
 
 Every countermeasure above ships as working code in this repository; the [codebase atlas §9](memory/codebase_reference.md) maps each of the 27 underlying observations to its exact file, signature and technical cause (the F15–F18 observations join the atlas at PS5 closure).
 
@@ -246,20 +249,20 @@ Why this shape: 2B physics. Every station gets 4–8K tokens of *minimum suffici
 
 ```mermaid
 flowchart LR
-    A[Request] --> B{Routing<br/><i>deterministic signals,<br/>classifier only if ambiguous</i>}
-    B -->|direct| W
-    B -->|short / full| C[Planner<br/><i>synthetic, versioned</i>]
-    C --> D[Phase Designer<br/><i>current phase only</i>]
-    D --> W[Worker<br/><i>single-step constrained ReAct,<br/>append-only context</i>]
-    W --> V[Deterministic<br/>verification]
-    V --> DB[Debugger<br/><i>residual only</i>]
-    DB --> S[Supervisor<br/><i>closed decision enum</i>]
-    S -->|accept| K[Git checkpoint] --> D
-    S -->|retry / repair / replan| D
-    K --> F[Final verification<br/>evidence-backed report]
+    A[Request] --> B{Driver selection<br/><i>today: naive plan by default;<br/>plan compiler behind the config gate;<br/>size-based routing arrives in F6</i>}
+    B -->|default| W[Giano<br/><i>single-step constrained ReAct,<br/>physical write scope,<br/>optional thinking channel</i>]
+    B -->|gated| S1[Sirio<br/><i>macro-plan, once</i>]
+    S1 --> M[Mira → Mizar → Vega → Altair<br/><i>per phase — deterministic<br/>compiler between every pair</i>]
+    M --> OQ[Oracle qualification<br/><i>tests must prove<br/>they can fail</i>]
+    OQ --> W
+    W --> V[Proof gates<br/><i>deterministic, per micro</i>]
+    V --> SY[Phase synthesis<br/>→ plan coverage]
+    SY --> F[External judge<br/><i>trusts no one</i>]
 ```
 
-**Domains:** coding (verified by tests) · local research & web research (verified by mechanical citation checking and multi-source triangulation) · advice (explicit, logged choice between web-first and declared model-knowledge). *Not a coding assistant* — the same pipeline serves all four.
+*(The Debugger and Supervisor roles of the original design do not exist yet — they arrive in F4; the in-loop Planner and Phase Designer of F3 exist but are deprecated behind the D11 gate.)*
+
+**Domains:** coding (verified by tests) · local research & web research (verified by mechanical citation checking and multi-source triangulation) · advice (explicit, logged choice between web-first and declared model-knowledge — the everyday path: one pass, cited sources, no hard gates). *Not a coding assistant* — the same pipeline serves all four.
 
 ## 🖥️ Target hardware ("Severino")
 
@@ -317,10 +320,24 @@ mentioned here lives in full detail in its own document:
 - **What the failure taught:** the thrashing was the *gates'* fault, not the proposer's — nothing checked whether a phase was already satisfied, whether a retry differed from the failed attempt, whether a new plan differed from the failed one. That diagnosis reshaped the design.
 - **Owed:** the planning system is being rebuilt as a standalone effort with its own plan — the planner as a plan-document *author* that writes once and exits, deterministic zero-token gates (phase-entry, retry-must-differ, replan-must-differ), a task ledger as external memory. *When* to plan stays F6's routing question; the final word belongs to the real codebase (F8).
 
+### ✅ Interlude — the planner-system rebuild (`v3.1.0` → `v4.0.0`, closed)
+
+*Goal: rebuild planning as a plan **compiler** behind deterministic gates, and let an official A/B decide its fate.*
+
+- **How it went:** PS0–PS7 all shipped in one campaign — typed artifacts, task ledger, the full cast (Sirio → Mira/Mizar/Vega/Altair → Giano), oracle qualification, physical scopes, GUI integration. ~50 permanent deterministic rules distilled from the instrumented runs; whole failure families (invented files, name mismatches, cheating tests, ordering bugs) went to zero, not down.
+- **The honest verdict (D11 confirmed):** 2/13 vs the baseline's 6–8/13 on micro-tasks, 0/3 both arms on wide tasks → **integrated but gated off**. What it bought, measured: failures at −44% tokens, useful-token share +9pt, one honesty gap in 35 official runs (found, diagnosed, closed), and ablations proving every gate pays for itself (+50–76% failure cost without).
+- **Method discoveries that outlive the verdict:** GPU batches classify failure *families*, never fine rates; even the CPU profile has a ±2/13 noise band (cache-state numerics — verdicts now come from multiple averaged runs); and the baseline itself moved 9/10→6–8/13 across commits, a humbling lesson in diagnosis confidence.
+
+### 🧠 Thinking campaign (current, `v4.1.x` — [`plan_thinking_ab.md`](memory/plan_thinking_ab.md))
+
+- **TH0 done:** two-call protocol, markers extracted from the GGUF itself, budgets-as-fuses, disposable thoughts (the model's own template agrees).
+- **TH1 done:** the 7-arm × 20-run grid of F20 — executor-thinking halves executor deaths; Sirio-thinking buys record depth; verification-thinking raises the bar; ~4/20 conversion ceiling.
+- **TH2 running:** official CPU A/B (executor-thinking vs control, multiple batteries, pre-registered decision rule: ≥+2 verified, wall ≤2×, zero honesty gaps). First battery: 2/13 with the historic T002 scalp, wall over budget (partially contaminated — clean battery in progress).
+- **TH3 next:** verdict, docs, and the decision on *selective* thinking (e.g. only on retry) if full-time thinking fails the wall rule.
+
 ### ⏭️ Next
 
-- **⏸️ Interlude (current): the planner-system redesign** — the main roadmap is paused while the planning system is rebuilt and A/B-ed as a standalone system (dedicated plan in `memory/`); the roadmap resumes at F3-bis when it earns its way back in.
-- **F3-bis — Multi-domain micro-slice** *(user-requested)*: prove the engine on everyday non-coding work — local document analysis, external API calls (never LLM APIs), document transforms — before designing the Supervisor, so F4 knows non-coding failure modes too.
+- **F3-bis — Multi-domain micro-slice** (`v4.3.0`, *user-requested*): prove the engine on everyday non-coding work — local document analysis, external API calls (never LLM APIs), document transforms — before designing the Supervisor, so F4 knows non-coding failure modes too.
 - **F4 — Continuous verification**: debugger, supervisor, anti-loop, git checkpoints. Two customers already waiting: the reasoning-trap task and a human protocol that evolves from answering machine to dialogue.
 - **F5 — Context & KV-cache engineering**: the cache already proved itself (88 calls cost only 82s of prefill on CPU); F5 makes it measured and engineered, and re-checks slot persistence.
 - **F6 — Adaptive routing**: small tasks go straight to the worker, big ones through the planner — where the "when is planning worth it" question gets its answer, and model-specific tolerances get A/B-ed as a system.
@@ -333,6 +350,8 @@ mentioned here lives in full detail in its own document:
 |---|---|
 | [`memory/small-model-powerhouse-specsheet.md`](memory/small-model-powerhouse-specsheet.md) | Vision & requirements (the operating spec) |
 | [`memory/plan_red_giant.md`](memory/plan_red_giant.md) | The implementation **contract**: 21 binding decisions, full architecture (DB DDL, config, tool catalog, prompt layout), 9 phases with real signatures, per-subphase rationale and acceptance criteria. Self-sufficient by design |
+| [`memory/plan_planner_system.md`](memory/plan_planner_system.md) | The plan-compiler interlude, closed: PS-D1–D11 decisions, the cast's contracts, every in-course revision with its motivating failure, the D11 verdict |
+| [`memory/plan_thinking_ab.md`](memory/plan_thinking_ab.md) | The thinking campaign (current): two-call protocol, TH-D1/TH-D2, the 7-arm grid, pre-registered decision rule |
 | [`memory/codebase_reference.md`](memory/codebase_reference.md) | The codebase atlas — every real class/signature/table/endpoint, mechanically verified against the code by `scripts/check_reference.py` (build-blocking) |
 | [`bench/results/`](bench/results/) | Committed measurement reports (constrained-decoding probe, CPU baselines) |
 
