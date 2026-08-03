@@ -95,6 +95,28 @@ def test_parts_untouched_th_d2(monkeypatch):
     assert CFG.think_open not in before
 
 
+def test_phase_id_is_control_plane_identity():
+    # TH1: M2 pensante copia la fase sbagliata nel phase_id — lo impone _norm.
+    # Il test usa il validatore a valle: un bp con phase_id imposto passa il
+    # check di coerenza id/micro che nel batch TH1 uccideva 5 run su 20.
+    from redgiant.plansys.artifacts import (MicroPhase, PhaseBlueprint,
+                                            WorkContract)
+    from redgiant.plansys.gates import validate_blueprint
+    bp = PhaseBlueprint(phase_id="P1", micro=[MicroPhase(
+        id="P2.S1", title="t", proves=["C1"],
+        work=WorkContract(goal="g", boundary="b", files_owned=["mod.py"],
+                          signatures=[], inputs=[], outputs=["mod.py"]))])
+    # simulazione della normalizzazione del control plane (compiler._norm)
+    bp.phase_id = "P2"
+    for i, m in enumerate(bp.micro, 1):
+        m.id = f"P2.S{i}"
+    from redgiant.plansys.artifacts import PhaseAnalysis
+    an = PhaseAnalysis(phase_id="P2", objective="o", involved=[],
+                       artifacts=["mod.py"], decisions=[], risks=[])
+    assert not [p for p in validate_blueprint(bp, an, ["C1"], existing=set())
+                if "phase_id" in p or "must match" in p]
+
+
 def test_db_migration_and_budget(tmp_path: Path):
     store = StateStore(tmp_path / "t.db")
     store.init_schema()                       # idempotente (migrazione TH0.2)

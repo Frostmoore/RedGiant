@@ -187,6 +187,10 @@ class PhaseCompiler:
             ("MicroPhase", "proves", list(phase.covers), True)])
 
         def _norm(b: PhaseBlueprint) -> PhaseBlueprint:
+            # TH1 batch 1 (5/20): M2 che PENSA al piano intero copia la fase
+            # sbagliata nel phase_id ("P1" mentre compila P2) — il phase_id e'
+            # IDENTITA' (PS-D11): lo impone il control plane, non si chiede
+            b.phase_id = phase.id
             # Smoke PS4.3: M2 inventa criteri mai esistiti (C3/C4 su un piano
             # C1-C2). Un id che non e' nel piano e' rumore inequivoco:
             # riparazione deterministica, non un giro di patch.
