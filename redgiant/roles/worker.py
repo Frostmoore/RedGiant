@@ -20,6 +20,14 @@ from redgiant.tools.base import ToolResult
 
 _RESULT_MAX_CHARS = 6000  # ~400 righe compatte; il troncamento e' dichiarato nel blocco
 
+# LAD.9 — il "finish fantasma": 31 tentativi su 78 (40%) dichiaravano done senza
+# aver chiamato NESSUNO strumento di scrittura, e ripetevano l'errore anche col
+# 'FAIL: answer.txt missing' del giudice riportato nel tentativo dopo (data.md
+# §7.6.5). La regola 8 della card lo vieta dal F1: terza conferma che l'istruzione
+# non produce obbedienza — quindi struttura.
+_MUTATING_TOOLS: frozenset[str] = frozenset({"write_file", "edit_file", "write_patch"})
+_MAX_FINISH_REFUSALS: int = 2  # tetto: non si sostituisce un loop degenere con un altro
+
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -66,6 +74,61 @@ class Worker(Role):
     name = "worker"
     output_model = WorkerStep
 
+    def _finish_gate(self, ctx: RoleContext, task_id: str,
+                     mutated: bool) -> str | None:
+        """LAD.9: messaggio di rifiuto azionabile, o None se il finish puo' passare.
+
+        Due condizioni DISTINTE, deliberatamente strette:
+
+        1. `expected_outputs` promessi ma inesistenti -> rifiuto. Costo zero.
+        2. Firma del finish fantasma: nessuna mutazione in questo tentativo E
+           oracolo di `verification` rosso -> rifiuto.
+
+        Perche' la CONGIUNZIONE e non il solo oracolo rosso: la regola 11 della
+        card autorizza a chiudere `done` quando i test falliscono FUORI dal
+        proprio perimetro (li possiede una sottofase successiva). Rifiutare ogni
+        finish con oracolo rosso ucciderebbe quella via d'uscita e produrrebbe
+        thrashing sui task multi-sottofase. Cosi' si colpisce solo il caso
+        logicamente impossibile: hai dichiarato fatto, non hai cambiato niente,
+        e l'oracolo e' rosso.
+
+        Costo nel percorso buono: ZERO. Se il tentativo ha mutato qualcosa
+        l'oracolo non viene eseguito qui — gira solo sul sospetto di fantasma.
+        """
+        spec = ctx.subtask
+        if spec is None:
+            return None
+
+        missing = []
+        for out in spec.expected_outputs:
+            try:
+                if not self.router.scope.check_read(out).exists():
+                    missing.append(out)
+            except Exception:
+                missing.append(out)
+        if missing:
+            return (f"you declared this subtask done, but the promised output(s) "
+                    f"{missing} do NOT exist on disk. Nothing you described was "
+                    f"written. Create them now with write_file, then finish.")
+
+        if mutated:
+            return None
+
+        from redgiant.core.verify import _is_cmd_id
+        for check in spec.verification:
+            if not _is_cmd_id(self.router, check):
+                continue
+            res = self.router.dispatch(task_id, spec.id, "run_tests",
+                                       {"cmd_id": check})
+            if not res.ok:
+                tail = str(res.data.get("output_tail", res.error or ""))[-300:]
+                return (f"you declared this subtask done, but in THIS attempt you "
+                        f"never wrote, edited or patched any file, and the "
+                        f"verification '{check}' fails:\n{tail}\n"
+                        f"Describing an action does not perform it. Do the actual "
+                        f"tool call now, then finish.")
+        return None
+
     def run(self, ctx: RoleContext, *, max_steps: int,
             step_max_tokens: int = 512,
             step_log=None, resume_file=None) -> FinishReport:
@@ -93,6 +156,13 @@ class Worker(Role):
 
         last_call_sig: str | None = None
         fail_counts: dict[tuple, int] = {}
+        # LAD.9: stato del gate sul finish. `mutated` e' vero appena UNA scrittura
+        # va a buon fine in questo tentativo — e' cio' che distingue il lavoro
+        # fatto dal lavoro solo raccontato.
+        from redgiant.core.ablate import worker_ablated
+        gate_ablated = worker_ablated("finishgate")
+        mutated = False
+        finish_refusals = 0
         # TH0.3 (braccio T-J): pensiero per-step di J — il canale e' usa-e-getta
         # dentro complete() (TH-D2): la catena append-only 'parts' non lo vede mai
         from redgiant.plansys import thinking_budget, thinking_roles
@@ -120,6 +190,17 @@ class Worker(Role):
                 step_log(f"step {k}: {step.model_dump_json()[:280]}")
 
             if isinstance(step, WorkerFinishStep):
+                if (step.finish.status == "done" and not gate_ablated
+                        and finish_refusals < _MAX_FINISH_REFUSALS):
+                    problem = self._finish_gate(ctx, task.id, mutated)
+                    if problem is not None:
+                        finish_refusals += 1
+                        if step_log is not None:
+                            step_log(f"step {k}: FINISH REFUSED ({finish_refusals}"
+                                     f"/{_MAX_FINISH_REFUSALS})")
+                        parts = parts.with_appended_context(
+                            f"\n[FINISH REFUSED] {problem}")
+                        continue
                 if resume_file is not None:
                     resume_file.unlink(missing_ok=True)  # tentativo concluso
                 return step.finish
@@ -139,6 +220,9 @@ class Worker(Role):
                 return FinishReport(status="blocked",
                                     summary=f"awaiting user approval for tool '{call.tool}'",
                                     evidence=[], verification_requested=[])
+
+            if result.ok and call.tool in _MUTATING_TOOLS:
+                mutated = True  # LAD.9: il mondo e' cambiato davvero, non a parole
 
             sig = json.dumps({"t": call.tool, "a": call.args}, sort_keys=True)
             repeat_note = ""

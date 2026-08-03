@@ -1386,18 +1386,60 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   mondo lascia il modello a ragionare su uno stato inesistente.* Applicato anche a
   `syntax_error`, che portava la stessa trappola da F1. **Regola generale per ogni gate
   futuro che rifiuta un'azione.**
-- [ ] **LAD.9** 🤖 **Gate sul finish, DENTRO il loop** (scoperto leggendo i log integrali,
-  `data.md` §7.6.5): il Worker dichiara `done` senza aver scritto nulla nel **40% dei
-  tentativi** (31 su 78), e ripete l'errore anche quando il retry gli riporta letteralmente
-  `FAIL: answer.txt missing`. Regola 8 della card lo vieta dal F1 — terza conferma che
-  l'istruzione non basta. **Intervento:** in `redgiant/roles/worker.py::Worker.run`, prima di
-  ritornare su `WorkerFinishStep` con `status=="done"`, eseguire l'oracolo deterministico che
-  girerebbe comunque subito dopo; se l'artefatto promesso non esiste, il finish è **rifiutato**
-  e diventa uno step con lo stato reale del mondo. **Non cambia chi decide** (la verifica resta
-  il trust boundary, D10): cambia *dove*, convertendo un tentativo intero sprecato — 90 file
-  rilistati, 5 ricerche rifatte — in **un passo** con la KV ancora calda. Ablabile
-  (`RG_WORKER_ABLATE=finishgate`), con tetto ai rifiuti in-loop per non sostituire un loop
-  degenere con un altro.
+- [ ] **LAD.9** 🤖 **Gate sul finish, DENTRO il loop.**
+
+  **Misura che lo motiva** (`data.md` §7.6.5): il Worker dichiara `done` **senza aver chiamato
+  nessuno strumento di scrittura** nel **40% dei tentativi** (31 su 78), 17 dei quali al primo
+  tentativo; e ripete l'errore anche quando il retry gli riporta letteralmente
+  `FAIL: answer.txt missing`. La regola 8 della card lo vieta dal F1 — terza conferma
+  indipendente che l'istruzione non basta.
+
+  **Costo attuale del difetto:** un finish fantasma brucia un **tentativo intero** (90 file
+  rilistati, 5 ricerche rifatte da zero) dove sarebbe bastato **un passo** con la KV calda.
+
+  **Regola del gate — deliberatamente STRETTA, due condizioni distinte:**
+  1. `spec.expected_outputs` dichiarati ma **inesistenti** → rifiuto. Costo zero, sempre
+     valutata.
+  2. **Firma del finish fantasma:** il tentativo non ha eseguito **nessuna mutazione**
+     (`write_file`/`edit_file`/`write_patch` con `ok=True`) **E** l'oracolo di
+     `spec.verification` è rosso → rifiuto.
+
+  **Perché la congiunzione e non il solo oracolo rosso:** la regola 11 della card autorizza
+  esplicitamente a chiudere `done` quando i test falliscono **fuori dal proprio perimetro**
+  (li possiede una sottofase successiva). Rifiutare ogni finish con oracolo rosso
+  ucciderebbe quella via d'uscita e produrrebbe thrashing sui task multi-sottofase. Con la
+  congiunzione si colpisce solo il caso logicamente impossibile: *hai dichiarato fatto, non hai
+  cambiato niente, e l'oracolo è rosso.*
+
+  **Perché costa zero nel percorso buono:** se il tentativo ha mutato qualcosa, l'oracolo NON
+  viene eseguito in-loop. Il comando di verifica gira solo sul sospetto di finish fantasma.
+
+  **Non cambia chi decide:** la verifica resta il trust boundary (D10). Cambia *dove*: un
+  tentativo sprecato diventa un passo di correzione.
+
+  **Firme (file `redgiant/roles/worker.py`):**
+  ```python
+  _MUTATING_TOOLS: frozenset[str] = frozenset({"write_file", "edit_file", "write_patch"})
+  _MAX_FINISH_REFUSALS: int = 2   # tetto: non si sostituisce un loop degenere con un altro
+
+  class Worker(Role):
+      def _finish_gate(self, ctx: RoleContext, task_id: str, mutated: bool) -> str | None:
+          """Messaggio di rifiuto azionabile, o None se il finish può passare."""
+  ```
+  In `Worker.run`, nel ramo `isinstance(step, WorkerFinishStep)`: se
+  `step.finish.status == "done"`, il gate non è ablato e i rifiuti sono sotto il tetto, si
+  chiama `_finish_gate`; se ritorna un messaggio si fa
+  `parts = parts.with_appended_context("\n[FINISH REFUSED] ...")` e `continue` — il finish
+  diventa uno step, **non** una chiusura.
+
+  **Il messaggio dichiara lo stato del mondo** (lezione di LAD.6): dice che nessuna scrittura è
+  avvenuta in questo tentativo, riporta l'uscita reale dell'oracolo, e nomina l'azione da fare.
+
+  **Ablazione:** `RG_WORKER_ABLATE=finishgate` → `worker_ablated("finishgate")`; bracci
+  `−finishgate` e `think-finishgate` in `bench/ladder/run_agentic.py::ARMS`, B2 e B4.
+
+  **Verifica:** unit test sui due rami del gate + sul tetto + sull'ablazione; poi A/B su L5 e
+  **su L7** (dove è la cura candidata di LAD.8), 20 run per braccio.
 - [ ] **LAD.10** 🤖 **`bad_args` che insegna** (stessa fonte): `calculator` riceve
   `expression=None` in **27 chiamate su 67 (40%)**; il router risponde col dump grezzo di
   pydantic e il modello ci cicla 5 step prima di arrendersi. **Riscrive in parte LAD.4:** parte
@@ -1405,12 +1447,26 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   respinto da un errore che non nominava l'argomento mancante. **Intervento:** in
   `ToolRouter.dispatch`, l'errore `bad_args` nomina i campi obbligatori mancanti e mostra una
   chiamata d'esempio derivata dall'`input_model`, invece di `e.errors()`.
+- [ ] **LAD.11** 🔎 **Rimisura di L6 e del blocco B4 (thinking) post-fix, su GPU.**
+  ⚠️ **Il blocco B4 pre-fix è stato BUTTATO** (girava su codice precedente ai fix del corpus e
+  del giudice, quindi non comparabile): nella matrice c'è un **buco dichiarato**, non un dato
+  mancante per dimenticanza. Nessuno vada a cercarlo in `bench/results/`.
+  Comando: `python bench/ladder/run_agentic.py dev-fast T056,T057 B4 20`.
+- [ ] **LAD.12** 🔎 **Disambiguazione del confondimento B3/L5.** Il braccio nudo+thinking su L5
+  è confondato: il budget di pensiero consuma 1536 token di contesto, quindi su un gradino al
+  limite il braccio col thinking vede **meno materiale** (6.0K contro 7.5K) — il suo 0/3 può
+  essere causato dal contesto mangiato, non dal ragionamento. Si ripete L5 con
+  `RG_THINKING_BUDGET=256` a parità di materiale visto. Finché non è fatto, **il verdetto TH3
+  non può essere citato su questo gradino**.
 - [ ] **LAD.7** 🔎 **Verifica di campagna:** L5/L6/L7 su `severino-sim` col codice finale,
   bracci B2 completi (`full`, `−search`, `−verify`, `−retry`, `−calc`, `−coherence`) e B4
-  simmetrico, run multiple. Sono **questi** i numeri destinati al README e a `data.md`; gli
-  attuali sono smoke GPU dichiarati tali.
+  simmetrico, **20 run per braccio** (regola sotto) con test esatto allegato. Sono **questi** i
+  numeri destinati al README e a `data.md`; gli attuali sono GPU e dichiarati tali.
+  Stima: ~6 bracci × 3 gradini × 20 run su CPU — va pianificata come campagna notturna, non
+  lanciata a cuor leggero.
 - [ ] **LAD.8** 🔎 Diagnosi di L7: quando arriva a scrivere produce **8 fatti su 8 e la somma
-  esatta**, ma di norma non ci arriva. Il problema è di **completamento**, non di correttezza.
+  esatta**, ma di norma non ci arriva. Il problema è di **completamento**, non di correttezza —
+  quindi **LAD.9 è la sua prima candidata cura** e L7 va rimisurato subito dopo LAD.9.
 
 **ESITO (2026-08-03, GPU, `@da8df90`, **20 run per braccio** — `data.md` §7.6):**
 `full` **18/20 (90%)** contro `−coherence` **9/20 (45%)** — 45 punti, **Fisher esatto

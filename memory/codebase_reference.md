@@ -306,9 +306,18 @@ class WorkerFinishStep  # thought<=300, action="finish", finish OBBLIGATORIO
 class WorkerStep    # RootModel: union DISCRIMINATA dei due — il ramo incompleto
                     # (finish:null) non e' generabile ne' validabile (fix F2.5:
                     # il derail da apice non escapato non ha piu' un'uscita incoerente)
+_MUTATING_TOOLS: frozenset[str]   # write_file, edit_file, write_patch
+_MAX_FINISH_REFUSALS: int = 2     # tetto ai rifiuti in-loop del gate LAD.9
 class Worker
     def run(self, ctx: RoleContext, *, max_steps: int, step_max_tokens: int = 512, step_log=None, resume_file=None) -> FinishReport
+    def _finish_gate(self, ctx: RoleContext, task_id: str, mutated: bool) -> str | None
 ```
+
+**Gate sul finish (LAD.9, 2026-08-03) — TRAPPOLA DISINNESCATA.** `_finish_gate` è chiamato in `run` prima di ritornare su un `WorkerFinishStep` con `status=="done"`; se ritorna un messaggio, il finish **non chiude il tentativo**: diventa uno step (`with_appended_context("[FINISH REFUSED] …")` + `continue`).
+
+**Causa tecnica:** misurato sui log integrali (`data.md` §7.6.5), **31 tentativi su 78 (40%)** dichiaravano `done` senza aver chiamato alcuno strumento di scrittura — il modello tratta la propria narrazione come fatto compiuto. Il retry glielo riportava (`FAIL: answer.txt missing`) e lui ripeteva: la regola 8 della card lo vieta dal F1 senza effetto.
+
+**Due condizioni, deliberatamente strette:** (1) `expected_outputs` promessi ma inesistenti → rifiuto, costo zero; (2) **nessuna mutazione riuscita in questo tentativo E oracolo di `verification` rosso** → rifiuto. **Perché la congiunzione:** la regola 11 della card autorizza a chiudere `done` quando i test falliscono *fuori dal perimetro* — rifiutare ogni finish con oracolo rosso ucciderebbe quella via d'uscita e produrrebbe thrashing sui task multi-sottofase. Con la congiunzione si colpisce solo il caso logicamente impossibile. **Costo nel percorso buono: zero** — se il tentativo ha mutato qualcosa l'oracolo non gira in-loop. Ablabile (`RG_WORKER_ABLATE=finishgate`), tetto `_MAX_FINISH_REFUSALS`.
 
 ### `redgiant/roles/planner.py` + `redgiant/roles/phase_designer.py` — pianificazione (F3)
 
@@ -451,7 +460,8 @@ Regola di metodo (utente, 2026-08-03): **ogni componente aggiunto dev'essere abl
 | verifica | `verify` | la verifica deterministica non gira | 8 false dichiarazioni in 5 run (vs 1 in 550+) — compra onestà, non throughput |
 | retry | `retry` | nessun secondo tentativo | (da misurare sulla ladder) |
 | calcolatrice | `calc` | `calculator` dal catalogo | ~nullo: il tool era invocato nel 40% delle run |
-| coerenza | `coherence` | la guardia F4 in scrittura | vedi `data.md` §7.6 |
+| coerenza | `coherence` | la guardia F4 in scrittura | **18/20 vs 9/20** su L5, p=0.0057 (`data.md` §7.6) |
+| gate sul finish | `finishgate` | il gate LAD.9 sul "finish fantasma" | vedi `data.md` §7.7 |
 
 ```python
 def worker_ablated(component: str) -> bool

@@ -33,19 +33,21 @@ ARMS = {
     "-retry": ("retry", ""),
     "-calc": ("calc", ""),                      # la calcolatrice deterministica
     "-coherence": ("coherence", ""),            # la guardia F4 sull'aritmetica
+    "-finishgate": ("finishgate", ""),          # il gate sul finish fantasma
     "think": ("", "worker"),                    # B4: percorso diretto = Giano
     "think-search": ("search", "worker"),       # B4 SPECCHIA B2 ablazione per
     "think-verify": ("verify", "worker"),       # ablazione: il ragionamento
     "think-retry": ("retry", "worker"),         # compensa il pezzo mancante?
     "think-calc": ("calc", "worker"),
     "think-coherence": ("coherence", "worker"),
+    "think-finishgate": ("finishgate", "worker"),
 }
 # simmetria obbligatoria (utente 2026-08-03): stesse ablazioni nei due blocchi
-B2 = ["full", "-search", "-verify", "-retry", "-calc", "-coherence"]
+B2 = ["full", "-search", "-verify", "-retry", "-calc", "-coherence", "-finishgate"]
 B4 = ["think", "think-search", "think-verify", "think-retry", "think-calc",
-      "think-coherence"]
+      "think-coherence", "think-finishgate"]
 # smoke GPU: i bracci piu' informativi, con N run per avere statistica
-SMOKE = ["full", "-coherence", "-calc", "-search"]
+SMOKE = ["full", "-finishgate", "-coherence", "-search"]
 
 
 def main(profile: str, task_ids: list[str], arms: list[str],
