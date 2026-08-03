@@ -99,7 +99,8 @@ piano padre si fa al rituale TH3.)
 - [ ] **TH1 — Compliance GPU (famiglie, non numeri)**
   - [x] TH1 round 1 (T-SM): **0/20** @`a2076ab` — famiglia nuova "phase_id drift di M2 pensante" (5/20, fixata: identità imposta in `_norm`); **amplificazione delle morti J** (M3 pensante progetta obblighi O1-O3 per micro, J non pensante ne fallisce di più: onestà su, conversione giù); costo 2,4× token / 2,3× wall.
   - [ ] TH1 round 2 (T-SM post-fix phase_id): in corsa @`4dfc05f`.
-  - [ ] **TH1 round 3 (T-J, decisione utente 2026-08-03): pensiero SOLO a J** (`RG_THINKING_ROLES=worker`), stesso protocollo. Razionale: le morti dominanti sono di J e sono "di testa" (formati esatti); il round 1 mostra che migliorare solo il verificatore peggiora la conversione — prima di TH2 va misurato il braccio dell'esecutore. Attenzione al costo: J pensa A OGNI STEP (10-30 per micro) — su GPU è tollerabile, il numero severino si stima dai token.
+  - [x] **TH1 round 3 (T-J, decisione utente 2026-08-03): pensiero SOLO a J** — **4/20** @`0c42560`, il miglior round thinking: **morti J DIMEZZATE (5/20 vs 10-11/20 storiche)**, due verdi a 4 fasi (profondità record GPU), costo 1,6× (8.5K tok/run) contro il 3,2× di T-SM. Le morti residue sono tornate sul lato M (che non pensa).
+  - [ ] **TH1 round 4 (T-SMJ) — REVISIONE del criterio** (era "solo se T-SM e T-J migliorano entrambi", scritto prima di conoscere il dato): i round 1 e 3 mostrano un pattern di **migrazione del muro verso chi non pensa** (M pensa → muore J; J pensa → muore M). Il combinato è l'esperimento che il pattern impone; il costo (~4×?) si misura insieme al beneficio.
 - [ ] **TH2 — A/B ufficiale severino-sim (i numeri)**
 - [ ] **TH3 — Verdetto, decision rule, documentazione**
 
