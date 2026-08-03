@@ -82,6 +82,6 @@ def arithmetic_check(path: Path, content: str) -> str | None:
     shown = addends if len(addends) <= 12 else addends[:12]
     expr = " + ".join(_fmt(v) for v in shown) + (" + ..." if len(shown) < len(addends) else "")
     return (f"{pairs[-1][0]}={_fmt(declared)} is WRONG: the {len(addends)} "
-            f"values you wrote in this file sum to {_fmt(real)} "
-            f"({expr} = {_fmt(real)}). Write {_fmt(real)} on the "
-            f"{pairs[-1][0]} line and retry — the other lines are untouched.")
+            f"values you wrote sum to {_fmt(real)} "
+            f"({expr} = {_fmt(real)}). Send the SAME content again with "
+            f"{pairs[-1][0]}={_fmt(real)} — change nothing else.")

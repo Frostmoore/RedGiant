@@ -1,6 +1,6 @@
 # Red Giant — Codebase Reference (atlante)
 
-**Aggiornato al:** 2026-08-02 · **Versione repo:** `v2.1.0` · **Fase completata:** F2 (GUI web + campagna di collaudo)
+**Aggiornato al:** 2026-08-03 · **Versione repo:** `v4.4.0` · **Fase completata:** F3-bis (domini non-coding) + planner system (PS0–PS6) + campagna thinking (TH0–TH3) + ladder di attribuzione
 **Regola:** questo documento descrive **il codice che esiste**, non quello pianificato (per quello c'è [plan_red_giant.md](plan_red_giant.md)). Verifica meccanica: `python scripts/check_reference.py` — bloccante nel rituale di fine fase.
 
 ---
@@ -21,29 +21,41 @@
 | Tool (Scope, catalogo, router) | `redgiant/tools/` |
 | Ruoli cognitivi (Worker) | `redgiant/roles/` |
 | Orchestrator, verifica, budget, task log | `redgiant/core/` |
-| Evaluator e task sintetici T001–T006 | `redgiant/eval/` |
+| Evaluator e task sintetici T001–T057 | `redgiant/eval/` |
 | CLI di sviluppo (`rg`) | `redgiant/cli.py` |
-| GUI web | **non esiste ancora** (F2) |
+| Planner system (artefatti, gate, compilatore, ledger) | `redgiant/plansys/` |
+| Leve di ablazione (attribuzione dei componenti) | `redgiant/core/ablate.py` + `redgiant/plansys/__init__.py::ablated` |
+| Guardia aritmetica in scrittura (F4 sui contenuti) | `redgiant/tools/coherence.py` |
+| Thinking mode (protocollo a due chiamate TH-D1/TH-D2) | `redgiant/llm/client.py::complete(..., think=)` |
+| Ladder di difficoltà crescente (generatore + runner) | `bench/ladder/` |
+| Tutti i dati mai raccolti, con tabelle | [../data.md](../data.md) |
+| Whitepaper scientifico | [../white_paper.md](../white_paper.md) |
 
-## 2. Albero dei file (reale, a fine F1)
+## 2. Albero dei file (reale, a v4.4.0)
 
 ```text
 RedGiant/
 ├── pyproject.toml / requirements.lock / LICENSE (MIT+attribution) / README.md / logo.png
+├── data.md (registro di tutte le misure) / white_paper.md
 ├── config/{default.toml, profiles/{dev-fast,severino-sim,severino}.toml}
 ├── docker/severino-sim/compose.yml     # 2 core (≈4 di Severino), 10g, digest-pinned b10200
-├── scripts/{download-llama,download-model,start-llama}.ps1, check_reference.py
-├── bench/{schemas_probe.py, run_bench.py, results/}
+├── scripts/{download-llama,download-model,start-llama}.ps1, check_reference.py, collaudo-gui.py
+├── bench/
+│   ├── schemas_probe.py · run_bench.py · naked_probe.py · results/
+│   └── ladder/{generate.py, run_naked.py, run_agentic.py}
+├── memory/{plan_red_giant.md, plan_planner_system.md, plan_thinking_ab.md, codebase_reference.md}
 ├── redgiant/
 │   ├── __init__.py (__version__) · config.py · cli.py
 │   ├── state/{models.py, store.py}
 │   ├── llm/{client.py, schema.py}
-│   ├── prompts/{assemble.py, preamble.md, roles/worker.md}
-│   ├── tools/{base.py, fs.py, search.py, proc.py, router.py}
-│   ├── roles/{base.py, worker.py}
-│   ├── core/{orchestrator.py, verify.py, budget.py}
-│   └── eval/{harness.py, tasks/T001..T006}
-└── tests/unit/  (31 test)
+│   ├── prompts/{assemble.py, preamble.md, roles/*.md}
+│   ├── tools/{base.py, fs.py, search.py, proc.py, router.py, calc.py, coherence.py, web.py}
+│   ├── roles/{base.py, worker.py, planner.py, phase_designer.py}
+│   ├── plansys/{artifacts.py, astscan.py, compiler.py, engine.py, gates.py, ledger.py, render.py, roles.py}
+│   ├── core/{orchestrator.py, verify.py, budget.py, ablate.py}
+│   ├── web/{app.py, jobs.py}
+│   └── eval/{harness.py, tasks/T001..T010,T030..T032,T040..T042,T051..T057}
+└── tests/unit/  (15 file, 126 test)
 ```
 
 ## 3. Classi e metodi
@@ -178,6 +190,8 @@ class ToolSpec      # name, description, risk, reversible, requires_approval, ti
 
 **Syntax gate (post-F1, richiesta utente):** ogni writer verifica la sintassi del contenuto risultante PRIMA della scrittura atomica (`.py` ast.parse, `.php` php -l se disponibile, `.json`, `.toml`); sintassi rotta = scrittura rifiutata con `syntax_error` + dettaglio riga — un file rotto non esiste mai su disco.
 
+**Coherence gate (2026-08-03, F4 sui CONTENUTI):** gli stessi tre writer chiamano `coherence_check` sul testo risultante; un artefatto testuale con un totale incoerente rispetto ai valori che dichiara è rifiutato con `incoherent_arithmetic` e il numero corretto nell'hint. Logica in [`redgiant/tools/coherence.py`](#redgianttoolscoherencepy--guardia-di-coerenza-aritmetica-f4-sui-contenuti); `coherence_check` è il solo wrapper che applica l'ablazione `RG_WORKER_ABLATE=coherence`.
+
 ```python
 class ReadFileArgs
 class ListFilesArgs
@@ -185,12 +199,41 @@ class WritePatchArgs
 class EditFileArgs
 class WriteFileArgs
 def syntax_check(path: Path, content: str) -> str | None
+def coherence_check(path: Path, content: str) -> str | None  # None se ablato; delega a coherence.arithmetic_check
 def syntax_hint(detail: str) -> str  # hint mirato accodato ai syntax_error (f-string annidati → .format/concat, pilota PS5)
 def read_file(scope: Scope, path: str, start_line: int = 1, end_line: int | None = None) -> ToolResult
 def list_files(scope: Scope, glob: str, max_results: int = 200) -> ToolResult
 def edit_file(scope: Scope, path: str, old_string: str, new_string: str, replace_all: bool = False) -> ToolResult
 def write_file(scope: Scope, path: str, content: str) -> ToolResult
 def write_patch(scope: Scope, path: str, unified_diff: str) -> ToolResult
+```
+
+### `redgiant/tools/coherence.py` — guardia di coerenza aritmetica (F4 sui contenuti)
+
+**Perché esiste:** l'esperimento sull'obbedienza (`data.md` §7.5) ha misurato che *un'istruzione non produce obbedienza* — tre livelli di persuasione testuale hanno portato l'invocazione della calcolatrice dal 16% al 40% e il gradino L5 è rimasto a 2/5, con i 5 fatti su 5 giusti e la sola somma sbagliata. Quindi l'operazione si toglie dalle mani del modello: un totale non è significato, è **identità derivata** dai valori che il modello stesso ha scritto, e l'identità appartiene al control plane (PS-D11).
+
+**Cosa NON è:** non è un oracolo sul task. Somma ciò che il modello ha scritto, non ciò che è vero: se i fatti sono sbagliati, certifica una somma sbagliata. Verifica coerenza interna, non correttezza — così non ripete il leak del giudice della ladder (§7.5).
+
+**Condizioni di attivazione (deliberatamente conservative — un falso positivo blocca lavoro legittimo, molto peggio di un mancato aiuto):** suffisso in `{"", ".txt", ".md", ".text", ".answer", ".out"}` (mai codice o config: là un `total = 100` è un valore indipendente); riga di totale riconosciuta per chiave (`total/totale/sum/somma/grand_total/…`); il totale dev'essere l'**ultima** assegnazione numerica del file; almeno 2 addendi; **una sola** riga di totale. Regex `_ASSIGN`: `chiave = numero` da sola sulla riga, niente unità o commenti in coda.
+
+```python
+_TEXTUAL: set[str]      # suffissi su cui la guardia è applicabile
+_TOTAL_KEYS: set[str]   # chiavi riconosciute come totale
+_ASSIGN: re.Pattern     # ^ [-*]? chiave [=:] numero [,.;]? $
+_TOL = 1e-9
+def _fmt(v: float) -> str
+def arithmetic_check(path: Path, content: str) -> str | None   # messaggio azionabile o None
+```
+
+Il messaggio contiene il numero corretto e l'espressione (`693 + 228 + … = 1792`, addendi troncati a 12): il giro successivo il modello trascrive invece di calcolare. Ablabile con `RG_WORKER_ABLATE=coherence` (l'ablazione è applicata da `fs.coherence_check`, non qui: `arithmetic_check` resta una funzione pura e testabile).
+
+### `redgiant/tools/calc.py` — calcolatrice deterministica (F4)
+
+AST-only: costanti numeriche e `+ - * / // % **`, niente nomi, chiamate, indexing o lambda (non è un `eval` travestito); `2**99999` e la divisione per zero sono errori-dato, non eccezioni. Registrata nel catalogo come `calculator` (rinominata da `calc` su richiesta utente 2026-08-03), descrizione "MANDATORY for every sum…". **Nota di misura:** il tool funziona ma viene invocato nel ~40% delle run — per questo esiste la guardia di coerenza qui sopra.
+
+```python
+class CalcArgs
+def calc(expression: str) -> ToolResult   # data["result"]; error: division_by_zero | bad_expression:<dettaglio>
 ```
 
 ### `redgiant/tools/web.py` — HTTP minimale (F3b.1, anticipo di F7.2)
@@ -393,6 +436,23 @@ Il trust boundary: tutti i check girano sempre; un check di `verification` scono
 class CheckResult   # name, ok, detail
 class Verdict       # verdict pass|fail, checks
 def verify_subtask(spec: SubtaskSpec, report: FinishReport, scope: Scope, router: ToolRouter, task_id: str) -> Verdict
+```
+
+### `redgiant/core/ablate.py` — leva di ablazione del percorso Worker
+
+Regola di metodo (utente, 2026-08-03): **ogni componente aggiunto dev'essere ablabile**, sennò il suo contributo non è attribuibile. Env var di SOLO A/B, mai contratto di config, mai in produzione — stessa filosofia di `plansys.ablated()`.
+
+| Componente | `RG_WORKER_ABLATE=` | Cosa toglie | Effetto misurato |
+|---|---|---|---|
+| ricerca | `search` | `search_code` dal catalogo | **0/5 su tutti i gradini**, replicato 3× — il componente portante |
+| verifica | `verify` | la verifica deterministica non gira | 8 false dichiarazioni in 5 run (vs 1 in 550+) — compra onestà, non throughput |
+| retry | `retry` | nessun secondo tentativo | (da misurare sulla ladder) |
+| calcolatrice | `calc` | `calculator` dal catalogo | ~nullo: il tool era invocato nel 40% delle run |
+| coerenza | `coherence` | la guardia F4 in scrittura | vedi `data.md` §7.6 |
+
+```python
+def worker_ablated(component: str) -> bool
+def active_ablations() -> list[str]
 ```
 
 ### `redgiant/core/budget.py` — BudgetTracker (F1.7)

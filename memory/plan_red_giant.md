@@ -635,9 +635,11 @@ aperti), si misura sulla matrice completa a DUE ASSI:
 | **WORKFLOW** (+ ablazioni) | **B2** — quanto sale il *pavimento*, e per merito di *quale pezzo* | **B4** — se ragionamento e impalcatura si sommano, si annullano o si ostacolano |
 
 **Le sotto-varianti sono obbligatorie, non facoltative:**
-- **B2 — ablazioni** (`RG_WORKER_ABLATE` ∈ {search, verify, retry}; per il plan compiler
-  `RG_PLANSYS_ABLATE` ∈ {oracle, ledger, entry}): senza, "il workflow funziona" è una frase,
-  non una misura — il delta va attribuito al **componente**.
+- **B2 — ablazioni** (`RG_WORKER_ABLATE` ∈ {search, verify, retry, calc, coherence}; per il
+  plan compiler `RG_PLANSYS_ABLATE` ∈ {oracle, ledger, entry}): senza, "il workflow funziona"
+  è una frase, non una misura — il delta va attribuito al **componente**. **Ogni componente
+  nuovo nasce con la sua leva di ablazione**: se non è ablabile, il suo contributo non è
+  attribuibile e la misura non vale.
 - **B4 — collocazione del thinking** (`RG_THINKING_ROLES`): TUTTE le varianti pertinenti al
   percorso in prova. Percorso diretto: solo Giano. Plan compiler: almeno solo-Giano,
   solo-pianificazione, tutti, e le combinazioni che i dati suggeriscono (TH1 ha mostrato che

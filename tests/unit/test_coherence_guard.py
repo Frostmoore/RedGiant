@@ -63,9 +63,22 @@ def test_write_file_refuses_and_the_message_is_actionable(tmp_path, monkeypatch)
     assert not r.ok and r.error == "incoherent_arithmetic"
     assert "1792" in r.data["hint"] and "NOT written" in r.data["hint"]
     assert not (tmp_path / "answer.txt").exists()   # il file NON esiste: F4
+    # ...e il messaggio lo DICE: 2 run su 4 morivano qui, una chiamando
+    # edit_file su un file mai creato (data.md §7.6)
+    assert "does NOT exist" in r.data["hint"]
+    assert "edit_file cannot work" in r.data["hint"]
     # il messaggio contiene il numero da scrivere -> il giro dopo passa
     assert write_file(scope, "answer.txt", L5_FACTS + "total=1792\n").ok
     assert "total=1792" in (tmp_path / "answer.txt").read_text(encoding="utf-8")
+
+
+def test_refusal_on_an_existing_file_says_it_is_unchanged(tmp_path, monkeypatch):
+    monkeypatch.delenv("RG_WORKER_ABLATE", raising=False)
+    scope = Scope(tmp_path, ["answer.txt"])
+    assert write_file(scope, "answer.txt", "a=1\nb=2\ntotal=3\n").ok
+    r = write_file(scope, "answer.txt", "a=1\nb=2\ntotal=9\n")
+    assert not r.ok and "still has its PREVIOUS content" in r.data["hint"]
+    assert (tmp_path / "answer.txt").read_text(encoding="utf-8").endswith("total=3\n")
 
 
 def test_guard_is_ablatable(tmp_path, monkeypatch):

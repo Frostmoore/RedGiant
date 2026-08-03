@@ -82,6 +82,24 @@ def coherence_check(path: Path, content: str) -> str | None:
     return arithmetic_check(path, content)
 
 
+def refusal_state(real: Path, path: str) -> str:
+    """Un rifiuto di scrittura deve dire com'e' rimasto il MONDO, non solo cosa
+    era sbagliato (F2: l'errore insegna).
+
+    Misurato sulla ladder L5 (data.md §7.6): su 4 write_file rifiutati dalla
+    guardia aritmetica, 2 run sono morte li' — una ha chiamato edit_file su un
+    file mai creato ("old_string not found", due volte), l'altra e' andata
+    dritta a run_tests convinta di aver scritto. Il modello tratta un rifiuto
+    come un successo se nessuno gli dice il contrario. Vale per OGNI rifiuto
+    (syntax_error compreso), non solo per l'aritmetica."""
+    if real.is_file():
+        return (f" {path} still has its PREVIOUS content: nothing changed on "
+                f"disk.")
+    return (f" {path} does NOT exist: nothing was written. Call write_file "
+            f"again with the full content — edit_file cannot work, there is "
+            f"no file to edit yet.")
+
+
 class _Args(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -247,11 +265,14 @@ def write_file(scope: Scope, path: str, content: str) -> ToolResult:
         return ToolResult(ok=False, data={"detail": err,
                                           "hint": "file NOT written: content has a syntax "
                                                   "error. Fix it and retry."
-                                                  + syntax_hint(err)},
+                                                  + syntax_hint(err)
+                                                  + refusal_state(real, path)},
                           error="syntax_error")
     bad = coherence_check(real, content)
     if bad is not None:
-        return ToolResult(ok=False, data={"hint": "file NOT written: " + bad},
+        return ToolResult(ok=False,
+                          data={"hint": "file NOT written: " + bad
+                                        + refusal_state(real, path)},
                           error="incoherent_arithmetic")
     existed = real.is_file()
     real.parent.mkdir(parents=True, exist_ok=True)
