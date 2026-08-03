@@ -102,6 +102,14 @@ piano padre si fa al rituale TH3.)
   - [x] **TH1 round 3 (T-J, decisione utente 2026-08-03): pensiero SOLO a J** — **4/20** @`0c42560`, il miglior round thinking: **morti J DIMEZZATE (5/20 vs 10-11/20 storiche)**, due verdi a 4 fasi (profondità record GPU), costo 1,6× (8.5K tok/run) contro il 3,2× di T-SM. Le morti residue sono tornate sul lato M (che non pensa).
   - [x] **TH1 round 4 (T-SMJ) — REVISIONE del criterio** (era "solo se T-SM e T-J migliorano entrambi", scritto prima di conoscere il dato): i round 1 e 3 mostrano un pattern di **migrazione del muro verso chi non pensa** (M pensa → muore J; J pensa → muore M). Il combinato è l'esperimento che il pattern impone; il costo (~4×?) si misura insieme al beneficio. **ESITO: 1/20 @`e6866cc`** — le morti J risalgono a 7-8/20: M pensante alza l'asticella degli oracoli (O2/O3) e nemmeno J pensante la regge. I due pensieri si annullano, a 4× il costo.
 
+  - [ ] **TH1 round 5-7 (ipotesi utente 2026-08-03, in parallelo a TH2 su server separati):**
+    il danno del pensiero lato M veniva da Vega/Altair (oracoli più esigenti). Bracci che
+    aggiungono pianificazione pensante a un Giano pensante SENZA toccare le verifiche:
+    r5 = Sirio+Giano (`senior_planner,worker`) · r6 = Sirio+Mizar+Giano
+    (`senior_planner,work_decomposer,worker`) · r7 = Mizar+Giano (`work_decomposer,worker`).
+    Confronto contro r3 (solo Giano, 4/20). Caveat dichiarato: contesa host marginale coi
+    wall di TH2 (verificati non toccati).
+
 **ESITO TH1 (2026-08-03, 4 round × 20 run GPU, `v4.1.1`):**
 
 | Round | Config | Verdi | Morti J | Fasi verdi | Token/run | Wall |
