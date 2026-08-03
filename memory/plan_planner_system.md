@@ -4,6 +4,10 @@
 **Data:** 2026-08-03
 **Piano padre:** [plan_red_giant.md](plan_red_giant.md) — IN PAUSA da ESITO F3; questo sistema è a sé stante e ha il suo ciclo di vita. Al completamento (PS7) il piano padre riprende da F3-bis.
 **Atlante:** [codebase_reference.md](codebase_reference.md) — le firme di questo piano vi confluiscono fase per fase, verificate da `scripts/check_reference.py`.
+**Nomi del cast (decisione utente 2026-08-03, id tecnici INVARIATI):** S=**Sirio**
+(`senior_planner`), M1=**Mira** (`phase_analyst`), M2=**Mizar** (`work_decomposer`),
+M3=**Vega** (`verification_designer`), M4=**Altair** (`test_author`), J=**Giano** (`worker`).
+
 **Stato:** 🏁 **PIANO CONCLUSO — PS7 completata** (2026-08-03, `v4.0.0`, merge in `main`). Il sistema S/M/J è integrato nel prodotto, **gated OFF** (`[plansys] enabled=false`). Verdetto PS6 confermato dalla ri-misura post-fix (v. ESITO PS6, appendice). La storia continua in: `plan_thinking_ab.md` (campagna TH, prossima) e F6 del piano padre (routing). Trappole e regole: atlante §9; ambizioni: `ambition.md` (in pausa fino a sistema ottimizzato).
 
 **Nota di condizione sperimentale (2026-08-02, decisione utente):** TUTTE le misure del progetto —

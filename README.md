@@ -69,7 +69,7 @@ If you are trying to make a small local model do real, verified work on hardware
 
 ## 🔬 Engineering findings — measured lessons from a 2B local agent
 
-This section records the engineering findings produced while building Red Giant. Most are **not claimed as novel principles in isolation**: several confirm established practice, but quantify its impact in an unusually constrained regime — a ~2B model, grammar-constrained JSON tool calls, CPU-only inference. Others document stack-specific failure modes or design patterns that emerged during implementation. Each finding states what was observed, the measured evidence, the countermeasure that now ships as working code, and how far the evidence reaches; findings may be revised, narrowed or retired as testing expands to other models, runtimes and real codebases. The **18 findings** below rest on **27 recorded observations** plus **over 250 instrumented end-to-end runs** of the planner-system rebuild, culminating in the official PS6 A/B (F8, F15–F18) — the full set, each mapped to its file and technical cause, lives in the [codebase atlas §9](memory/codebase_reference.md), with raw reports in [`bench/results/`](bench/results/).
+This section records the engineering findings produced while building Red Giant. Most are **not claimed as novel principles in isolation**: several confirm established practice, but quantify its impact in an unusually constrained regime — a ~2B model, grammar-constrained JSON tool calls, CPU-only inference. Others document stack-specific failure modes or design patterns that emerged during implementation. Each finding states what was observed, the measured evidence, the countermeasure that now ships as working code, and how far the evidence reaches; findings may be revised, narrowed or retired as testing expands to other models, runtimes and real codebases. The **20 findings** below rest on **27 recorded observations** plus **over 330 instrumented end-to-end runs** of the planner-system rebuild and the thinking-mode campaign, culminating in the official PS6 A/B (F8, F15–F18) and the role-by-role thinking measurements (F19–F20) — the full set, each mapped to its file and technical cause, lives in the [codebase atlas §9](memory/codebase_reference.md), with raw reports in [`bench/results/`](bench/results/).
 
 *Labels:* **measured confirmation** — known principle, quantified in this regime · **implementation finding** — behaviour that emerged building the system · **stack-specific** — tied to Gemma 4 E2B / the pinned llama.cpp build (the lesson may transfer; the numbers won't) · **engineering safeguard** — ordinary robustness, listed because its absence measurably hurt · **open hypothesis** — preliminary, awaiting larger-scale tests.
 
@@ -157,6 +157,24 @@ Reading: at the *step* level the workflow demonstrably turns an unreliable 2B in
 - **F17 — A fixed seed is not determinism on GPU; and determinism is a prompt property first.** *(stack-specific)* Runtime task artifacts (logs, plan documents with per-run ULID names) leaking into repo listings silently varied every prompt, making the fixed seed irrelevant — prompt-level determinism had to be engineered before seed-level determinism meant anything. After prompts were made bit-identical, CUDA continuous batching *still* produced divergent trajectories run-to-run. Consequence: GPU batches are used to classify failure families, never to compare fine success rates (2↔7 greens out of 20 on identical code is mostly noise). And the CPU profile is *quieter*, not silent: identical code re-measured across server sessions moved the baseline 6/13↔8/13 (llama.cpp evaluates a prompt differently cold vs from cache — upstream issue #2838), a ±2/13 band. Official verdicts are therefore drawn from **multiple averaged runs**, never a single one.
 - **F18 — With references made coherent, the residual walls are capability walls — now visible, attributable, and split by role.** *(measured in the official A/B)* On the GPU iteration batches the dominant residual was the junior failing exact output formats even when shown the test source and the failing assertion diff. The official CPU A/B then exposed the upstream twin: the **planner under-scoping requests** (a plan covering one third of the ask, internally coherent, honestly "completed" — and externally wrong: the one completed≠verified gap in the 35 official A/B runs) and the mid-roles writing wrong characterizations that the oracle gate correctly kills at compile time. Every death now has a stage, a cause and a cost; the cheap next lever is explicit reasoning for the *deciding* roles (planner and phase compiler), which is exactly what the queued thinking-mode experiment measures — a stronger model dropped into the same scaffold inherits the entire discipline for free.
 
+### 🧠 Thinking mode: measured, role by role
+
+Gemma 4 E2B has a native reasoning channel (`<|channel>thought … <channel|>` — markers extracted from the chat template *embedded in the pinned GGUF*, since neither `/props` nor `/tokenize` exposes them on this build). Red Giant drives it with a **two-call protocol**: one ungrammared call opens the channel and captures the thought, then the usual grammar-constrained call runs with the thought in context — and the thought is **disposable by construction**: it never enters the ledger, later steps, or the stable KV prefixes (which matches the model's own embedded template, whose `strip_thinking` macro deletes past reasoning from history).
+
+- **F19 — Let the model finish the thought: budgets are fuses, not targets.** *(measured)* Capped at 256 tokens, every single thought hit the cap mid-sentence — which read as "the model never closes the channel". Given room, it **closes the channel by itself, every time, at 322–543 tokens** (simple plan / wide plan / debugging). The thinking budget is now a circuit-breaker (1536, never trips in normal operation, caps the pathological case at ~43s on target hardware) and the answer's token budget is always reserved — a thought that starves its own answer would be the dumbest possible failure.
+- **F20 — Reasoning helps the *executor*; given to the *planner* it raises the bar instead; given to everyone it cancels out. The wall migrates to whoever is not thinking.** *(measured on 4×20 instrumented end-to-end runs, GPU compliance profile — official CPU A/B in progress)*
+
+| 20-run batch (same task, same code, same seed policy) | Verified | Giano's deaths | Tokens/run | Wall/run |
+|---|---|---|---|---|
+| No thinking (reference) | 3/20 | 10/20 | 5.4K | 33s |
+| Thinking on the planning side (Sirio + Mira→Altair) | 0→2/20¹ | 10–11/20 | 13–17K | 70–95s |
+| **Thinking on the executor only (Giano)** | **4/20** | **5/20 (halved)** | 8.5K (1.6×) | 50s |
+| Thinking on everyone | 1/20 | 7–8/20 | 16.9K (3.1×) | 88s |
+
+¹ Round 1 exposed a new thinking-induced failure family: Mizar, having *reasoned about the whole plan*, copied the wrong phase id into its output (5/20 runs) — fixed permanently by making phase identity control-plane-owned, one more F15 rule.
+
+The mechanism, visible in the failure taxonomies: with Vega and Altair thinking, the qualified proofs get **richer and more demanding** (three obligations per micro-task instead of one) — honesty up, conversion down, because Giano now faces harder proofs; a thinking Giano **halves his own failure rate** against standard proofs; both together re-raise the bar and re-fail it, at 3× cost. The general lesson — likely worth stealing for any multi-role agent system: **upgrading one role's intelligence moves the bottleneck, it does not dissolve it; measure every role upgrade on the whole chain, never on the role in isolation.**
+
 Every countermeasure above ships as working code in this repository; the [codebase atlas §9](memory/codebase_reference.md) maps each of the 27 underlying observations to its exact file, signature and technical cause (the F15–F18 observations join the atlas at PS5 closure).
 
 **Measured baselines** on the capped reference profile (2 workstation cores ≈ 4 target cores, [full report](bench/results/f0_baseline_severino-sim.md)):
@@ -167,6 +185,21 @@ Every countermeasure above ships as working code in this repository; the [codeba
 | Generation | 35.8 tok/s (memory-bound: 24 threads only reach 42) |
 | Prefix reuse (8K ctx) | append-only: **65** tokens reprocessed · one byte changed mid-prompt: **7,971** (~120× worse) |
 | Grammar overhead | 0.4–9.8% on generation speed |
+
+## 🌟 The cast
+
+The plan-compiler roles have names (their technical ids in the DB, prompts and env vars stay stable — comparability is sacred):
+
+| Name | Role | Technical id | Does |
+|---|---|---|---|
+| **Sirio** | Senior Planner (S) | `senior_planner` | writes the macro-plan once — criteria, phases, coverage — then exits |
+| **Mira** | Phase Analyst (M1) | `phase_analyst` | analyzes one phase: involved files, decisions, risks |
+| **Mizar** | Work Decomposer (M2) | `work_decomposer` | splits the phase into micro-tasks with exclusive file ownership |
+| **Vega** | Verification Designer (M3) | `verification_designer` | designs the proof obligations for each micro-task |
+| **Altair** | Test Author (M4) | `test_author` | writes the qualified tests, one file per call |
+| **Giano** | Worker (J) | `worker` | the two-faced executor: thinks, acts, gets verified — never writes its own tests |
+
+Sirio proposes meaning; the deterministic control plane owns every identity (names, order, existence); Giano executes inside a physical scope; external judges have the last word.
 
 ## 🔁 Pipeline at a glance
 

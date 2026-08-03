@@ -277,6 +277,8 @@ Orchestrator v1 (F3.3/F3.4): piano generato se assente, espansione lazy della so
 
 ### `redgiant/plansys/` — il sistema di pianificazione S/M/J (piano: `plan_planner_system.md`)
 
+**Cast (nomi utente, id tecnici invariati):** Sirio=`senior_planner` · Mira=`phase_analyst` · Mizar=`work_decomposer` · Vega=`verification_designer` · Altair=`test_author` · Giano=`worker`.
+
 Sistema a sé stante (PS-D1: LLM solo in roles.py/compiler.py, il resto deterministico). PS0: artefatti tipizzati (versionati in `ps_artifacts`), renderer DB→Markdown greppabile (`data/tasks/<id>/plan/`, byte-deterministico, scrittura atomica LF), config `[plansys]` (default OFF, PS-D9). Tabelle: `ps_artifacts` (task_id, kind∈{macro_plan, phase_analysis, phase_blueprint, verification_blueprint, test_bundle, ledger_snapshot}, ref, version UNIQUE auto-incrementata per (task,kind,ref), actor, json, created_at) e `ps_gates` (gate, target, ok, checks JSON).
 
 ```python
