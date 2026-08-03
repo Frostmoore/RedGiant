@@ -70,7 +70,9 @@ CREATE TABLE IF NOT EXISTS llm_calls (
   gen_tokens    INTEGER NOT NULL,
   prefill_ms    REAL NOT NULL,
   gen_ms        REAL NOT NULL,
-  outcome       TEXT NOT NULL CHECK (outcome IN ('ok','timeout','error','invalid'))
+  outcome       TEXT NOT NULL CHECK (outcome IN ('ok','timeout','error','invalid')),
+  thinking_tokens INTEGER NOT NULL DEFAULT 0,
+  thinking_ms     REAL NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS tool_calls (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -199,6 +201,18 @@ class StateStore:
         conn = sqlite3.connect(self.db_path)
         try:
             conn.executescript(_DDL)
+            # TH0.2 — migrazione additiva per i DB creati prima del thinking
+            # (CREATE IF NOT EXISTS non aggiorna le tabelle esistenti).
+            # Idempotente: la ALTER su colonna gia' presente fallisce e basta.
+            for ddl in ("ALTER TABLE llm_calls ADD COLUMN thinking_tokens"
+                        " INTEGER NOT NULL DEFAULT 0",
+                        "ALTER TABLE llm_calls ADD COLUMN thinking_ms"
+                        " REAL NOT NULL DEFAULT 0"):
+                try:
+                    conn.execute(ddl)
+                except sqlite3.OperationalError:
+                    pass
+            conn.commit()
         finally:
             conn.close()
 
@@ -433,11 +447,13 @@ class StateStore:
         with self._conn() as c:
             c.execute(
                 "INSERT INTO llm_calls (task_id, subtask_id, role, schema_name, t_start,"
-                " prompt_tokens, cached_tokens, gen_tokens, prefill_ms, gen_ms, outcome)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " prompt_tokens, cached_tokens, gen_tokens, prefill_ms, gen_ms, outcome,"
+                " thinking_tokens, thinking_ms)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (task_id, row.subtask_id, row.role, row.schema_name, row.t_start,
                  row.prompt_tokens, row.cached_tokens, row.gen_tokens,
-                 row.prefill_ms, row.gen_ms, row.outcome))
+                 row.prefill_ms, row.gen_ms, row.outcome,
+                 row.thinking_tokens, row.thinking_ms))
 
     def log_tool_call(self, task_id: str, row: ToolCallRow) -> None:
         with self._conn() as c:
@@ -538,8 +554,12 @@ class StateStore:
             # clamp per riga (F2.5): il server puo' riportare piu' cache del nostro
             # conteggio prompt (template/BOS) -> righe negative che cancellano i gen
             # e DISATTIVANO il budget. MAX(prompt-cached,0)+gen.
+            # TH0.2: i thinking token sono costo vero e entrano UNA volta
+            # (dalla chiamata 1); il prefill del pensiero in chiamata 2 e' gia'
+            # dentro max(prompt-cached,0) — niente doppio conteggio (trap TH-5)
             llm = c.execute(
-                "SELECT COALESCE(SUM(MAX(prompt_tokens - cached_tokens, 0) + gen_tokens), 0)"
+                "SELECT COALESCE(SUM(MAX(prompt_tokens - cached_tokens, 0) + gen_tokens"
+                " + thinking_tokens), 0)"
                 " AS t FROM llm_calls WHERE task_id=?", (task_id,)).fetchone()
             tools = c.execute("SELECT COUNT(*) AS n FROM tool_calls WHERE task_id=?",
                               (task_id,)).fetchone()

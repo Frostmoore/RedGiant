@@ -32,9 +32,11 @@ class SeniorPlanner(Role):
             self.name, task=ctx.task, subtask=None, tools=[],
             volatile=ctx.volatile,
             output_schema=MacroPlan.model_json_schema(), schema_name="MacroPlan")
+        from redgiant.plansys import thinking_budget, thinking_roles
+        think = thinking_budget() if self.name in thinking_roles() else None
         out: MacroPlan = self.llm.complete(
             parts, role=self.name, schema=MacroPlan, max_tokens=max_tokens,
-            task_id=ctx.task.id).parsed  # type: ignore[assignment]
+            task_id=ctx.task.id, think=think).parsed  # type: ignore[assignment]
         report = macro_validation_gate(normalize_macro(out), ctx.task.request)
         # fino a DUE richiamate correttive (fast #4: la coverage e' l'errore
         # piu' meccanicamente correggibile; una richiamata sola perdeva task
@@ -56,7 +58,7 @@ class SeniorPlanner(Role):
                   " appear in a criterion or phase intent — plan ALL of it.")
             out = self.llm.complete(
                 retry, role=self.name, schema=MacroPlan, max_tokens=max_tokens,
-                task_id=ctx.task.id).parsed  # type: ignore[assignment]
+                task_id=ctx.task.id, think=think).parsed  # type: ignore[assignment]
             report = macro_validation_gate(normalize_macro(out), ctx.task.request)
         if not report.ok:
             raise MacroRejected(
@@ -85,11 +87,14 @@ class _SingleShot(Role):
                 volatile=volatile,
                 output_schema=self.output_model.model_json_schema(),
                 schema_name=self.output_model.__name__)
+            from redgiant.plansys import thinking_budget, thinking_roles
+            think = (thinking_budget()
+                     if self.name in thinking_roles() else None)
             try:
                 return self.llm.complete(
                     parts, role=self.name, schema=self.output_model,
                     max_tokens=max_tokens, task_id=ctx.task.id,
-                    grammar_schema=grammar_schema).parsed
+                    grammar_schema=grammar_schema, think=think).parsed
             except LlmTruncated:
                 if attempt == 2:
                     raise

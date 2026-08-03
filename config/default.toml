@@ -22,6 +22,12 @@ ctx_size = 8192                      # tetto duro per chiamata (D8; confermato d
 timeout_s = 600                      # alto: su CPU una chiamata lunga e' normale, non un errore
 temperature = 0.2                    # default; override per ruolo in futuro [roles.<name>]
 max_tokens_default = 1024            # tetto generazione se il ruolo non specifica
+# TH0: canale di pensiero di Gemma 4 — marcatori estratti dal chat template
+# INCORPORATO nel GGUF pinnato (tokenizer.chat_template: '<|channel>thought' /
+# '<channel|>'; l'interruttore nativo <|think|> e' token di controllo id 98,
+# non necessario col two-call: il canale lo apriamo noi). Trap TH-1 rispettata.
+think_open = "<|channel>thought\n"
+think_close = "<channel|>"
 idle_shutdown_s = 1800               # F2.5 (decisione utente): il server gestito si spegne
                                      # dopo 30 min di inutilizzo — non a ogni fine task
                                      # (ricaricare i pesi a ogni ciclo costa ~1 min)

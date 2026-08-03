@@ -93,12 +93,17 @@ class Worker(Role):
 
         last_call_sig: str | None = None
         fail_counts: dict[tuple, int] = {}
+        # TH0.3 (braccio T-J): pensiero per-step di J — il canale e' usa-e-getta
+        # dentro complete() (TH-D2): la catena append-only 'parts' non lo vede mai
+        from redgiant.plansys import thinking_budget, thinking_roles
+        think = thinking_budget() if self.name in thinking_roles() else None
         for k in range(1, max_steps + 1):
             try:
                 wrapper: WorkerStep = self.llm.complete(
                     parts, role=self.name, schema=WorkerStep,
                     max_tokens=step_max_tokens, task_id=task.id,
-                    subtask_id=ctx.subtask.id if ctx.subtask else None).parsed  # type: ignore
+                    subtask_id=ctx.subtask.id if ctx.subtask else None,
+                    think=think).parsed  # type: ignore
                 step = wrapper.root
             except LlmTruncated:
                 # F2.5: il troncamento di UNO step non brucia il tentativo intero —

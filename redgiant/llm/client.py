@@ -55,6 +55,11 @@ class LlmResult:
     prefill_ms: float
     gen_ms: float
     raw_timings: dict
+    # TH0: il pensiero e' usa-e-getta (TH-D2) — il testo si logga per l'analisi,
+    # MAI ri-iniettato in altri contesti dal chiamante
+    thinking_tokens: int = 0
+    thinking_ms: float = 0.0
+    thinking_text: str = ""
 
 
 class LlamaClient:
@@ -70,11 +75,50 @@ class LlamaClient:
                  max_tokens: int, temperature: float | None = None,
                  task_id: str | None = None, subtask_id: str | None = None,
                  cache_prompt: bool = True,
-                 grammar_schema: dict | None = None) -> LlmResult:
+                 grammar_schema: dict | None = None,
+                 think: int | None = None) -> LlmResult:
         """grammar_schema (plansys, batch20): JSON Schema SPECIALIZZATO per la
         grammatica del server (es. enum dinamici sui riferimenti) — deve essere
-        un SOTTOINSIEME dello schema di `schema`, che resta il validatore."""
+        un SOTTOINSIEME dello schema di `schema`, che resta il validatore.
+
+        think (TH0, plan_thinking_ab.md): budget del canale di pensiero.
+        Two-call protocol (TH-D1): (1) stesso prompt + think_open, SENZA
+        grammatica, stop a think_close — il troncamento a budget NON e' errore
+        (e' un budget, non un contratto); (2) prompt + canale completo + la
+        chiamata strutturata di sempre. `parts` non viene MAI mutato (TH-D2):
+        i prompt arricchiti nascono e muoiono qui dentro."""
         prompt = parts.render()
+        think_text, think_tok, think_ms = "", 0, 0.0
+        if think:
+            if not self.cfg.think_close:
+                raise LlmError("thinking markers not configured "
+                               "([llm] think_open/think_close)")
+            if self.count_tokens(prompt) + think > self.cfg.ctx_size:
+                raise ContextOverflow(self.count_tokens(prompt) + think,
+                                      self.cfg.ctx_size,
+                                      parts.section_tokens(self.count_tokens))
+            p1 = {"prompt": prompt + self.cfg.think_open, "n_predict": think,
+                  "temperature": (self.cfg.temperature if temperature is None
+                                  else temperature),
+                  "cache_prompt": cache_prompt, "seed": 42,
+                  "stop": [self.cfg.think_close]}
+            t1_start = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            try:
+                r1 = self._post_with_transport_retry("/completion", p1)
+            except httpx.TimeoutException as e:
+                self._log(task_id, role, subtask_id, schema, t1_start, 0,
+                          "timeout")
+                raise LlmTimeout(str(e)) from e
+            except httpx.HTTPError as e:
+                self._log(task_id, role, subtask_id, schema, t1_start, 0,
+                          "error")
+                raise LlmError(str(e)) from e
+            think_text = r1.get("content", "")
+            t1 = r1.get("timings", {})
+            think_tok = int(t1.get("predicted_n", 0) or 0)
+            think_ms = float(t1.get("predicted_ms", 0.0) or 0.0)
+            prompt = (prompt + self.cfg.think_open + think_text
+                      + self.cfg.think_close + "\n")
         n_prompt = self.count_tokens(prompt)
         if n_prompt + max_tokens > self.cfg.ctx_size:
             raise ContextOverflow(n_prompt, self.cfg.ctx_size,
@@ -112,7 +156,9 @@ class LlamaClient:
             gen_tokens=int(timings.get("predicted_n", 0) or 0),
             prefill_ms=float(timings.get("prompt_ms", 0.0) or 0.0),
             gen_ms=float(timings.get("predicted_ms", 0.0) or 0.0),
-            raw_timings=timings)
+            raw_timings=timings,
+            thinking_tokens=think_tok, thinking_ms=think_ms,
+            thinking_text=think_text)
 
         if res.get("stop_type") == "limit" or res.get("stopped_limit"):
             self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "error", result)
@@ -177,4 +223,6 @@ class LlamaClient:
             gen_tokens=result.gen_tokens if result else 0,
             prefill_ms=result.prefill_ms if result else 0.0,
             gen_ms=result.gen_ms if result else 0.0,
+            thinking_tokens=result.thinking_tokens if result else 0,
+            thinking_ms=result.thinking_ms if result else 0.0,
             outcome=outcome))  # type: ignore[arg-type]

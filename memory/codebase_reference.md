@@ -139,7 +139,7 @@ class ContextOverflow
 class LlmResult     # text, parsed, prompt_tokens, cached_tokens, gen_tokens, prefill_ms, gen_ms, raw_timings
 class LlamaClient
     def __init__(self, cfg: LlmProfileCfg, store: StateStore | None = None) -> None
-    def complete(self, parts: PromptParts, *, role: str, schema: type[BaseModel] | None = None, max_tokens: int, temperature: float | None = None, task_id: str | None = None, subtask_id: str | None = None, cache_prompt: bool = True, grammar_schema: dict | None = None) -> LlmResult  # grammar_schema: schema SPECIALIZZATO (enum dinamici) per la grammatica server; la rivalidazione resta su schema
+    def complete(self, parts: PromptParts, *, role: str, schema: type[BaseModel] | None = None, max_tokens: int, temperature: float | None = None, task_id: str | None = None, subtask_id: str | None = None, cache_prompt: bool = True, grammar_schema: dict | None = None, think: int | None = None) -> LlmResult  # grammar_schema: schema SPECIALIZZATO (enum dinamici); think (TH0): budget del canale di pensiero, two-call protocol TH-D1/TH-D2 — chiamata 1 = prompt+think_open senza grammatica con stop=[think_close] (troncamento NON errore), chiamata 2 = prompt+canale+JSON grammaticato; parts MAI mutate; LlmResult guadagna thinking_tokens/thinking_ms/thinking_text (testo solo per log)
     def count_tokens(self, text: str) -> int
     def health(self) -> bool
     def props(self) -> dict
@@ -309,6 +309,8 @@ def build_ledger(store: StateStore, scope: Scope, task_id: str) -> TaskLedger
 def render_ledger(ledger: TaskLedger) -> str
 def project_for_phase(ledger: TaskLedger, plan: MacroPlan, phase_id: str, max_tokens: int, count: Callable[[str], int]) -> str
 def ablated(component: str) -> bool   # PS6.2: RG_PLANSYS_ABLATE="oracle,ledger,entry" (solo A/B)
+def thinking_roles() -> set[str]      # TH0.3: RG_THINKING_ROLES=nomi ruolo DB (senior_planner,...,worker) — leva di solo esperimento
+def thinking_budget() -> int          # TH0.3: RG_THINKING_BUDGET (default 256)
 def dag_problems(pairs: list[tuple[str, list[str]]]) -> list[str]
 def normalize_macro(plan: MacroPlan) -> MacroPlan
 def macro_validation_gate(plan: MacroPlan, request: str | None = None) -> GateReport  # request: check copertura-richiesta (file .py nominati => criteri/intent, forbice T041)
@@ -440,7 +442,7 @@ def create_app(cfg: Config) -> FastAPI
 
 ## 4. Database (SQLite, `data/redgiant.db` — DDL in `store.py::_DDL`)
 
-Tutte le tabelle del piano §A5 esistono da F1 (le CREATE sono idempotenti): `tasks`, `plans`, `subtasks`, `llm_calls` (con `cached_tokens` e outcome `ok|timeout|error|invalid`), `tool_calls`, `decisions`, `budgets`, `eval_runs`, `approvals` (già scritta dal router), `checkpoints` (vuota fino a F4), `routing_log` (vuota fino a F6) + 4 indici. WAL, foreign_keys ON.
+Tutte le tabelle del piano §A5 esistono da F1 (le CREATE sono idempotenti): `tasks`, `plans`, `subtasks`, `llm_calls` (con `cached_tokens`, outcome `ok|timeout|error|invalid` e — TH0.2 — `thinking_tokens INTEGER DEFAULT 0` + `thinking_ms REAL DEFAULT 0`, migrazione additiva idempotente in `init_schema` via ALTER try/except), `tool_calls`, `decisions`, `budgets`, `eval_runs`, `approvals` (già scritta dal router), `checkpoints` (vuota fino a F4), `routing_log` (vuota fino a F6) + 4 indici. WAL, foreign_keys ON. `budget_used`: max(prompt−cached,0)+gen+thinking (il pensiero conta UNA volta, dalla chiamata 1).
 
 ## 5. Endpoint / rotte
 
@@ -448,7 +450,7 @@ Rotte GUI: tabella F2.2 del piano (inline in `web/app.py`) + **PS7.2**: `GET /ta
 
 ## 6. Configurazione
 
-V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità PS0:** sezione `[plansys]` (`enabled=false` PS-D9, `max_phases`, `max_micro_per_phase`, `projection_max_tokens`, `m_pass_max_tokens`, `test_author_max_tokens`, `mutation_probe`) → `Config.plansys_enabled: bool` + `Config.plansys: PlansysCfg`. **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
+V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità PS0:** sezione `[plansys]` (`enabled=false` PS-D9, `max_phases`, `max_micro_per_phase`, `projection_max_tokens`, `m_pass_max_tokens`, `test_author_max_tokens`, `mutation_probe`) → `Config.plansys_enabled: bool` + `Config.plansys: PlansysCfg`. **Novità TH0:** chiavi `[llm] think_open`/`think_close` (marcatori del canale di pensiero, estratti dal chat template incorporato nel GGUF: `<|channel>thought\n` / `<channel|>`; default "" nei profili senza thinking → `complete(think=N)` con marcatori vuoti alza LlmError). **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
 
 ## 7. Catalogo dei test
 
@@ -565,6 +567,7 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 | T007 verde ma laborioso (41 chiamate: giri di lettura ridondanti) | serve contesto selettivo e strategia | F4 + F5 |
 | Registro delle tolleranze modello-specifiche (N-TAB, CRLF, code vuote, closest_match, soglie): euristiche overfittate su E2B QAT b10200 | vanno A/B-ate come sistema al cambio di modello/build | F6/F8 |
 | Nessun task sintetico "sporco" (repo grande, rumore, test lenti) | il micro-mondo non prepara a F8 | pre-F8 |
+| I marcatori di turno S1→S7 (`<start_of_turn>`) NON sono token speciali di questo GGUF (7 token testuali); il protocollo nativo è `<|turn>`/`<turn|>` (control 105/106, scoperto in TH0) | funziona così da F0 (60/60 misurato) — cambiare ora invaliderebbe la comparabilità di tutta la serie storica | A/B dedicato post-TH3, insieme al retest tolleranze |
 | Evaluator senza varianza multi-seed (1 run = 1 traiettoria) | costa CPU; serve per distinguere "funziona" da "è passato" | F6 |
 | `task_config.json` su file = seconda fonte di stato oltre al DB | uso single-writer, fallimento benigno e visibile | con l'evoluzione GUI di F4 |
 | Protocollo umano = segreteria (solo ultima risposta, niente cronologia) | il dialogo vero è il protocollo F4 | F4.2/F4 GUI |

@@ -84,6 +84,9 @@ class LlmCallRow(_Strict):
     prefill_ms: float
     gen_ms: float
     outcome: Literal["ok", "timeout", "error", "invalid"]
+    # TH0: token/ms del canale di pensiero (0 per le chiamate senza thinking)
+    thinking_tokens: int = 0
+    thinking_ms: float = 0.0
 
 
 class ToolCallRow(_Strict):

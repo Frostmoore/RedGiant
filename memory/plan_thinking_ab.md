@@ -48,23 +48,50 @@ Alla fine di OGNI fase TH*n*:
 
 | Fine fase | Branch | Entità |
 |---|---|---|
-| TH0 (meccanica) | +0.1.0 dalla versione corrente al momento dello scheduling | media |
-| TH1 (compliance GPU) | +0.0.1 | piccola |
-| TH2 (A/B ufficiale severino-sim) | +0.0.1 | piccola |
-| TH3 (verdetto + docs) | +0.1.0 | media |
+| TH0 (meccanica) | `v4.1.0` | media |
+| TH1 (compliance GPU) | `v4.1.1` | piccola |
+| TH2 (A/B ufficiale severino-sim) | `v4.1.2` | piccola |
+| TH3 (verdetto + docs) | `v4.2.0` | media |
 
-(La numerazione assoluta si fissa quando l'esperimento viene schedulato — dipende da dove sarà
-arrivato il piano padre; la regola è la tabella d'entità qui sopra.)
+(Numerazione fissata allo scheduling, 2026-08-03: la campagna TH parte subito dopo `v4.0.0`
+per decisione utente, quindi PRIMA di F3-bis — che slitta a `v4.3.0`; la riconciliazione del
+piano padre si fa al rituale TH3.)
 
 ---
 
 ## Tracking
 
-- [ ] **TH0 — Meccanica del thinking (two-call protocol)**
-  - [ ] TH0.1 client: `complete()` con `think: int | None`
-  - [ ] TH0.2 store: colonna `thinking_tokens` su `llm_calls`
-  - [ ] TH0.3 leva d'esperimento `RG_THINKING_ROLES`
-  - [ ] TH0.4 unit (5 test nuovi) + smoke GPU singolo
+- [x] **TH0 — Meccanica del thinking (two-call protocol)** ✅ 2026-08-03, `v4.1.0`
+  - [x] TH0.1 client: `complete()` con `think: int | None`
+  - [x] TH0.2 store: colonne `thinking_tokens`/`thinking_ms` su `llm_calls` (migrazione additiva idempotente; `budget_used` le conta una volta)
+  - [x] TH0.3 leva d'esperimento `RG_THINKING_ROLES` + `RG_THINKING_BUDGET` (`plansys.thinking_roles()/thinking_budget()`; call-site: `_SingleShot.run`, `SeniorPlanner.run`, `Worker`)
+  - [x] TH0.4 unit (7 test nuovi, suite a 92) + smoke GPU: sonda diretta col canale che produce ragionamento strutturato vero (200 tok/914ms) e pilota fast con S+M1+M2+M3 tutti pensanti (256 tok/ruolo, ~1.15s l'uno su GPU)
+
+  **REVISIONE TH0 (dai fatti del GGUF, non dai docs — trap TH-1 rispettata):**
+  1. **Marcatori veri, estratti dal chat template INCORPORATO nel GGUF pinnato** (parser
+     dell'header scritto ad hoc; `/props` di questa build espone solo l'alias "gemma" e
+     `/tokenize` non onora i token speciali): il pensiero di Gemma 4 vive in un CANALE
+     testuale `<|channel>thought\n … \n<channel|>` dentro il turno model; l'interruttore
+     nativo è il token di controllo `<|think|>` (id 98) in testa al system turn.
+  2. **Niente variante S7** (il piano ipotizzava la sostituzione dell'istruzione): la
+     chiamata 1 apre direttamente il canale — `prompt + think_open`, stop a `think_close`.
+     Più semplice, byte-stabile, e non serve l'interruttore `<|think|>` (il canale lo
+     apriamo noi; se TH1 mostrasse pensieri di bassa qualità, provare l'interruttore è la
+     prima variante da testare).
+  3. **La TH-D2 è cablata nel modello stesso**: il template incorporato ha `strip_thinking`
+     che RIMUOVE i canali thought dai turni precedenti + un reasoning guard — la linea
+     guida "mai ripassare il ragionamento" è il comportamento nativo, il nostro two-call
+     la rispetta per costruzione.
+  4. **Valori della leva = nomi ruolo reali del DB** (`senior_planner`, non `senior`):
+     T-SM = `RG_THINKING_ROLES=senior_planner,phase_analyst,work_decomposer,verification_designer,test_author`.
+  5. **Osservazione per TH1**: nello smoke il modello non chiude quasi mai il canale da
+     solo — tutte le chiamate sbattono sul budget (256/256). Il troncamento si usa com'è
+     (by design), ma la qualità del pensiero troncato a metà frase va osservata nelle
+     famiglie di TH1 (eventuale chiusura con "[END THINKING]" — trap TH-4).
+  6. **Scoperta collaterale (a debito, NON si tocca ora)**: i marcatori di turno nativi di
+     questo GGUF sono i token di controllo `<|turn>`/`<turn|>` (105/106) — il nostro
+     `<start_of_turn>` tokenizza come 7 token NON speciali. Funziona (misurato da F0 in
+     poi), ma il protocollo nativo è un altro: A/B futuro, registrato nell'atlante §10.
 - [ ] **TH1 — Compliance GPU (famiglie, non numeri)**
 - [ ] **TH2 — A/B ufficiale severino-sim (i numeri)**
 - [ ] **TH3 — Verdetto, decision rule, documentazione**
