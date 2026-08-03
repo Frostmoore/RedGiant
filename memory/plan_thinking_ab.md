@@ -1,6 +1,8 @@
 # Piano: A/B Thinking Mode su Gemma 4 E2B (esperimento TH)
 
-**Stato:** 📋 pianificato — prerequisito: PS6 chiusa (il braccio di controllo è il suo run B ufficiale).
+**Stato:** 🏁 **CAMPAGNA CONCLUSA** (2026-08-03, `v4.2.0`) — verdetto TH3: thinking OFF in
+produzione (decision rule: Δ verificati = 0); meccanica pronta, findings F19-F20 nel README,
+leva futura = thinking selettivo al retry (TH-bis). Dettagli negli ESITI TH1/TH2/TH3.
 **Decisione utente (2026-08-02):** PS6 si chiude nella condizione storica no-thinking; POI il thinking
 si misura con un batch dedicato comparabile, per determinare la differenza di prestazioni e di
 token/tempo. Questo documento è la specsheet di quell'esperimento.
@@ -132,8 +134,34 @@ control plane); (3) il combinato somma i costi e annulla i benefici. **Braccio c
 per TH2: T-J** (contro il controllo T-0). Trappola nuova a catalogo: "il muro migra verso
 chi non pensa" — ogni potenziamento di un ruolo va misurato sull'INTERA catena, mai sul
 ruolo isolato.
-- [ ] **TH2 — A/B ufficiale severino-sim (i numeri)**
-- [ ] **TH3 — Verdetto, decision rule, documentazione**
+- [x] **TH2 — A/B ufficiale severino-sim (i numeri)** ✅ 2026-08-03, `v4.1.2`
+  **ESITO (2 batterie per braccio, regola delle run multiple):** T-J (Giano pensante,
+  fusibile 1536) = 2/13 (9.111s, contaminata da carico parallelo dichiarato) e 1/13
+  (5.183s, pulita); controllo T-0 = 2/13 (@`80fe6fe`) e 1/13 (2.345s). **Δ verificati = 0**
+  (richiesto ≥+2) · wall pulito 1,9× (nel tetto, al pelo) · token ~1,4× · forbice 0 su
+  tutte e 4 le batterie. Lo scalpo di T002 (batteria 1 — il task-trappola mai passato
+  nella storia del progetto) NON si è ripetuto in batteria 2: reale ma dentro il rumore,
+  non un effetto stabile. Nota: la banda ±2/13 vale anche qui — su 2 run per braccio il
+  potere statistico distingue solo effetti grossi, e un effetto grosso non c'è.
+- [x] **TH3 — Verdetto, decision rule, documentazione** ✅ 2026-08-03, `v4.2.0`
+
+**ESITO TH3 — VERDETTO DELLA CAMPAGNA (decision rule pre-registrata, applicata senza sconti):**
+**Il thinking a tempo pieno NON entra in produzione per nessun ruolo.** `RG_THINKING_ROLES`
+resta leva sperimentale, OFF di default. Motivazione nei numeri: sul profilo ufficiale il
+pensiero di Giano non compra conversione (Δ=0) a ~1,4× token e ~1,9× wall; gli altri bracci
+non hanno nemmeno superato la compliance GPU. Cosa RESTA della campagna (tutto misurato):
+1. **La meccanica è pronta e collaudata** (two-call, fusibile, TH-D2): qualunque modello
+   futuro o esperimento la eredita gratis; per il worker quotidiano di F7 (chat con
+   streaming) il thinking resta pienamente disponibile via config.
+2. **F19-F20 nel README**: la mappa completa di dove il ragionamento paga (griglia a 7
+   bracci, migrazione del muro, Sirio che compra profondità, tetto ~4/20).
+3. **Una regola permanente in più** (phase_id imposto) e la trappola "il muro migra".
+4. **Leva successiva identificata, NON misurata: il thinking selettivo** — solo al retry,
+   quando il proof è già fallito una volta (il beneficio del r3 era concentrato lì; il
+   costo crollerebbe perché la maggioranza degli step non pensa). Esperimento futuro
+   TH-bis, da aprire coi dati di F3-bis/F6 alla mano.
+5. Il segnale "Sirio-profondità" (1.9 fasi) resta GPU-only: se mai servirà sui task larghi
+   (post-F6), va confermato su severino-sim prima di crederci.
 
 ---
 
