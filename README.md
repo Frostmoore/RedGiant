@@ -14,11 +14,28 @@
 
 *The model stays small. The **system** becomes large.*
 
-[Thesis](#-the-thesis) · [Niche](#-where-this-sits--the-niche-honestly) · [Decisions](#-key-technical-decisions) · [Findings](#-engineering-findings--measured-lessons-from-a-2b-local-agent) · [Pipeline](#-pipeline-at-a-glance) · [Hardware](#-target-hardware-severino) · [Roadmap](#%EF%B8%8F-roadmap--and-how-its-actually-going) · [Docs](#-repository-map) · [Quickstart](#-getting-started-development-windows)
+[Thesis](#-the-thesis) · [Niche](#-where-this-sits--the-niche-honestly) · [Findings](#-engineering-findings--measured-lessons-from-a-2b-local-agent) · [Scoreboard](#-the-scoreboard--every-official-ab-in-numbers) · [Cast](#-the-cast) · [Assembly line](#-how-the-assembly-line-actually-works) · [Roadmap](#%EF%B8%8F-roadmap--and-how-its-actually-going) · [Quickstart](#-getting-started-development-windows)
 
 </div>
 
 ---
+
+## 📑 Index
+
+- **[🧠 The thesis](#-the-thesis)** — what this project bets on, in four principles
+- **[🧭 Where this sits — the niche, honestly](#-where-this-sits--the-niche-honestly)** — the landscape, the supporting research (with sources), and the honest boundary
+- **[⚙️ Key technical decisions](#-key-technical-decisions)** — model, runtime, grammar, sequentiality, no-cloud
+- **[🔬 Engineering findings (F1–F20)](#-engineering-findings--measured-lessons-from-a-2b-local-agent)** — the measured lessons:
+  - [🔧 Tool design](#-tool-design-how-a-small-model-edits-files-reliably) (F1–F2) · [🔒 Constrained decoding](#-constrained-decoding-the-grammar-gives-you-shape-not-meaning) (F3–F4) · [🧨 Small-model failure modes](#-failure-modes-of-small-models-in-agent-loops) (F5–F7)
+  - [🪙 Token economy](#-token-economy-on-cpu-only-inference) (F8–F9) · [📏 **The scoreboard — every official A/B**](#-the-scoreboard--every-official-ab-in-numbers)
+  - [♻️ KV-cache & prefill](#%EF%B8%8F-kv-cache-reuse-and-prefill-engineering) (F10–F11) · [🎛️ Orchestration](#%EF%B8%8F-orchestration-running-an-unreliable-proposer-safely) (F12) · [✅ Verification design](#-verification-design-trusting-an-agent-you-cannot-trust) (F13) · [🤝 Consent UX](#-consent-ux-humans-in-the-loop-without-losing-the-cache) (F14)
+  - [🧭 Planner rebuild](#-planner-rebuild-smj-reference-coherence-is-the-control-planes-job) (F15–F18) · [🧠 **Thinking mode, role by role**](#-thinking-mode-measured-role-by-role) (F19–F20)
+- **[🌟 The cast](#-the-cast)** — Sirio, Mira, Mizar, Vega, Altair, Giano: who does what
+- **[🏭 How the assembly line actually works](#-how-the-assembly-line-actually-works)** — no agent talks to another; the three separations; the flow in one line
+- **[🔁 Pipeline at a glance](#-pipeline-at-a-glance)** — the diagram and the four domains
+- **[🖥️ Target hardware ("Severino")](#%EF%B8%8F-target-hardware-severino)** — the 15W mini-PC this is all for
+- **[🗺️ Roadmap — and how it's actually going](#%EF%B8%8F-roadmap--and-how-its-actually-going)** — F0→F8, phase by phase, verdicts included
+- **[📚 Repository map](#-repository-map)** · **[🚀 Getting started](#-getting-started-development-windows)**
 
 Red Giant wraps a **~2B-effective-parameter model** — Gemma 4 E2B, Q4 QAT, GGUF, CPU-only — in a deterministic pipeline of **decomposition, continuous verification, minimal context, and KV-cache-aware prompt engineering**.
 
