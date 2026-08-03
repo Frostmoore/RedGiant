@@ -34,9 +34,9 @@ def test_calc_is_in_catalog_and_ablatable(tmp_path, monkeypatch):
     cfg = Config.load("dev-fast", CONFIG_DIR)
     scope = Scope(tmp_path, ["*.txt"])
     monkeypatch.delenv("RG_WORKER_ABLATE", raising=False)
-    assert "calc" in default_catalog(cfg, scope, {})
+    assert "calculator" in default_catalog(cfg, scope, {})
     monkeypatch.setenv("RG_WORKER_ABLATE", "calc")
-    assert "calc" not in default_catalog(cfg, scope, {})
+    assert "calculator" not in default_catalog(cfg, scope, {})
 
 
 def test_unknown_tool_error_is_actionable(tmp_path):

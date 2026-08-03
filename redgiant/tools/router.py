@@ -76,9 +76,10 @@ def default_catalog(cfg: Config, scope: Scope,
                  "(cmd_id + argv, e.g. ['pytest','-q']) after discovering it from the "
                  "project files. The executable must be whitelisted.",
                  "medium", True, False, 5.0, proc.RegisterTestCommandArgs, _register),
-        ToolSpec("calc", "Compute an arithmetic expression exactly "
-                 "(e.g. '693+228+196'). USE THIS for any sum or arithmetic: "
-                 "never compute numbers in your head.",
+        ToolSpec("calculator", "Compute an arithmetic expression exactly "
+                 "(e.g. '693+228+196'). MANDATORY for every sum, difference, "
+                 "product or average: your mental arithmetic drops carries, "
+                 "this does not.",
                  "low", True, False, 5.0, calc_mod.CalcArgs,
                  lambda expression: calc_mod.calc(expression)),
         ToolSpec("http_get", "Fetch a small http(s) page from a whitelisted "
@@ -97,7 +98,7 @@ def default_catalog(cfg: Config, scope: Scope,
     if worker_ablated("search"):
         specs = [s for s in specs if s.name != "search_code"]
     if worker_ablated("calc"):
-        specs = [s for s in specs if s.name != "calc"]
+        specs = [s for s in specs if s.name != "calculator"]
     return {s.name: s for s in specs}
 
 

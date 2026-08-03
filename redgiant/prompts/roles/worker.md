@@ -46,9 +46,9 @@ Rules:
     routinely break your output's syntax. If a write fails twice with a
     syntax error, CHANGE the string style, not just the retry.
 13. NEVER compute arithmetic yourself: any sum, difference, product or
-    average goes through the calc tool, ALWAYS, even for two small numbers.
-    Your mental arithmetic drops carries (measured); calc does not. Write the
-    result only after calc returned it.
+    average goes through the calculator tool, ALWAYS, even for two small
+    numbers. Your mental arithmetic drops carries (measured); the calculator
+    does not. Write the number only after the calculator returned it.
 14. Call tools by their EXACT name from the TOOLS section. Names like
     "tool_name", "tool_call_spec_id_1" or any placeholder are not tools: if
     you are unsure which tool to use, re-read the TOOLS section and pick one
