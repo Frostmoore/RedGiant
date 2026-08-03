@@ -436,9 +436,97 @@ risposta** a chiunque eseguisse il check — il task misurava la lettura di un m
 derivata → appartiene al control plane). Prossimo passo misurato: guardia deterministica che
 rende l'incoerenza aritmetica irrappresentabile invece di sconsigliata.
 
+## 7.6 LADDER — togliere l'operazione dalle mani del modello (2026-08-03, GPU)
+
+Seguito diretto di §7.5. Se un'istruzione non produce obbedienza, l'operazione va resa
+**irrappresentabile**: `redgiant/tools/coherence.py` verifica, *prima* che il file tocchi il
+disco, che un totale dichiarato sia coerente coi valori che il modello stesso ha scritto; se
+non lo è, la scrittura è rifiutata con il numero corretto nel messaggio. È il principio F4 del
+progetto (*rendi l'output incoerente impossibile da generare, invece di validarlo a
+posteriori*), applicato per la prima volta ai **contenuti** e non alla sintassi.
+
+**Cosa NON è:** non è un oracolo sul task. Somma ciò che il modello ha scritto, non ciò che è
+vero — se i fatti sono sbagliati certifica una somma sbagliata. Coerenza interna, non
+correttezza: nessun leak come quello del giudice (§7.5).
+
+**Nota di metodo:** il prompt **non è stato toccato**. Nessuna nuova regola testuale, nessuna
+menzione della guardia nella card — così il delta è attribuibile solo al meccanismo, e il
+confronto con le tornate di §7.5 resta pulito.
+
+### 7.6.1 Smoke A/B su L5 (`@6409487`, dev-fast, 5 run per braccio)
+
+| Braccio | L5 verificati | Tempo totale | Totale scritto |
+|---|---|---|---|
+| `full` (guardia attiva) | **3/5** | 140 s | 1792 corretto in 3 run |
+| `−coherence` (guardia ablata) | **1/5** | 214 s | 1492 / 1492 / 1592 accettati senza obiezioni |
+
+Riferimento di §7.5, stesso gradino e stesso hardware: `full` era **2/5**, `−calc` 1/5.
+
+Il braccio con la guardia è anche **il 35% più veloce**: un rifiuto immediato costa una
+riscrittura, mentre un artefatto incoerente costa un giro completo di verifica fallita più il
+rientro nella ricerca.
+
+### 7.6.2 Il meccanismo, run per run (log dei tool, braccio `full`)
+
+| Run | Morsi della guardia | Cosa è successo dopo | Esito |
+|---|---|---|---|
+| 1 | 1 (`total=1392`) | riscrive `total=1792` alla chiamata successiva | ✅ |
+| 2 | 1 (`total=1202`) | va a `run_tests` **credendo di aver scritto**, poi ricomincia a cercare | ❌ |
+| 3 | 1 (`total=1532`) | chiama `edit_file` su un file **mai creato**, due volte | ❌ |
+| 4 | 1 | riscrive `total=1792` | ✅ |
+| 5 | 0 | totale giusto al primo colpo | ✅ |
+
+**La guardia ha morso in 4 run su 5** — cioè l'errore aritmetico è quasi universale su questo
+gradino, molto più di quanto suggerisse il punteggio. Ma solo **2 morsi su 4** si sono
+convertiti.
+
+### 7.6.3 Il difetto scoperto dal fallimento (e il fix)
+
+Le due run perse condividono la stessa causa, e **non riguarda l'aritmetica**: *un rifiuto di
+scrittura non diceva al modello che il file non esisteva*. Il modello trattava il rifiuto come
+un successo e proseguiva su un mondo immaginario — chiamando `edit_file` su un file assente o
+verificando un artefatto mai scritto.
+
+Fix (`fs.refusal_state`, `@63f55eb`): ogni hint di rifiuto ora dichiara lo stato reale del
+disco — *"answer.txt does NOT exist: nothing was written. Call write_file again with the full
+content — edit_file cannot work, there is no file to edit yet"* oppure *"still has its
+PREVIOUS content"*. Applicato anche a `syntax_error`, che aveva sempre avuto la stessa
+trappola senza che nessuno l'avesse notata.
+
+**Lezione trasversale, la più riusabile di questa tornata:** un errore che dice *cosa era
+sbagliato* ma non *com'è rimasto il mondo* lascia il modello a ragionare su uno stato che non
+esiste. Vale per ogni gate che rifiuta un'azione, non solo per questo.
+
+### 7.6.4 Dopo il fix (`@63f55eb`, dev-fast, 5 run)
+
+| Configurazione | L5 verificati | Tempo | Morsi convertiti |
+|---|---|---|---|
+| workflow, solo la regola nel prompt (§7.5) | 2/5 | — | — (lo strumento non veniva invocato) |
+| + guardia di coerenza in scrittura | 3/5 | 140 s | 2 su 4 |
+| + il rifiuto dichiara lo stato del disco | **5/5** | **134 s** | **4 su 4** |
+| guardia ablata (`−coherence`) | 1/5 | 214 s | — |
+
+**La guardia ha morso in 4 run su 5 e tutte e 4 si sono riprese** scrivendo `total=1792` alla
+chiamata immediatamente successiva; la quinta aveva il totale giusto al primo colpo. Il gradino
+passa **5 volte su 5** — ed è il primo gradino che il modello nudo non vede in nessuna
+configurazione (B1 0/3, B3 0/3).
+
+**Il dato più istruttivo di tutta la tornata:** in nessuna delle 5 run il modello ha invocato la
+calcolatrice. Zero. Il gradino è stato risolto **senza** che l'operazione fosse eseguita
+correttamente dal modello, perché non gli è più stata chiesta: il control plane la esegue,
+rifiuta l'incoerenza e restituisce il numero: al modello resta la trascrizione. È la conferma
+operativa di PS-D11 — *il modello crea il significato, il control plane crea l'identità* —
+applicata all'aritmetica.
+
+**Riserve dichiarate:** 5 run per braccio su GPU (`dev-fast`), non su `severino-sim`; la banda
+di rumore GPU misurata è 2↔7 su 20 (§1.3), quindi 5/5 contro 1/5 è indicativo e va confermato
+sul profilo ufficiale. Il **meccanismo**, invece, è osservato direttamente sui log dei tool
+(rifiuto → riscrittura corretta → giudice verde), e non dipende dalla statistica.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
-- [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify` su GPU (in corso)
+- [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto: §7.6.4; mancano L6 e L7)
+- [ ] L5 con la guardia su `severino-sim` (il 5/5 di §7.6.4 è GPU, va confermato sul profilo ufficiale)
 - [ ] Ladder B4 post-fix (workflow + thinking, con le stesse ablazioni) — il blocco pre-fix è da buttare
 - [ ] **Ladder ufficiale su severino-sim**: B2 + B4 col codice fixato, run multiple → i numeri che andranno nel README
 - [ ] Diagnosi di L7 (perché 60 passi non bastano)

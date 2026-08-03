@@ -611,6 +611,7 @@ Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i comm
 | *Interludio planner-system (PS0–PS7, 2026-08-02/03)* | `v3.1.0` → `v4.0.0` | v. `plan_planner_system.md` |
 | *Campagna thinking (TH0–TH3, 2026-08-03)* | `v4.1.0` → `v4.2.0` | v. `plan_thinking_ab.md` |
 | Fine F3-bis (micro-slice multi-dominio) | `v4.3.0` | media |
+| *Campagna LADDER (attribuzione modello↔workflow, 2026-08-03)* | `v4.4.0` → `v4.5.x` | v. §LADDER |
 | Fine F4 | `v5.0.0` | grande |
 | Fine F5 | `v6.0.0` | grande |
 | Fine F6 | `v6.1.0` | media |
@@ -1339,6 +1340,66 @@ F6 (la più importante):** il percorso diretto per i task quotidiani deve essere
 diretto — materiali raccolti deterministicamente + una chiamata + giudice — non il Worker-loop:
 su questa classe di task il loop è overhead puro. La probe resta nel repo come braccio di
 controllo permanente per ogni task futuro della serie.
+
+---
+
+## Campagna LADDER — attribuzione modello ↔ workflow → `v4.4.0` → `v4.5.x`
+
+📎 **Metodo:** §LA MATRICE DI MISURA (regola permanente) · **Origine:** richiesta utente
+2026-08-03 — *"quanto è merito del modello e quanto del workflow? Bisogna creare una batteria
+di test di difficoltà crescente e farglieli svolgere nudo finché non fallisce. Poi riprovare
+col loop agentico"*.
+🎯 **Scope:** costruire un asse di difficoltà **deterministico e rigenerabile** che cresce in
+**ampiezza** a cognizione costante per fatto, trovare il punto di rottura del modello nudo,
+e sopra quel punto attribuire ogni verde a un componente identificato tramite ablazione.
+
+- [x] **LAD.1** 🤖 Generatore del corpus a 7 gradini, seed fisso, giudici esterni non
+  modificabili — `bench/ladder/generate.py`. **FATTO**, con due difetti di misura scoperti e
+  corretti in corso d'opera (`data.md` §7.5): il grassetto markdown sui soli bersagli
+  penalizzava **solo** il braccio workflow; il giudice stampava il valore atteso, cioè
+  **regalava la risposta**. Test permanente che asserisce l'assenza di `**` nel corpus.
+- [x] **LAD.2** 🤖 Braccia nude B1/B3 con troncamento dichiarato — `bench/ladder/run_naked.py`.
+  **FATTO.** Soffitto del 2B nudo localizzato: **~5.8K token di materiale, 5 fatti, nessuna
+  aggregazione**; sopra, zero in tutte e tre le configurazioni.
+- [x] **LAD.3** 🤖 Bracci agentici B2/B4 con ablazioni da CLI — `bench/ladder/run_agentic.py`.
+  **FATTO.** Attribuzione principale: **la ricerca selettiva è il componente portante**
+  (`−search` = 0/5 su tutti i gradini, replicato 3× su due corpus); **la verifica compra
+  onestà, non throughput** (`−verify` = 8 false dichiarazioni in 5 run, contro 1 in oltre 550
+  run verificate).
+- [x] **LAD.4** 🤖 **L'esperimento sull'obbedienza** (`data.md` §7.5): tre livelli di
+  persuasione testuale (regola numerata → nome pieno `calculator` → descrizione MANDATORY)
+  portano l'invocazione dello strumento dal 16% al 40% e **non muovono il punteggio** (L5
+  fermo a 2/5). **Verdetto: un'istruzione non produce obbedienza in questo regime.**
+- [x] **LAD.5** 🤖 **F4 applicato ai contenuti** — `redgiant/tools/coherence.py`
+  (`arithmetic_check`), cablato in `write_file`/`edit_file`/`write_patch` via
+  `fs.coherence_check`, ablabile con `RG_WORKER_ABLATE=coherence`. **FATTO** (`v4.4.0`).
+  Motivazione: dove esiste un oracolo deterministico l'operazione non si *suggerisce*, si
+  **toglie dalle mani del modello** — un totale non è significato, è identità derivata, e
+  l'identità appartiene al control plane (PS-D11). Guardia deliberatamente conservativa
+  (solo testo, totale ultimo, ≥2 addendi, un solo totale): un falso positivo blocca lavoro
+  legittimo, che è peggio di un mancato aiuto. **Non è un oracolo sul task**: somma ciò che
+  il modello ha scritto, non ciò che è vero.
+- [x] **LAD.6** 🤖 **Lo stato del mondo nei rifiuti** — `fs.refusal_state`. **FATTO**
+  (`v4.4.1`). Scoperto misurando LAD.5: la guardia mordeva in 4 run su 5 ma solo 2 si
+  riprendevano — le altre chiamavano `edit_file` su un file **mai creato** o verificavano un
+  artefatto mai scritto. *Un rifiuto che dice cosa era sbagliato ma non com'è rimasto il
+  mondo lascia il modello a ragionare su uno stato inesistente.* Applicato anche a
+  `syntax_error`, che portava la stessa trappola da F1. **Regola generale per ogni gate
+  futuro che rifiuta un'azione.**
+- [ ] **LAD.7** 🔎 **Verifica di campagna:** L5/L6/L7 su `severino-sim` col codice finale,
+  bracci B2 completi (`full`, `−search`, `−verify`, `−retry`, `−calc`, `−coherence`) e B4
+  simmetrico, run multiple. Sono **questi** i numeri destinati al README e a `data.md`; gli
+  attuali sono smoke GPU dichiarati tali.
+- [ ] **LAD.8** 🔎 Diagnosi di L7: quando arriva a scrivere produce **8 fatti su 8 e la somma
+  esatta**, ma di norma non ci arriva. Il problema è di **completamento**, non di correttezza.
+
+**ESITO PARZIALE (2026-08-03, GPU, 5 run per braccio — `data.md` §7.6):** L5 passa da **2/5**
+(solo la regola nel prompt) a **3/5** (guardia) a **5/5** (guardia + stato del rifiuto), con
+`−coherence` a 1/5 e il braccio con la guardia anche **più veloce** (134s vs 214s: un rifiuto
+immediato costa una riscrittura, un artefatto incoerente costa un giro di verifica fallita).
+**In nessuna delle 5 run vincenti il modello ha invocato la calcolatrice**: il gradino è stato
+risolto senza che il modello eseguisse mai l'operazione, perché non gliela si chiede più.
+È il primo gradino che il modello nudo non vede in nessuna configurazione (B1 0/3, B3 0/3).
 
 ---
 

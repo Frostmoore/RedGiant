@@ -210,7 +210,7 @@ Every rung is then measured on the full **2×2 matrix, ablations included in bot
 | **Workflow** (agent loop, tools, verification) | **B2** (+ablations) | **B4** (+same ablations) |
 
 - **B1 — naked model.** Everything the task needs is pasted into one prompt; the model answers once; its output *is* the artifact; the task's real judge grades it. No tools, no loop, no retries, no verification. When materials exceed the context they are truncated and the truncation is declared — that is the physical limit of a one-shot system, not an imposed handicap. **Isolates: the model's own capability.** Run by [`bench/ladder/run_naked.py`](bench/ladder/run_naked.py).
-- **B2 — full workflow, plus one ablation per arm.** The real agent: it finds files, searches, reads, writes, runs the checker, retries. Four arms, each removing exactly one component (`RG_WORKER_ABLATE`): `full` (nothing removed) · `−search` (no `search_code`: it must list and read blindly) · `−verify` (deterministic verification off — the system is *believed* when it says "done") · `−retry` (one attempt only, but with tools). **Isolates: how much the harness raises the floor, and which component pays for it.** Run by [`bench/ladder/run_agentic.py`](bench/ladder/run_agentic.py).
+- **B2 — full workflow, plus one ablation per arm.** The real agent: it finds files, searches, reads, writes, runs the checker, retries. One arm per component removed (`RG_WORKER_ABLATE`): `full` (nothing removed) · `−search` (no `search_code`: it must list and read blindly) · `−verify` (deterministic verification off — the system is *believed* when it says "done") · `−retry` (one attempt only, but with tools) · `−calc` (no calculator tool) · `−coherence` (the write-time arithmetic guard off). **Every component added to the system ships with its own ablation lever** — if it cannot be removed, its contribution cannot be attributed. **Isolates: how much the harness raises the floor, and which component pays for it.** Run by [`bench/ladder/run_agentic.py`](bench/ladder/run_agentic.py).
 - **B3 — naked model + thinking.** Identical to B1, but the model's native reasoning channel opens before it answers (two-call protocol, F19). **Isolates: what explicit reasoning buys with zero scaffolding.**
 - **B4 — workflow + thinking, with the same four ablations.** The symmetry is deliberate and mandatory: only by ablating *inside* the thinking block can you ask the question no other arm poses — **does reasoning substitute for a missing component?** (Can a thinking agent compensate for having no verification? no search?)
 
@@ -224,11 +224,11 @@ The comparisons this makes possible: **B2−B1** = value of the scaffolding · *
 | L2 | 15 docs · 1K tok | 3 | **3/3** | **3/3** | — | — | — | — |
 | L3 | 40 docs · 2.5K tok | 4 | **3/3** | **3/3** | — | — | — | — |
 | L4 | 90 docs · 5.8K tok | 5 | **3/3** | **3/3** | — | — | — | — |
-| **L5** | 90 docs (= L4) | 5 **+ sum** | **0/3** | **0/3**¹ | ✗ | ✗ | ✗ | ✗ |
+| **L5** | 90 docs (= L4) | 5 **+ sum** | **0/3** | **0/3**¹ | ✗ → **5/5**² | ✗ | ✗ | ✗ |
 | **L6** | 200 docs · 12.7K tok | 6 | **0/3** | **0/3** | **✓** | ✗ | ✗ **(lied)** | ✗ |
 | **L7** | 400 docs · 25.3K tok | 8 + sum | **0/3** | *running* | ✗ | ✗ | ✗ | ✗ |
 
-*Rungs L1–L4 are not run through the workflow by design: where the naked model passes, the task measures nothing about the harness.* ¹ Confounded and being re-run: the thinking budget eats 1536 tokens of context, so on near-limit rungs the thinking arm sees **less material** (6.0K vs 7.5K) — a real trade-off the matrix itself exposed, disambiguated by repeating L5 with a 256-token thinking budget.
+*Rungs L1–L4 are not run through the workflow by design: where the naked model passes, the task measures nothing about the harness.* ¹ Confounded and being re-run: the thinking budget eats 1536 tokens of context, so on near-limit rungs the thinking arm sees **less material** (6.0K vs 7.5K) — a real trade-off the matrix itself exposed, disambiguated by repeating L5 with a 256-token thinking budget. ² L5 was **flipped after the fact**: see *An instruction does not produce obedience* below — the ✗ is the pre-guard measurement on severino-sim, the 5/5 is the post-guard GPU smoke awaiting official confirmation.
 
 **Cost and honesty per arm** (the three failing rungs, aggregate):
 
@@ -239,7 +239,36 @@ The comparisons this makes possible: **B2−B1** = value of the scaffolding · *
 | −verify | 0/3 | **1** ⚠️ | 346K | 675s | **verification buys honesty, not throughput**: the only arm in the whole campaign that ever claimed "done" on an unfinished task — and it did so precisely on L6 |
 | −retry | 0/3 | 0 | **154K** | 297s | retry is fuel, not engine: without it the system dies **fast and cheap** (−59% tokens) |
 
-**What this measures, stated plainly:** the naked 2B's ceiling on this axis is **~5.8K tokens of material, 5 facts, no aggregation** — above that, zero. The workflow's contribution is **not** cognition: it is *selective retrieval* (the only component whose removal loses the won rung) and *honesty* (the only component whose removal produces a false claim). And it is **not enough yet**: two rungs out of three stay red in every arm — aggregation (L5) and extreme volume (L7) remain beyond reach, workflow or not.
+**What this measures, stated plainly:** the naked 2B's ceiling on this axis is **~5.8K tokens of material, 5 facts, no aggregation** — above that, zero. The workflow's contribution is **not** cognition: it is *selective retrieval* (the only component whose removal loses the won rung) and *honesty* (the only component whose removal produces a false claim).
+
+#### An instruction does not produce obedience — so stop instructing
+
+L5 is L4 plus one sum. The model finds **5 facts out of 5** and then gets the total wrong, always the same way: units and tens right, hundreds wrong — the arithmetic of a **dropped carry**. A deterministic calculator tool was already available. Three escalating levels of textual persuasion were measured in sequence:
+
+| Persuasion | Tool actually invoked | L5 verified |
+|---|---|---|
+| tool present, no rule | 7/43 runs (16%) | 2/5 |
+| + numbered rule in the prompt card, with the measured *why* | ~40% | 2/5 |
+| + full name `calculator` + description marked **MANDATORY** | 40% | 2/5 |
+
+**Sixty percent of runs kept doing mental arithmetic**, and the score never moved. Ablating the tool changed nothing either (1/5 vs 2/5) — you cannot ablate what was never called. The conclusion is uncomfortable and worth stating: in this regime, *telling a small model to do something is not a control mechanism*.
+
+So the operation was **taken out of the model's hands**. A total is not meaning; it is **identity derived** from values the model already wrote — and identity belongs to the control plane. [`redgiant/tools/coherence.py`](redgiant/tools/coherence.py) checks, *before* the bytes reach the disk, that a declared total matches the values in the same artifact; if it does not, the write is **refused** and the correct number is returned in the error. This is the project's F4 principle (*make incoherent output impossible to emit, rather than validating it afterwards*) applied to **content** for the first time instead of syntax. It is deliberately conservative — text files only, never code or config; the total must be the last numeric assignment; at least two addends — because a false positive here blocks legitimate work, which is far worse than a missed catch. And it is **not an oracle on the task**: it sums what the model wrote, not what is true, so wrong facts still yield a wrong total. Internal coherence, not correctness.
+
+| Configuration | L5 verified | Wall | Refusals converted |
+|---|---|---|---|
+| workflow, rule in the prompt only | 2/5 | — | — |
+| + write-time coherence guard | 3/5 | 140s | 2 of 4 |
+| + refusal declares the state of the world | **5/5** | **134s** | **4 of 4** |
+| guard ablated (`−coherence`) | 1/5 | 214s | — |
+
+The middle row taught more than the last one. The guard fired in **4 runs out of 5** — the arithmetic error was near-universal, far more common than the score suggested — but only half the refusals converted. The tool log showed why, and it had nothing to do with arithmetic: **a refused write never told the model the file did not exist.** One run called `edit_file` on a file that was never created (twice); another went straight to `run_tests` to verify an artifact it had never written. The model treated a refusal as a success and reasoned on a world that did not exist. The fix ([`fs.refusal_state`](redgiant/tools/fs.py)) makes every refusal state what is actually on disk — *"answer.txt does NOT exist: nothing was written… edit_file cannot work, there is no file to edit yet"* — and it was applied to `syntax_error` too, which had carried the same trap unnoticed since F1.
+
+**The generalizable lesson:** an error that says *what was wrong* but not *how the world was left* leaves the model reasoning about a state that does not exist. That holds for every gate that refuses an action.
+
+And the detail that makes the point sharpest: **in none of the five passing runs did the model invoke the calculator.** Zero. The rung was solved without the model ever performing the arithmetic correctly — because it was no longer asked to.
+
+Still, the ladder is **not conquered**: L7 (25K tokens, 8 facts, aggregation) remains red, and these numbers are GPU smoke tests (5 runs, noise band 2↔7 of 20) awaiting confirmation on the reference CPU profile.
 
 Every countermeasure above ships as working code in this repository; the [codebase atlas §9](memory/codebase_reference.md) maps each of the 27 underlying observations to its exact file, signature and technical cause (the F15–F18 observations join the atlas at PS5 closure).
 

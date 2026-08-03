@@ -192,6 +192,8 @@ class ToolSpec      # name, description, risk, reversible, requires_approval, ti
 
 **Coherence gate (2026-08-03, F4 sui CONTENUTI):** gli stessi tre writer chiamano `coherence_check` sul testo risultante; un artefatto testuale con un totale incoerente rispetto ai valori che dichiara è rifiutato con `incoherent_arithmetic` e il numero corretto nell'hint. Logica in [`redgiant/tools/coherence.py`](#redgianttoolscoherencepy--guardia-di-coerenza-aritmetica-f4-sui-contenuti); `coherence_check` è il solo wrapper che applica l'ablazione `RG_WORKER_ABLATE=coherence`.
 
+**Stato del mondo nei rifiuti (`refusal_state`, 2026-08-03) — TRAPPOLA DISINNESCATA:** ogni hint di rifiuto (`incoherent_arithmetic` **e** `syntax_error`) dichiara ora com'è rimasto il disco: *"… does NOT exist: nothing was written. Call write_file again with the full content — edit_file cannot work, there is no file to edit yet"* oppure *"still has its PREVIOUS content"*. **Causa tecnica:** misurato su L5 (`data.md` §7.6), su 4 write rifiutati 2 run morivano perché il modello trattava il rifiuto come un successo — una chiamava `edit_file` su un file mai creato (due volte), l'altra andava a `run_tests` su un artefatto inesistente. La regola generale, valida per **ogni gate futuro che rifiuta un'azione**: un errore che dice *cosa* era sbagliato ma non *com'è rimasto il mondo* lascia il modello a ragionare su uno stato che non esiste.
+
 ```python
 class ReadFileArgs
 class ListFilesArgs
@@ -200,6 +202,7 @@ class EditFileArgs
 class WriteFileArgs
 def syntax_check(path: Path, content: str) -> str | None
 def coherence_check(path: Path, content: str) -> str | None  # None se ablato; delega a coherence.arithmetic_check
+def refusal_state(real: Path, path: str) -> str  # stato REALE del disco, accodato a ogni hint di rifiuto
 def syntax_hint(detail: str) -> str  # hint mirato accodato ai syntax_error (f-string annidati → .format/concat, pilota PS5)
 def read_file(scope: Scope, path: str, start_line: int = 1, end_line: int | None = None) -> ToolResult
 def list_files(scope: Scope, glob: str, max_results: int = 200) -> ToolResult
