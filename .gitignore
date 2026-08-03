@@ -19,3 +19,6 @@ bench/results/raw/
 
 # richiesta utente 2026-08-03: le ambizioni restano locali
 memory/ambition.md
+
+# i report GPU (dev-fast) sono NON UFFICIALI per definizione (F17): mai committati
+bench/results/eval_dev-fast_*.md
