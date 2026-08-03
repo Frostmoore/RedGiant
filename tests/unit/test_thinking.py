@@ -117,10 +117,16 @@ def test_think_clamped_to_context_room(monkeypatch):
     from dataclasses import replace
     captured: list[dict] = []
     c = _client(monkeypatch, [_resp("t"), _resp("out")], captured)
-    c.cfg = replace(CFG, ctx_size=200)
+    c.cfg = replace(CFG, ctx_size=300)
     c.complete(PARTS, role="worker", max_tokens=100, think=99999)
-    room = 200 - (len(PARTS.render()) // 4) - 100 - 64
+    room = 300 - (len(PARTS.render()) // 4) - 100 - 64
     assert captured[0]["n_predict"] == room > 0
+    # e se non c'e' spazio nemmeno per la risposta -> overflow esplicito
+    from redgiant.llm.client import ContextOverflow
+    c2 = _client(monkeypatch, [_resp("t"), _resp("out")], [])
+    c2.cfg = replace(CFG, ctx_size=200)
+    with pytest.raises(ContextOverflow):
+        c2.complete(PARTS, role="worker", max_tokens=100, think=10)
 
 
 def test_thinking_roles_lever(monkeypatch):
