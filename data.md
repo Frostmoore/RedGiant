@@ -406,6 +406,36 @@ progetto**, ed entrambe sono spiegate:
 
 ---
 
+## 7.5 LADDER — l'esperimento sull'obbedienza a una regola (2026-08-03, GPU)
+
+Diagnosi: su L5 il modello estrae **5 fatti su 5 corretti** e sbaglia solo il totale, sempre
+allo stesso modo — unità e decine giuste, centinaia sbagliate (`1592` è esattamente la somma
+col **riporto dimenticato**). Analisi degli artefatti su 43 run: **solo 7 invocavano lo
+strumento di calcolo** pur avendolo disponibile; 13 su 43 sprecavano metà del budget chiamando
+tool inesistenti (`tool_name_placeholder`).
+
+Tre livelli di persuasione testuale, misurati in sequenza:
+
+| Intervento | Uso dello strumento | L5 verificati |
+|---|---|---|
+| strumento presente, nessuna regola | 7/43 (16%) | 4/5 → 2/5 |
+| + regola numerata nella card (con il *perché* misurato) | ~40% | 2/5 |
+| + nome pieno `calculator` + descrizione **MANDATORY** + giudice che non regala la risposta | **2/5 (40%)** | **2/5** · ablato: 1/5 |
+
+**Il 60% delle run continua a calcolare a mente.** Un'istruzione procedurale esplicita, ripetuta
+su tre livelli, non produce comportamento affidabile in questo regime — e l'ablazione dello
+strumento non morde (2/5 vs 1/5) proprio perché lo strumento non viene invocato.
+
+**Difetti di misura scoperti e corretti lungo il percorso** (entrambi invalidavano il gradino):
+il corpus marcava i bersagli in grassetto markdown, rompendo le ricerche naturali **solo** nel
+braccio workflow; e il giudice stampava `expected 1792, got 1892`, cioè **regalava la
+risposta** a chiunque eseguisse il check — il task misurava la lettura di un messaggio d'errore.
+
+**Conclusione operativa:** dove esiste un oracolo deterministico, l'operazione non va
+*suggerita* al modello ma **tolta dalle sue mani** (il totale non è significato, è identità
+derivata → appartiene al control plane). Prossimo passo misurato: guardia deterministica che
+rende l'incoerenza aritmetica irrappresentabile invece di sconsigliata.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify` su GPU (in corso)
