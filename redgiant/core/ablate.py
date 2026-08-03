@@ -8,6 +8,11 @@ config, mai in produzione. `RG_WORKER_ABLATE="search,verify,retry"`:
 - verify: la verifica deterministica NON gira, si crede al report del Worker
   (= "agente senza oracoli", il braccio che misura quanto vale la verifica)
 - retry: nessun secondo tentativo (un colpo solo, come il nudo ma con i tool)
+- calc: il catalogo perde `calculator` (aritmetica solo mentale)
+- coherence: la guardia di coerenza aritmetica in scrittura non gira, cioe'
+  un artefatto con un totale sbagliato finisce sul disco (braccio che misura
+  quanto vale togliere l'operazione dalle mani del modello invece di
+  raccomandargliela — data.md §7.5)
 """
 
 from __future__ import annotations

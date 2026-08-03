@@ -68,6 +68,20 @@ def syntax_check(path: Path, content: str) -> str | None:
     return None
 
 
+def coherence_check(path: Path, content: str) -> str | None:
+    """F4 sui contenuti: un artefatto internamente incoerente non si scrive.
+
+    Vive qui accanto a syntax_check perche' e' lo stesso contratto — verifica
+    il testo RISULTANTE prima del disco — ma su una proprieta' semantica
+    invece che sintattica. Ablabile (RG_WORKER_ABLATE=coherence) per poterne
+    misurare il contributo isolato."""
+    from redgiant.core.ablate import worker_ablated
+    if worker_ablated("coherence"):
+        return None
+    from redgiant.tools.coherence import arithmetic_check
+    return arithmetic_check(path, content)
+
+
 class _Args(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -194,6 +208,10 @@ def edit_file(scope: Scope, path: str, old_string: str, new_string: str,
                                                   "file's syntax. Fix new_string and retry."
                                                   + syntax_hint(err)},
                           error="syntax_error")
+    bad = coherence_check(real, new_text)
+    if bad is not None:
+        return ToolResult(ok=False, data={"hint": "edit NOT applied: " + bad},
+                          error="incoherent_arithmetic")
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgedit")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
@@ -231,6 +249,10 @@ def write_file(scope: Scope, path: str, content: str) -> ToolResult:
                                                   "error. Fix it and retry."
                                                   + syntax_hint(err)},
                           error="syntax_error")
+    bad = coherence_check(real, content)
+    if bad is not None:
+        return ToolResult(ok=False, data={"hint": "file NOT written: " + bad},
+                          error="incoherent_arithmetic")
     existed = real.is_file()
     real.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgwrite")
@@ -280,12 +302,17 @@ def write_patch(scope: Scope, path: str, unified_diff: str) -> ToolResult:
         return ToolResult(ok=False, data={"applied": 0, "rejected": rejected},
                           error="all_hunks_rejected")
 
-    err = syntax_check(real, "\n".join(lines) + ("\n" if lines else ""))
+    result_text = "\n".join(lines) + ("\n" if lines else "")
+    err = syntax_check(real, result_text)
     if err is not None:
         return ToolResult(ok=False, data={"detail": err,
                                           "hint": "patch NOT applied: the result would "
                                                   "break the file's syntax."},
                           error="syntax_error")
+    bad = coherence_check(real, result_text)
+    if bad is not None:
+        return ToolResult(ok=False, data={"hint": "patch NOT applied: " + bad},
+                          error="incoherent_arithmetic")
 
     fd, tmp = tempfile.mkstemp(dir=real.parent, suffix=".rgpatch")
     try:
