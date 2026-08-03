@@ -568,6 +568,7 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 | Registro delle tolleranze modello-specifiche (N-TAB, CRLF, code vuote, closest_match, soglie): euristiche overfittate su E2B QAT b10200 | vanno A/B-ate come sistema al cambio di modello/build | F6/F8 |
 | Nessun task sintetico "sporco" (repo grande, rumore, test lenti) | il micro-mondo non prepara a F8 | pre-F8 |
 | I marcatori di turno S1→S7 (`<start_of_turn>`) NON sono token speciali di questo GGUF (7 token testuali); il protocollo nativo è `<|turn>`/`<turn|>` (control 105/106, scoperto in TH0) | funziona così da F0 (60/60 misurato) — cambiare ora invaliderebbe la comparabilità di tutta la serie storica | A/B dedicato post-TH3, insieme al retest tolleranze |
+| Streaming dei token in GUI per il percorso chat (decisione utente TH0: ~15s di pensiero per chiamata sono accettabili SE l'utente vede lo stream) | il runtime attuale è batch/non-streaming (D7: task asincroni); serve solo per l'uso conversazionale quotidiano | F7 (advice/chat), insieme al worker quotidiano con thinking |
 | Evaluator senza varianza multi-seed (1 run = 1 traiettoria) | costa CPU; serve per distinguere "funziona" da "è passato" | F6 |
 | `task_config.json` su file = seconda fonte di stato oltre al DB | uso single-writer, fallimento benigno e visibile | con l'evoluzione GUI di F4 |
 | Protocollo umano = segreteria (solo ultima risposta, niente cronologia) | il dialogo vero è il protocollo F4 | F4.2/F4 GUI |
