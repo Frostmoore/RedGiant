@@ -193,6 +193,17 @@ def write_file(scope: Scope, path: str, content: str) -> ToolResult
 def write_patch(scope: Scope, path: str, unified_diff: str) -> ToolResult
 ```
 
+### `redgiant/tools/web.py` — HTTP minimale (F3b.1, anticipo di F7.2)
+
+Whitelist da config (`security.http_allowed_domains`, default VUOTA = niente rete), solo http(s), timeout 15s, size-cap 200KB, guardia sui redirect (destinazione ri-verificata), CACHE per-task in `.rg_http_cache/` dentro la workdir (la verifica rilegge LA copia vista dal modello; dir esclusa da `_repo_listing`, `build_ledger` e quindi dai prompt). Registrato nel catalogo come `http_get` (approval-free, "medium").
+
+```python
+CACHE_DIR = ".rg_http_cache"
+class HttpGetArgs
+def _host_allowed(host: str, allowed: tuple[str, ...]) -> bool
+def http_get(scope: Scope, allowed_domains: tuple[str, ...], url: str) -> ToolResult
+```
+
 ### `redgiant/tools/search.py` — ricerca (F1.4)
 
 `resolve_ripgrep` salta gli Scripts del venv (omonimia col nostro entry point); `search_python` è il fallback puro Python quando ripgrep manca (stesso contratto).
@@ -416,7 +427,10 @@ Copia del repo in tmp (il sorgente non si sporca), run, poi giudice esterno (`su
 
 ```python
 class EvalTask      # id, domain, prompt, repo_dir, plan_file, success_cmd, timeout_s, tags,
-                    # writable_globs, test_commands, requires, expected_outcome
+                    # writable_globs, test_commands, requires, expected_outcome,
+                    # http_allowed_domains (F3b: override per-task della whitelist),
+                    # service_script (F3b: servizio locale avviato/terminato dall'harness,
+                    # vive nella dir del task NON nel repo — il modello non lo vede)
 class EvalResult    # task_id, completed, verified, skipped, total_tokens, useful_tokens,
                     # wall_s, llm_calls, tool_calls, retries
 def discover_tasks(tasks_dir: Path) -> list[EvalTask]
@@ -452,7 +466,7 @@ Rotte GUI: tabella F2.2 del piano (inline in `web/app.py`) + **PS7.2**: `GET /ta
 
 ## 6. Configurazione
 
-V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità PS0:** sezione `[plansys]` (`enabled=false` PS-D9, `max_phases`, `max_micro_per_phase`, `projection_max_tokens`, `m_pass_max_tokens`, `test_author_max_tokens`, `mutation_probe`) → `Config.plansys_enabled: bool` + `Config.plansys: PlansysCfg`. **Novità TH0:** chiavi `[llm] think_open`/`think_close` (marcatori del canale di pensiero, estratti dal chat template incorporato nel GGUF: `<|channel>thought\n` / `<channel|>`; default "" nei profili senza thinking → `complete(think=N)` con marcatori vuoti alza LlmError). **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
+V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità PS0:** sezione `[plansys]` (`enabled=false` PS-D9, `max_phases`, `max_micro_per_phase`, `projection_max_tokens`, `m_pass_max_tokens`, `test_author_max_tokens`, `mutation_probe`) → `Config.plansys_enabled: bool` + `Config.plansys: PlansysCfg`. **Novità F3b.1:** chiave `security.http_allowed_domains` (whitelist per `http_get`, default `[]` = niente rete; i task la estendono via task.toml, mai il default). **Novità TH0:** chiavi `[llm] think_open`/`think_close` (marcatori del canale di pensiero, estratti dal chat template incorporato nel GGUF: `<|channel>thought\n` / `<channel|>`; default "" nei profili senza thinking → `complete(think=N)` con marcatori vuoti alza LlmError). **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
 
 ## 7. Catalogo dei test
 
@@ -464,8 +478,11 @@ V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. N
 | `test_prompts.py` (6) | prefisso S1–S4 byte-identico tra build, ordine sezioni+turn markers, append-only che preserva il prefisso, schema in S2 (non in S7), KeyError su ruolo ignoto, sezione TOOLS sempre presente |
 | `test_tools.py` (11) | Scope (traversal, globs di scrittura), read_file (troncamento dichiarato), edit_file (unico/ambiguo/mancante/replace_all/prefissi N-TAB), write_file (creazione+scope), write_patch (hunk pulito/respinto con expected/creazione file), run_tests (cmd_id ignoto, whitelist), dispatch (unknown/bad_args come dati, logging completo) |
 | `test_verify_and_worker.py` (8) | blocked non passa mai, done+evidenze+output passa, output mancante/evidenze vuote/check sconosciuto = fail, incoerenza WorkerStep come dato |
+| `test_thinking.py` (9, TH0) | think=None payload identico, two-call con stop/budget, troncamento pensiero NON errore, marcatori richiesti, TH-D2 parts intatte, clamp con spazio-risposta riservato + overflow esplicito, migrazione DB + budget che conta il pensiero una volta, phase_id come identità, leva RG_THINKING_* col fusibile 1536 |
+| `test_web_tool.py` (4, F3b.1) | whitelist vuota = niente rete, schemi/domini (incl. suffisso-truffa), cache che rilegge LA copia a rete spenta, redirect fuori whitelist respinto |
+| `test_f3bis_tasks.py` (5, F3b.2) | giudici T030-T032 SODDISFACIBILI con artefatti di riferimento (parametrizzato), servizio T031 vivo (payload+404), parsing harness delle chiavi F3b (whitelist per-task, service_script, domini) |
 
-Integration (marker `llm`): la vera integration è l'Evaluator stesso (T001–T006).
+Integration (marker `llm`): la vera integration è l'Evaluator stesso (T001–T006 + T030–T032 multi-dominio + T040–T042 multi-sessione).
 
 ## 8. Regole non negoziabili
 
