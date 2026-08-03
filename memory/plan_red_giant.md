@@ -1286,6 +1286,19 @@ più duro per il 2B — coerente con F18). Forbice 0, useful 100% su tutti e tre
 sui domini quotidiani alla prima uscita — ed è esattamente il regime (task stretti, catene
 corte, oracoli economici) dove la letteratura colloca il valore degli SLM (README §niche).
 
+**ADDENDUM — ATTRIBUZIONE DEL MERITO (probe "modello nudo", richiesta utente 2026-08-03,
+`bench/naked_probe.py` committata e automatica):** stesso compito, materiali inline, UNA
+completion, zero tool/loop/retry, stesso giudice → **9/9 VERDI anche nudo**. Attribuzione
+onesta: (a) la COGNIZIONE di questi task (estrazione, formato) è **tutta del modello**;
+(b) il merito del workflow qui è l'**autonomia end-to-end** (trovare i file, fare il fetch,
+scrivere l'artefatto — nella probe l'ho fatto io al posto suo), l'**onestà** (giudice,
+forbice 0) e la **sicurezza** (whitelist) — NON la capacità; (c) il costo dell'impacchettamento
+agentico è enorme sui task stretti: T032 = 140K token in loop vs <1K nudo. **Conseguenza per
+F6 (la più importante):** il percorso diretto per i task quotidiani deve essere DAVVERO
+diretto — materiali raccolti deterministicamente + una chiamata + giudice — non il Worker-loop:
+su questa classe di task il loop è overhead puro. La probe resta nel repo come braccio di
+controllo permanente per ogni task futuro della serie.
+
 ---
 
 ## Fase 4 — Verifica continua e supervisione → `v4.0.0`
