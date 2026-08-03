@@ -187,11 +187,12 @@ Gemma 4 E2B has a native reasoning channel (`<|channel>thought … <channel|>` �
 | Planning side thinks (Sirio + Mira→Altair) | 0→2/20¹ | 10–11/20 | 0.9–1.4 | 13–17K | 70–95s |
 | **Executor thinks (Giano only)** | **4/20** | **5/20 (halved)** | 1.3 | **8.5K (1.6×)** | 50s |
 | Everyone thinks | 1/20 | 7–8/20 | 1.1 | 16.9K | 88s |
-| Sirio + Giano think | 2/20 | — | **1.9 (record)** | 14.1K | 87s |
-| **Sirio + Mizar + Giano think** (verification sober) | **4/20** | — | **1.9 (record)** | 16.5K | 95s |
-| Mizar + Giano think | 2/20 | — | 0.8 | 10.8K | 62s |
+| Sirio + Giano think | 2/20 | 9/20² | **1.9 (record)** | 14.1K | 87s |
+| **Sirio + Mizar + Giano think** (verification sober) | **4/20** | 6/20² | **1.9 (record)** | 16.5K | 95s |
+| Mizar + Giano think | 2/20 | 4/20 (14 die at compile) | 0.8 | 10.8K | 62s |
 
 ¹ Round 1 exposed a new thinking-induced failure family: Mizar, having *reasoned about the whole plan*, copied the wrong phase id into its output (5/20 runs) — fixed permanently by making phase identity control-plane-owned, one more F15 rule.
+² Executor-death counts are not directly comparable across depths: in the Sirio arms far more runs *survive compilation and reach Giano* — deeper into later phases — so his exposure roughly doubles even as his per-attempt failure rate stays improved. The clean comparison is the executor-only row (same exposure as reference, deaths halved).
 
 What the grid says, taxonomy-backed: (a) a thinking Giano **halves his own failure rate** against standard proofs — the single cheapest win (1.6× cost); (b) thinking on the *verification* side (Vega/Altair) designs **richer, more demanding proofs** (three obligations per micro instead of one) — honesty up, conversion down, and it poisons even the everyone-thinks arm; (c) with verification kept sober, a thinking **Sirio buys execution depth** — both Sirio-arms hit a record **1.9 average green phases**, double the reference — making Sirio+Mizar+Giano the depth champion at equal best conversion; (d) **no arm breaks the ~4/20 conversion ceiling**: the last mile is still the wall. First official CPU battery (executor-thinking): 2/13 with a historic scalp — **the reasoning-trap task that had never passed in the project's entire history (the model must flip "that library is off-limits, so the bug must be in the caller") finally fell to a thinking Giano** — at ~2.9× wall (partially contaminated by parallel load; clean battery in progress, pre-registered decision rule pending). The general lesson — likely worth stealing for any multi-role agent system: **upgrading one role's intelligence moves the bottleneck, it does not dissolve it; placement beats quantity; measure every role upgrade on the whole chain, never on the role in isolation.**
 
