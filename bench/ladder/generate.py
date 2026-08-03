@@ -139,6 +139,10 @@ def build_rung(rid: str, n_docs: int, n_facts: int, computed: bool,
         f'timeout_s = 3600\n'
         f'tags = ["ladder", "{rid.lower()}", "research_local"]\n'
         f'writable_globs = ["answer.txt"]\n'
+        # il budget di passi e' proporzionale alla TAGLIA (ladder: 8 fatti in
+        # 400 documenti non si raccolgono in 20 mosse — L7 moriva senza mai
+        # scrivere il file, non per incapacita' ma per budget)
+        f'worker_max_steps = {max(20, min(60, n_docs // 5 + n_facts * 3))}\n'
         f'naked_materials = ["docs/*.md"]\n'
         f'naked_instruction = "{prompt}"\n\n'
         f"# LADDER {rid}: {n_docs} documenti, {n_facts} fatti"

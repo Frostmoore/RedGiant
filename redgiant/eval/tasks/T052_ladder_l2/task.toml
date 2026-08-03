@@ -5,6 +5,7 @@ success_cmd = "python judge.py"
 timeout_s = 3600
 tags = ["ladder", "l2", "research_local"]
 writable_globs = ["answer.txt"]
+worker_max_steps = 20
 naked_materials = ["docs/*.md"]
 naked_instruction = "The folder docs/ contains 15 service notes. Find these facts, reading ONLY what you need: the listen_port of service tucana; the retention_days of service aquila; the worker_count of service mensa. Write answer.txt with one line per fact, exactly 'tucana_listen_port=<value>', 'aquila_retention_days=<value>', 'mensa_worker_count=<value>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
 

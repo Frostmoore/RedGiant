@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from redgiant.config import Config
 from redgiant.state.models import ToolCallRow
 from redgiant.state.store import StateStore
+from redgiant.tools import calc as calc_mod
 from redgiant.tools import fs, proc, search, web
 from redgiant.tools.base import Scope, ToolResult, ToolSpec
 
@@ -75,6 +76,11 @@ def default_catalog(cfg: Config, scope: Scope,
                  "(cmd_id + argv, e.g. ['pytest','-q']) after discovering it from the "
                  "project files. The executable must be whitelisted.",
                  "medium", True, False, 5.0, proc.RegisterTestCommandArgs, _register),
+        ToolSpec("calc", "Compute an arithmetic expression exactly "
+                 "(e.g. '693+228+196'). USE THIS for any sum or arithmetic: "
+                 "never compute numbers in your head.",
+                 "low", True, False, 5.0, calc_mod.CalcArgs,
+                 lambda expression: calc_mod.calc(expression)),
         ToolSpec("http_get", "Fetch a small http(s) page from a whitelisted "
                  "domain (per-task cache: the same URL returns the same copy).",
                  "medium", True, False, 30.0, web.HttpGetArgs,
@@ -85,11 +91,13 @@ def default_catalog(cfg: Config, scope: Scope,
         ToolSpec("git_diff", "Show the unified diff against a ref (default HEAD).",
                  "low", True, False, 30.0, proc.GitDiffArgs, partial(proc.git_diff, scope)),
     ]
-    # ablazione di SOLO A/B (mai in produzione): senza search_code il modello
-    # deve listare e leggere file per file — misura il valore della ricerca
+    # ablazioni di SOLO A/B (mai in produzione): ogni componente aggiunto DEVE
+    # essere ablabile, sennò il suo contributo non e' attribuibile (matrice)
     from redgiant.core.ablate import worker_ablated
     if worker_ablated("search"):
         specs = [s for s in specs if s.name != "search_code"]
+    if worker_ablated("calc"):
+        specs = [s for s in specs if s.name != "calc"]
     return {s.name: s for s in specs}
 
 

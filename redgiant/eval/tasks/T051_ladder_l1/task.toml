@@ -5,6 +5,7 @@ success_cmd = "python judge.py"
 timeout_s = 3600
 tags = ["ladder", "l1", "research_local"]
 writable_globs = ["answer.txt"]
+worker_max_steps = 20
 naked_materials = ["docs/*.md"]
 naked_instruction = "The folder docs/ contains 5 service notes. Find these facts, reading ONLY what you need: the listen_port of service eridanus; the retention_days of service norma. Write answer.txt with one line per fact, exactly 'eridanus_listen_port=<value>', 'norma_retention_days=<value>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
 

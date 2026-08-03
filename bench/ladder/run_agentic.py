@@ -31,17 +31,22 @@ ARMS = {
     "-search": ("search", ""),
     "-verify": ("verify", ""),
     "-retry": ("retry", ""),
+    "-calc": ("calc", ""),                      # la calcolatrice deterministica
     "think": ("", "worker"),                    # B4: percorso diretto = Giano
     "think-search": ("search", "worker"),       # B4 SPECCHIA B2 ablazione per
     "think-verify": ("verify", "worker"),       # ablazione: il ragionamento
     "think-retry": ("retry", "worker"),         # compensa il pezzo mancante?
+    "think-calc": ("calc", "worker"),
 }
 # simmetria obbligatoria (utente 2026-08-03): stesse ablazioni nei due blocchi
-B2 = ["full", "-search", "-verify", "-retry"]
-B4 = ["think", "think-search", "think-verify", "think-retry"]
+B2 = ["full", "-search", "-verify", "-retry", "-calc"]
+B4 = ["think", "think-search", "think-verify", "think-retry", "think-calc"]
+# smoke GPU: i bracci piu' informativi, con N run per avere statistica
+SMOKE = ["full", "-calc", "-search", "-verify"]
 
 
-def main(profile: str, task_ids: list[str], arms: list[str]) -> int:
+def main(profile: str, task_ids: list[str], arms: list[str],
+         runs: int = 1) -> int:
     dirty = subprocess.run(["git", "status", "--porcelain"],
                            capture_output=True, text=True).stdout.strip()
     if dirty:
@@ -59,20 +64,25 @@ def main(profile: str, task_ids: list[str], arms: list[str]) -> int:
                 os.environ[var] = val
             else:
                 os.environ.pop(var, None)
+        greens = {t: 0 for t in task_ids}
         t0 = time.time()
-        try:
-            report = run_eval(profile, task_ids, out)
-            body = Path(report).read_text(encoding="utf-8")
-            verified = [l for l in body.splitlines()
-                        if l.startswith("**Verified")]
-            print(f"[{arm}] {' '.join(verified)} in {time.time()-t0:.0f}s",
-                  flush=True)
-            for line in body.splitlines():
-                if line.startswith("| T05"):
-                    print(f"    {line}", flush=True)
-        except Exception as e:
-            print(f"[{arm}] ERRORE dopo {time.time()-t0:.0f}s: {e}",
-                  flush=True)
+        for n in range(runs):
+            try:
+                report = run_eval(profile, task_ids, out)
+                body = Path(report).read_text(encoding="utf-8")
+                for line in body.splitlines():
+                    if line.startswith("| T05"):
+                        cells = [c.strip() for c in line.split("|")]
+                        if len(cells) > 3 and cells[3] == "True":
+                            greens[cells[1]] += 1
+                print(f"[{arm}] run {n+1}/{runs}: "
+                      + " ".join(f"{k}={v}" for k, v in greens.items()),
+                      flush=True)
+            except Exception as e:
+                print(f"[{arm}] run {n+1} ERRORE: {e}", flush=True)
+        print(f"[{arm}] TOTALE "
+              + " ".join(f"{k}={v}/{runs}" for k, v in greens.items())
+              + f" in {time.time()-t0:.0f}s", flush=True)
     os.environ.pop("RG_WORKER_ABLATE", None)
     os.environ.pop("RG_THINKING_ROLES", None)
     print("\nLADDER AGENTICA COMPLETA")
@@ -83,5 +93,7 @@ if __name__ == "__main__":
     prof = sys.argv[1] if len(sys.argv) > 1 else "severino-sim"
     ids = (sys.argv[2].split(",") if len(sys.argv) > 2 else ["T055"])
     spec = sys.argv[3] if len(sys.argv) > 3 else "B2"
-    a = {"B2": B2, "B4": B4, "all": B2 + B4}.get(spec, spec.split(","))
-    sys.exit(main(prof, ids, a))
+    a = {"B2": B2, "B4": B4, "all": B2 + B4,
+         "SMOKE": SMOKE}.get(spec, spec.split(","))
+    n = int(sys.argv[4]) if len(sys.argv) > 4 else 1
+    sys.exit(main(prof, ids, a, n))

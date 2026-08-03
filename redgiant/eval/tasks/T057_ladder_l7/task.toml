@@ -5,6 +5,7 @@ success_cmd = "python judge.py"
 timeout_s = 3600
 tags = ["ladder", "l7", "research_local"]
 writable_globs = ["answer.txt"]
+worker_max_steps = 60
 naked_materials = ["docs/*.md"]
 naked_instruction = "The folder docs/ contains 400 service notes. Find these facts, reading ONLY what you need: the listen_port of service mensa; the retention_days of service pyxis; the worker_count of service norma; the max_connections of service phoenix; the cache_size_mb of service orion; the listen_port of service borealis; the retention_days of service dorado; the worker_count of service tucana. Write answer.txt with one line per fact, exactly 'mensa_listen_port=<value>', 'pyxis_retention_days=<value>', 'norma_worker_count=<value>', 'phoenix_max_connections=<value>', 'orion_cache_size_mb=<value>', 'borealis_listen_port=<value>', 'dorado_retention_days=<value>', 'tucana_worker_count=<value>'. Then add a final line 'total=<sum of all the values above>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
 

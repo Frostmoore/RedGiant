@@ -5,6 +5,7 @@ success_cmd = "python judge.py"
 timeout_s = 3600
 tags = ["ladder", "l4", "research_local"]
 writable_globs = ["answer.txt"]
+worker_max_steps = 33
 naked_materials = ["docs/*.md"]
 naked_instruction = "The folder docs/ contains 90 service notes. Find these facts, reading ONLY what you need: the listen_port of service pavo; the retention_days of service borealis; the worker_count of service eridanus; the max_connections of service dorado; the cache_size_mb of service carina. Write answer.txt with one line per fact, exactly 'pavo_listen_port=<value>', 'borealis_retention_days=<value>', 'eridanus_worker_count=<value>', 'dorado_max_connections=<value>', 'carina_cache_size_mb=<value>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
 

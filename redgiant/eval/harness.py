@@ -63,6 +63,10 @@ class EvalTask(BaseModel):
     # task non ha braccio nudo (es. serve tool-use per costruzione).
     naked_materials: list[str] = []
     naked_instruction: str = ""
+    # LADDER L7: 8 fatti in 400 documenti non si raccolgono in 20 passi — il
+    # budget di passi e' una proprieta' della TAGLIA del task, non una
+    # costante globale (0 = usa il default di config)
+    worker_max_steps: int = 0
 
 
 class EvalResult(BaseModel):
@@ -98,7 +102,8 @@ def discover_tasks(tasks_dir: Path) -> list[EvalTask]:
             service_script=(base / data["service_script"]
                             if data.get("service_script") else None),
             naked_materials=data.get("naked_materials", []),
-            naked_instruction=data.get("naked_instruction", "")))
+            naked_instruction=data.get("naked_instruction", ""),
+            worker_max_steps=data.get("worker_max_steps", 0)))
     return tasks
 
 
@@ -177,6 +182,9 @@ def _run_one(cfg: Config, store: StateStore, llm: LlamaClient,
         cfg = replace(cfg, security=replace(
             cfg.security,
             http_allowed_domains=tuple(task.http_allowed_domains)))
+    if task.worker_max_steps:
+        from dataclasses import replace as _replace
+        cfg = _replace(cfg, worker_max_steps=task.worker_max_steps)
     service = None
     if task.service_script is not None:
         service = subprocess.Popen(
