@@ -1,6 +1,6 @@
 # Service note 019
 
-Service **norma**: the worker_count is 788.
+Service norma: the worker_count is 788.
 
 Service gemini: the max_connections is 311.
 Service mensa: the worker_count is 679.

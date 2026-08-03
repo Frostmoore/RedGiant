@@ -1,6 +1,6 @@
 # Service note 082
 
-Service **draco**: the retention_days is 228.
+Service draco: the retention_days is 228.
 
 Service volans: the max_connections is 503.
 Service vela: the listen_port is 585.

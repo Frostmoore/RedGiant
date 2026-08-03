@@ -1,6 +1,6 @@
 # Service note 059
 
-Service **borealis**: the retention_days is 479.
+Service borealis: the retention_days is 479.
 
 Service cygnus: the retention_days is 897.
 Service mensa: the worker_count is 287.

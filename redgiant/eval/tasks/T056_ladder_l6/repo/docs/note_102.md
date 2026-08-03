@@ -1,6 +1,6 @@
 # Service note 102
 
-Service **hydra**: the max_connections is 398.
+Service hydra: the max_connections is 398.
 
 Service carina: the listen_port is 619.
 Service reticulum: the worker_count is 648.

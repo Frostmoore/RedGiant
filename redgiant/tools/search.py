@@ -26,6 +26,27 @@ class SearchCodeArgs(BaseModel):
     max_results: int = 50
 
 
+def _smart_case(pattern: str) -> bool:
+    """Smart-case (convenzione rg/vim): pattern tutto minuscolo => ricerca
+    insensibile. Ladder L7: il modello cercava 'service mensa' e la riga era
+    'Service **mensa**' — zero risultati per una maiuscola."""
+    return pattern.islower() or not any(c.isupper() for c in pattern)
+
+
+def _no_match_hint(pattern: str) -> str:
+    """Un fallimento di ricerca deve essere ATTUABILE (F2): il modello che
+    riceve 'zero risultati' e nient'altro ripete la stessa query all'infinito
+    (misurato: 5 volte identiche sulla ladder)."""
+    words = [w for w in pattern.replace("|", " ").split() if w]
+    if len(words) > 1:
+        return (f"no matches: the pattern has {len(words)} words and matches "
+                f"them ADJACENT. Search ONE distinctive word instead, e.g. "
+                f"'{max(words, key=len)}'")
+    return ("no matches: try a shorter or more distinctive substring, or a "
+            "different spelling (search is smart-case: an all-lowercase "
+            "pattern matches any case)")
+
+
 def resolve_ripgrep(configured: str) -> str:
     """Risolve il binario ripgrep evitando l'omonimo entry point nel venv."""
     p = Path(configured)
@@ -49,7 +70,8 @@ def search_python(scope: Scope, pattern: str, glob: str | None = None,
     import re as _re
     from fnmatch import fnmatch as _fn
     try:
-        rx = _re.compile(pattern)
+        rx = _re.compile(pattern,
+                         _re.IGNORECASE if _smart_case(pattern) else 0)
     except _re.error as e:
         return ToolResult(ok=False, data={"detail": str(e)}, error="bad_pattern")
     matches = []
@@ -69,14 +91,18 @@ def search_python(scope: Scope, pattern: str, glob: str | None = None,
                     break
         if len(matches) >= max_results:
             break
-    return ToolResult(ok=True,
-                      data={"matches": matches, "truncated": len(matches) >= max_results},
+    data = {"matches": matches, "truncated": len(matches) >= max_results}
+    if not matches:
+        data["hint"] = _no_match_hint(pattern)
+    return ToolResult(ok=True, data=data,
                       evidence=[f"python-search '{pattern}' -> {len(matches)} matches"])
 
 
 def search_code(scope: Scope, rg_bin: str, pattern: str, glob: str | None = None,
                 max_results: int = 50) -> ToolResult:
     argv = [rg_bin, "--json", "-e", pattern]
+    if _smart_case(pattern):
+        argv.insert(1, "-i")
     if glob:
         argv += ["--glob", glob]
     argv.append(str(scope.root))
@@ -106,6 +132,8 @@ def search_code(scope: Scope, rg_bin: str, pattern: str, glob: str | None = None
                         "text": d["lines"]["text"].rstrip("\n")[:300]})
         if len(matches) >= max_results:
             break
-    return ToolResult(ok=True,
-                      data={"matches": matches, "truncated": len(matches) >= max_results},
+    data = {"matches": matches, "truncated": len(matches) >= max_results}
+    if not matches:
+        data["hint"] = _no_match_hint(pattern)
+    return ToolResult(ok=True, data=data,
                       evidence=[f"ripgrep '{pattern}' -> {len(matches)} matches"])

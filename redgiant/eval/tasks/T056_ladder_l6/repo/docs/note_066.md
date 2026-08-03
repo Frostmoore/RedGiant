@@ -1,6 +1,6 @@
 # Service note 066
 
-Service **vela**: the retention_days is 151.
+Service vela: the retention_days is 151.
 
 Service tucana: the max_connections is 586.
 Service indus: the retention_days is 560.

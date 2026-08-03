@@ -1,6 +1,6 @@
 # Service note 003
 
-Service **norma**: the retention_days is 888.
+Service norma: the retention_days is 888.
 
 Service draco: the listen_port is 819.
 Service dorado: the worker_count is 670.

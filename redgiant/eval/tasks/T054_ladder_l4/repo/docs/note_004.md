@@ -1,6 +1,6 @@
 # Service note 004
 
-Service **pavo**: the listen_port is 146.
+Service pavo: the listen_port is 146.
 
 Service indus: the max_connections is 231.
 Service vela: the worker_count is 520.

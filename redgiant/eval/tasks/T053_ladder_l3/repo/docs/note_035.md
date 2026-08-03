@@ -1,6 +1,6 @@
 # Service note 035
 
-Service **hydra**: the retention_days is 331.
+Service hydra: the retention_days is 331.
 
 Service carina: the worker_count is 569.
 Service tucana: the listen_port is 242.

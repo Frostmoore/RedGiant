@@ -1,6 +1,6 @@
 # Service note 007
 
-Service **aquila**: the retention_days is 483.
+Service aquila: the retention_days is 483.
 
 Service grus: the retention_days is 901.
 Service reticulum: the worker_count is 549.

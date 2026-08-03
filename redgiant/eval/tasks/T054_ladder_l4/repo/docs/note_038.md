@@ -1,6 +1,6 @@
 # Service note 038
 
-Service **dorado**: the max_connections is 247.
+Service dorado: the max_connections is 247.
 
 Service orion: the retention_days is 456.
 Service aquila: the cache_size_mb is 858.

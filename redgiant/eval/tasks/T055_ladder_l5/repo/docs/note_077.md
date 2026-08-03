@@ -1,6 +1,6 @@
 # Service note 077
 
-Service **sagitta**: the worker_count is 196.
+Service sagitta: the worker_count is 196.
 
 Service indus: the cache_size_mb is 150.
 Service lyra: the listen_port is 994.

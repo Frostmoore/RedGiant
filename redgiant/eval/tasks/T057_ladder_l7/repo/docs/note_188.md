@@ -1,6 +1,6 @@
 # Service note 188
 
-Service **borealis**: the listen_port is 695.
+Service borealis: the listen_port is 695.
 
 Service indus: the listen_port is 525.
 Service carina: the retention_days is 932.

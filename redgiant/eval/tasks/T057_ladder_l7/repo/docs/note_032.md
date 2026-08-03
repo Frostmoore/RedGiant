@@ -1,6 +1,6 @@
 # Service note 032
 
-Service **phoenix**: the max_connections is 476.
+Service phoenix: the max_connections is 476.
 
 Service pavo: the cache_size_mb is 492.
 Service hydra: the max_connections is 778.

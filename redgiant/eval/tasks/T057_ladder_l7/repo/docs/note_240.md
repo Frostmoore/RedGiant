@@ -1,6 +1,6 @@
 # Service note 240
 
-Service **dorado**: the retention_days is 504.
+Service dorado: the retention_days is 504.
 
 Service sagitta: the worker_count is 701.
 Service aquila: the cache_size_mb is 332.

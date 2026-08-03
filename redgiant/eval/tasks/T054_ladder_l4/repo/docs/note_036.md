@@ -1,6 +1,6 @@
 # Service note 036
 
-Service **carina**: the cache_size_mb is 666.
+Service carina: the cache_size_mb is 666.
 
 Service cygnus: the worker_count is 159.
 Service norma: the worker_count is 269.

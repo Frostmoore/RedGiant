@@ -103,6 +103,34 @@ def test_ladder_judges_are_satisfiable_and_scale():
     assert sizes[-1] * 1.35 > 8192, "l'ultimo gradino deve eccedere il ctx"
 
 
+def test_search_is_smart_case_and_actionable(tmp_path):
+    """Diagnosi ladder L7: il modello cercava 'service mensa' mentre la riga
+    era 'Service **mensa**' → 0 risultati, e la ricerca non diceva NULLA di
+    utile: query ripetuta 5 volte identica. Due difetti, due fix."""
+    from redgiant.tools.base import Scope
+    from redgiant.tools.search import search_python
+    (tmp_path / "d.md").write_text("Service Mensa: the listen_port is 210.\n",
+                                   encoding="utf-8")
+    scope = Scope(tmp_path, ["*.md"])
+    # smart-case: pattern tutto minuscolo trova comunque
+    assert len(search_python(scope, "service mensa").data["matches"]) == 1
+    # pattern con maiuscole = ricerca esatta (non si perde il controllo fine)
+    assert search_python(scope, "SERVICE MENSA").data["matches"] == []
+    # zero risultati => hint ATTUABILE, non silenzio
+    r = search_python(scope, "totally absent words here")
+    assert r.ok and "hint" in r.data and "ONE distinctive word" in r.data["hint"]
+
+
+def test_ladder_corpus_is_uniform(tmp_path):
+    """Il fatto bersaglio dev'essere INDISTINGUIBILE dai distrattori: l'unica
+    difficolta' della ladder e' l'ampiezza, mai la tipografia."""
+    for tid in ("T055_ladder_l5", "T057_ladder_l7"):
+        docs = sorted((TASKS / tid / "repo" / "docs").glob("*.md"))
+        assert docs
+        for p in docs:
+            assert "**" not in p.read_text(encoding="utf-8"), f"{tid}/{p.name}"
+
+
 def test_harness_parses_f3bis_keys():
     from redgiant.eval.harness import discover_tasks
     tasks = {t.id: t for t in discover_tasks(TASKS)}

@@ -1,6 +1,6 @@
 # Service note 053
 
-Service **cygnus**: the listen_port is 707.
+Service cygnus: the listen_port is 707.
 
 Service pyxis: the retention_days is 254.
 Service gemini: the listen_port is 950.

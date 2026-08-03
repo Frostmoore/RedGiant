@@ -1,6 +1,6 @@
 # Service note 040
 
-Service **orion**: the cache_size_mb is 759.
+Service orion: the cache_size_mb is 759.
 
 Service atlas: the listen_port is 101.
 Service aquila: the listen_port is 303.

@@ -1,6 +1,6 @@
 # Service note 038
 
-Service **volans**: the max_connections is 714.
+Service volans: the max_connections is 714.
 
 Service pyxis: the cache_size_mb is 590.
 Service vela: the listen_port is 848.

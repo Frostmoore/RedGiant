@@ -1,6 +1,6 @@
 # Service note 132
 
-Service **lyra**: the listen_port is 329.
+Service lyra: the listen_port is 329.
 
 Service eridanus: the listen_port is 664.
 Service tucana: the listen_port is 955.

@@ -1,6 +1,6 @@
 # Service note 160
 
-Service **aquila**: the worker_count is 204.
+Service aquila: the worker_count is 204.
 
 Service carina: the worker_count is 343.
 Service norma: the cache_size_mb is 701.

@@ -1,6 +1,6 @@
 # Service note 039
 
-Service **phoenix**: the listen_port is 796.
+Service phoenix: the listen_port is 796.
 
 Service fornax: the cache_size_mb is 972.
 Service pavo: the cache_size_mb is 167.

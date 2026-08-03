@@ -1,6 +1,6 @@
 # Service note 350
 
-Service **mensa**: the listen_port is 210.
+Service mensa: the listen_port is 210.
 
 Service hydra: the worker_count is 138.
 Service eridanus: the max_connections is 365.

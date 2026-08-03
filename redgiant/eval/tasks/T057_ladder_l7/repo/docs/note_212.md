@@ -1,6 +1,6 @@
 # Service note 212
 
-Service **pyxis**: the retention_days is 383.
+Service pyxis: the retention_days is 383.
 
 Service indus: the retention_days is 743.
 Service vela: the max_connections is 271.

@@ -105,7 +105,12 @@ def build_rung(rid: str, n_docs: int, n_facts: int, computed: bool,
         lines = [f"# Service note {d:03d}", ""]
         if d in target_docs:
             sysname, metric, value = targets[target_docs.index(d)]
-            lines.append(f"Service **{sysname}**: the {metric} is {value}.")
+            # FORMATO UNIFORME coi distrattori (fix 2026-08-03): il grassetto
+            # markdown sui soli bersagli era un artefatto SLEALE — una ricerca
+            # naturale "Service mensa" falliva per gli asterischi in mezzo,
+            # penalizzando il braccio workflow e non quello nudo (che legge
+            # tutto inline). L'unica difficolta' dev'essere l'AMPIEZZA.
+            lines.append(f"Service {sysname}: the {metric} is {value}.")
             lines.append("")
         # distrattori: stessa metrica, sistema DIVERSO (mai ambiguo)
         for _ in range(2):

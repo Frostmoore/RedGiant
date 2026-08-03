@@ -1,6 +1,6 @@
 # Service note 196
 
-Service **atlas**: the cache_size_mb is 686.
+Service atlas: the cache_size_mb is 686.
 
 Service tucana: the max_connections is 743.
 Service mensa: the listen_port is 598.

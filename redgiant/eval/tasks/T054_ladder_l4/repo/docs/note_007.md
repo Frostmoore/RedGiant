@@ -1,6 +1,6 @@
 # Service note 007
 
-Service **eridanus**: the worker_count is 913.
+Service eridanus: the worker_count is 913.
 
 Service hydra: the max_connections is 449.
 Service orion: the max_connections is 569.
