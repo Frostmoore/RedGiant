@@ -201,6 +201,30 @@ The plan-compiler roles have names (their technical ids in the DB, prompts and e
 
 Sirio proposes meaning; the deterministic control plane owns every identity (names, order, existence); Giano executes inside a physical scope; external judges have the last word.
 
+### 🏭 How the assembly line actually works
+
+The single most important structural fact: **no agent ever talks to another agent.** Each one receives a *minimal context assembled by code*, produces *one typed artifact* (a small Pydantic schema, enforced by the decoding grammar), and that artifact is **validated, normalized and persisted** before the next agent sees any of it. Communication is always `agent → artifact → gate → cleaned artifact → next agent`. A broken artifact gets targeted patches (max 2, then one full regeneration citing the violated rules), then explicit failure — never silence.
+
+1. **Sirio speaks exactly once.** Request + repo listing in; `MacroPlan` out — success criteria (C1…) and phases (P1…) declaring which criteria they cover and what they depend on. The gate rejects uncovered criteria, cyclic dependencies, and plans that ignore files named in the request. Then Sirio leaves the stage permanently: the plan is a document, not a process.
+2. **Per phase, a deterministic compiler drives Mira → Mizar → Vega → Altair.** Mira analyzes under an anti-invention gate (she can only *copy* identifiers from the ledger projection, never coin them). Mizar decomposes into micro-tasks with **exclusive file ownership** — and the control plane then imposes the phase id, sorts micros topologically, splits oversized ones, dedups ownership. Vega designs proof obligations; the control plane assigns every test its **canonical name** (`P1.S1.O1 → test_p1_s1.py::test_p1_s1_o1`). Altair writes test files one per call, and his tests survive three layers of distrust: static AST checks (real asserts, real anchoring to the target, resolvable imports), then the **oracle qualification gate executes them** — a new-behaviour test must fail *now*, a characterization test must pass *now*; a test that cannot fail dies in the repair loop, not at the end of the task. Only qualified tests reach the disk — written by the control plane, never by an agent.
+3. **Giano executes in a cage.** His work order carries the goal, the boundary, the importable modules, the **verbatim source of the tests that will judge him**, and the exact commands to run them. He works ReAct-style inside a **physical scope**: only his owned files are writable — the tests and everyone else's files are protected at the filesystem level, not by prompt-level pleading (he once overwrote the qualified tests; that day the scope became physical). On failure he retries with the failing test's output tail in front of him; failing twice *identically* is forbidden (photocopy gate) and dies explicitly.
+
+Three separations hold the whole thing up:
+
+- **Prosecution ≠ defendant**: who writes the tests (Altair) never writes the code (Giano), and the final judge — the task's external script — trusts neither.
+- **Meaning ≠ identity** (the central rule, F15): *what to do* is proposed by models; *what things are called, in what order they run, what exists* is decided by deterministic code. Every identity moved from model to code sent a whole failure family to zero.
+- **Nobody remembers anything**: between calls, agents have no memory. The only memory is the **task ledger**, rebuilt deterministically from the DB and the AST of the *real* code (never from model recollection) and projected per phase within a token budget — criteria and intent always, the rest as space allows, truncation declared.
+
+The whole flow in one line:
+
+```
+Sirio → [gate] → per phase: Mira → [gate] → Mizar → [normalize+gate] → Vega → [canonical names+gate]
+  → Altair → [static checks + oracle EXECUTES the tests] → per micro: Giano in scope → [proof gate]
+  → phase synthesis → final coverage → external judge
+```
+
+Why this shape: 2B physics. Every station gets 4–8K tokens of *minimum sufficient* context, every output is small and constrained, every transition is verifiable — and when something dies, it dies **at a nameable station, for a nameable cause**, which is what made the whole measurement campaign above possible in the first place.
+
 ## 🔁 Pipeline at a glance
 
 ```mermaid
