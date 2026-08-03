@@ -292,8 +292,22 @@ chiede la stessa cosa banale ("il `listen_port` del servizio X è N"); cresce so
 | L6 | **0/3** | 17.737 → 7.536 (−57%) | **0/3** | 17.737 → 6.000 (−66%) |
 | L7 | **0/3** | 35.263 → 7.536 (−79%) | **0/3** | 35.263 → 6.000 (−83%) |
 
-¹ *Confondimento dichiarato: il fusibile del pensiero mangia 1536 token di contesto, quindi il
-braccio B3 vede meno materiale. Disambiguazione in corso con budget 256.*
+¹ **Confondimento RISOLTO** (severino-sim, 3 run): ripetuto con budget di pensiero 256, il
+troncamento torna a **7.280 token** — alla pari col braccio nudo (7.536, −3%) — e il risultato
+resta **0/3**. Il fallimento di L5 col thinking **non** era dovuto al contesto rubato.
+
+**Conclusione su L5, con tutte le configurazioni misurate:**
+
+| Configurazione | L5 | Materiale visto |
+|---|---|---|
+| nudo | 0/3 | 7.536 tok |
+| nudo + thinking (fusibile 1536) | 0/3 | 6.000 tok |
+| nudo + thinking (fusibile 256) | **0/3** | 7.280 tok (alla pari) |
+| workflow **con** `calc` | **4/5** | lettura selettiva |
+| workflow **senza** `calc` | 0/5 | lettura selettiva |
+
+**Il ragionamento esplicito non compra l'aritmetica; un tool deterministico sì.** Tre
+configurazioni di pensiero falliscono, una calcolatrice AST da poche righe risolve il gradino.
 
 **Il pavimento nudo del modello su questo asse: ~5.8K token di materiale, 5 fatti, nessuna
 aggregazione.** Sopra: zero.
