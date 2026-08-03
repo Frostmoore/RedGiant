@@ -609,18 +609,33 @@ Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i comm
 | Fine F2 | `v2.1.0` | media |
 | Fine F3 | `v3.0.0` | grande |
 | *Interludio planner-system (PS0–PS7, 2026-08-02/03)* | `v3.1.0` → `v4.0.0` | v. `plan_planner_system.md` |
-| Fine F3-bis (micro-slice multi-dominio) | `v4.1.0` | media |
+| *Campagna thinking (TH0–TH3, 2026-08-03)* | `v4.1.0` → `v4.2.0` | v. `plan_thinking_ab.md` |
+| Fine F3-bis (micro-slice multi-dominio) | `v4.3.0` | media |
 | Fine F4 | `v5.0.0` | grande |
 | Fine F5 | `v6.0.0` | grande |
 | Fine F6 | `v6.1.0` | media |
 | Fine F7 | `v7.0.0` | grande |
 | Fine F8 | `v8.0.0` | grande |
 
-**Nota di riconciliazione (PS7.3, 2026-08-03):** l'interludio planner-system ha occupato la
-serie `v3.1.0`–`v4.0.0` (tabella versioni propria in `plan_planner_system.md`); le fasi della
-roadmap principale slittano di conseguenza (F3-bis: `v3.1.0`→`v4.1.0`, e a cascata). Il
+**Nota di riconciliazione (PS7.3 + TH3, 2026-08-03):** interludio planner-system =
+`v3.1.0`–`v4.0.0`; campagna thinking = `v4.1.0`–`v4.2.0`; F3-bis slitta a `v4.3.0`. Il
 routing di **F6** userà i dati di PS6 come input (quando pianificare: i micro-task NON si
 pianificano — misurato due volte; i task larghi solo se il plansys converte post-thinking).
+
+**RETEST OBBLIGATORI A FINE PERCORSO (decisione utente, 2026-08-03 — i verdetti D11 e TH3
+sono APERTI, non tombali):**
+1. **Retest planner+thinking col router attivo (dopo F6/F7):** entrambi i verdetti negativi
+   sono stati misurati SOLO su coding sintetico senza routing. Col router per taglia attivo
+   e i domini everyday/ricerca/matematica in piedi, vanno rimisurati: il thinking potrebbe
+   non pagare sul codice ma pagare sull'everyday o sulla matematica — non lo sappiamo, e
+   "non lo sappiamo" si risolve misurando, non presumendo. Config attuale: entrambi OFF di
+   default (`[plansys] enabled=false`, `RG_THINKING_ROLES` non settata), riattivabili in
+   qualunque momento senza toccare codice.
+2. **Benchmark pubblici (fine progetto, pre/post F8):** eseguire i benchmark più utilizzati
+   e pertinenti (candidati in `memory/ambition.md` §2: BFCL per function calling,
+   structured-output benchmarks, GSM8K-class per la matematica col thinking) per avere
+   **valori pubblicamente comparabili** — le batterie interne dimostrano i delta, solo i
+   benchmark pubblici dimostrano la posizione assoluta.
 
 ---
 

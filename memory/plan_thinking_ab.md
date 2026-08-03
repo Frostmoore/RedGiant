@@ -145,9 +145,13 @@ ruolo isolato.
   potere statistico distingue solo effetti grossi, e un effetto grosso non c'è.
 - [x] **TH3 — Verdetto, decision rule, documentazione** ✅ 2026-08-03, `v4.2.0`
 
-**ESITO TH3 — VERDETTO DELLA CAMPAGNA (decision rule pre-registrata, applicata senza sconti):**
-**Il thinking a tempo pieno NON entra in produzione per nessun ruolo.** `RG_THINKING_ROLES`
-resta leva sperimentale, OFF di default. Motivazione nei numeri: sul profilo ufficiale il
+**ESITO TH3 — VERDETTO DELLA CAMPAGNA (decision rule pre-registrata, applicata senza sconti;
+VERDETTO APERTO per decisione utente 2026-08-03):**
+**Il thinking a tempo pieno resta OFF di default — ma il verdetto NON è tombale.** Vale per
+il regime misurato (coding sintetico, senza router): col router attivo e i domini
+everyday/matematica in piedi (post F6/F7) va RIMISURATO — retest obbligatorio a verbale nel
+piano padre (§tabella versioni). `RG_THINKING_ROLES` resta leva sperimentale, OFF di default,
+riattivabile senza toccare codice. Motivazione nei numeri: sul profilo ufficiale il
 pensiero di Giano non compra conversione (Δ=0) a ~1,4× token e ~1,9× wall; gli altri bracci
 non hanno nemmeno superato la compliance GPU. Cosa RESTA della campagna (tutto misurato):
 1. **La meccanica è pronta e collaudata** (two-call, fusibile, TH-D2): qualunque modello
