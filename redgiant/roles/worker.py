@@ -29,6 +29,30 @@ _MUTATING_TOOLS: frozenset[str] = frozenset({"write_file", "edit_file", "write_p
 _MAX_FINISH_REFUSALS: int = 2  # tetto: non si sostituisce un loop degenere con un altro
 
 
+def finish_gate_enabled() -> bool:
+    """SPENTO DI DEFAULT (verdetto LAD.9, 2026-08-03) — `RG_FINISH_GATE=1` per
+    accenderlo.
+
+    Il gate intercetta una patologia REALE e misurata (40% dei tentativi
+    dichiarava done senza scrivere) ma non ha prodotto alcun effetto:
+    L5 18/20 vs 16/20 (p=0.66), L7 11/20 vs 11/20 (p=1.00), e costa il +15% di
+    tempo. Il motivo, che e' il vero risultato: **il loop di retry pagava gia'
+    per il finish fantasma** — la verifica esterna lo becca e il tentativo dopo
+    di solito riesce. Il gate e' ridondante rispetto a un componente che
+    esisteva gia'.
+
+    Resta nel codice, spento, perche' il verdetto e' APERTO: sui task coding
+    larghi un tentativo sprecato costa 100K+ token invece di 25 secondi (T032:
+    140K token in loop), e li' convertirlo in un passo potrebbe pagare. Va
+    rimisurato su T040-T042 prima di dichiararlo inutile.
+
+    Stesso trattamento di D11 (planner) e TH3 (thinking): costruito, misurato,
+    spento, con la condizione di retest scritta.
+    """
+    import os
+    return os.environ.get("RG_FINISH_GATE", "").strip() not in ("", "0", "false")
+
+
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -159,8 +183,7 @@ class Worker(Role):
         # LAD.9: stato del gate sul finish. `mutated` e' vero appena UNA scrittura
         # va a buon fine in questo tentativo — e' cio' che distingue il lavoro
         # fatto dal lavoro solo raccontato.
-        from redgiant.core.ablate import worker_ablated
-        gate_ablated = worker_ablated("finishgate")
+        gate_on = finish_gate_enabled()
         mutated = False
         finish_refusals = 0
         # TH0.3 (braccio T-J): pensiero per-step di J — il canale e' usa-e-getta
@@ -190,7 +213,7 @@ class Worker(Role):
                 step_log(f"step {k}: {step.model_dump_json()[:280]}")
 
             if isinstance(step, WorkerFinishStep):
-                if (step.finish.status == "done" and not gate_ablated
+                if (step.finish.status == "done" and gate_on
                         and finish_refusals < _MAX_FINISH_REFUSALS):
                     problem = self._finish_gate(ctx, task.id, mutated)
                     if problem is not None:

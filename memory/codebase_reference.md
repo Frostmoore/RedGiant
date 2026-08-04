@@ -308,12 +308,13 @@ class WorkerStep    # RootModel: union DISCRIMINATA dei due — il ramo incomple
                     # il derail da apice non escapato non ha piu' un'uscita incoerente)
 _MUTATING_TOOLS: frozenset[str]   # write_file, edit_file, write_patch
 _MAX_FINISH_REFUSALS: int = 2     # tetto ai rifiuti in-loop del gate LAD.9
+def finish_gate_enabled() -> bool  # RG_FINISH_GATE=1; SPENTO di default (verdetto LAD.9)
 class Worker
     def run(self, ctx: RoleContext, *, max_steps: int, step_max_tokens: int = 512, step_log=None, resume_file=None) -> FinishReport
     def _finish_gate(self, ctx: RoleContext, task_id: str, mutated: bool) -> str | None
 ```
 
-**Gate sul finish (LAD.9, 2026-08-03) — TRAPPOLA DISINNESCATA.** `_finish_gate` è chiamato in `run` prima di ritornare su un `WorkerFinishStep` con `status=="done"`; se ritorna un messaggio, il finish **non chiude il tentativo**: diventa uno step (`with_appended_context("[FINISH REFUSED] …")` + `continue`).
+**Gate sul finish (LAD.9, 2026-08-03) — ⚠️ COSTRUITO, MISURATO, SPENTO.** `_finish_gate` è chiamato in `run` prima di ritornare su un `WorkerFinishStep` con `status=="done"` **solo se `finish_gate_enabled()`**; se ritorna un messaggio, il finish non chiude il tentativo: diventa uno step (`with_appended_context("[FINISH REFUSED] …")` + `continue`). **Default OFF:** L5 18/20 vs 16/20 (p=0.66), L7 11/20 vs 11/20 (p=1.00), +15% di tempo — *il loop di retry pagava già per il finish fantasma*, il gate è ridondante rispetto a un componente esistente. Verdetto **aperto**: da rimisurare su T040–T042, dove un tentativo sprecato costa 100K+ token invece di 25 s.
 
 **Causa tecnica:** misurato sui log integrali (`data.md` §7.6.5), **31 tentativi su 78 (40%)** dichiaravano `done` senza aver chiamato alcuno strumento di scrittura — il modello tratta la propria narrazione come fatto compiuto. Il retry glielo riportava (`FAIL: answer.txt missing`) e lui ripeteva: la regola 8 della card lo vieta dal F1 senza effetto.
 
@@ -461,7 +462,8 @@ Regola di metodo (utente, 2026-08-03): **ogni componente aggiunto dev'essere abl
 | retry | `retry` | nessun secondo tentativo | (da misurare sulla ladder) |
 | calcolatrice | `calc` | `calculator` dal catalogo | ~nullo: il tool era invocato nel 40% delle run |
 | coerenza | `coherence` | la guardia F4 in scrittura | **18/20 vs 9/20** su L5, p=0.0057 (`data.md` §7.6) |
-| gate sul finish | `finishgate` | il gate LAD.9 sul "finish fantasma" | vedi `data.md` §7.7 |
+
+**Non tutto si abla: ciò che è misurato come non pagante si SPEGNE.** Il gate sul finish (LAD.9) non ha una leva di ablazione ma un interruttore di accensione, `RG_FINISH_GATE=1`, **spento di default** (L5 18/20 vs 16/20 p=0.66; L7 11/20 vs 11/20 p=1.00; +15% di tempo — `data.md` §7.7). Stesso trattamento di `planner_enabled` (D11) e `RG_THINKING_ROLES` (TH3). Polarità dei bracci in `run_agentic.py`: **`−x` abla un componente attivo, `+x` accende uno spento.**
 
 ```python
 def worker_ablated(component: str) -> bool

@@ -1386,7 +1386,28 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   mondo lascia il modello a ragionare su uno stato inesistente.* Applicato anche a
   `syntax_error`, che portava la stessa trappola da F1. **Regola generale per ogni gate
   futuro che rifiuta un'azione.**
-- [ ] **LAD.9** 🤖 **Gate sul finish, DENTRO il loop.**
+- [x] **LAD.9** 🤖 **Gate sul finish, DENTRO il loop.** ✅ **FATTO — e SPENTO: risultato nullo.**
+
+  **ESITO (dev-fast, 20 run per braccio, `@699ed56` — `data.md` §7.7):** L5 **18/20 vs 16/20**
+  (Fisher bilaterale **p = 0.66**), L7 **11/20 vs 11/20** (**p = 1.00**), con un **+15% di
+  tempo** su L5. Nessun effetto su nessuno dei due gradini.
+
+  **Perché, ed è il vero risultato:** *il loop di retry pagava già per il finish fantasma* — la
+  verifica esterna lo intercetta e il tentativo dopo di solito scrive. Abbiamo trovato una
+  patologia reale che l'architettura **tollerava già**; il gate è ridondante rispetto a un
+  componente esistente.
+
+  **Verdetto: spento di default**, `roles/worker.py::finish_gate_enabled` dietro
+  `RG_FINISH_GATE=1` — stesso trattamento di D11 e TH3. **Verdetto APERTO**, condizione di
+  retest: sui task coding larghi un tentativo sprecato costa **100K+ token** invece di 25
+  secondi (T032: 140K in loop), e lì potrebbe pagare → rimisurare su **T040–T042**.
+
+  **Corollario di metodo (da ricordare prima di costruire la prossima difesa):** una patologia
+  *frequente* non è automaticamente una patologia *costosa*. Prima di costruire, misurare
+  **chi sta già pagando** per il problema.
+
+  Specifica originale conservata qui sotto, perché la condizione di retest la richiede.
+
 
   **Misura che lo motiva** (`data.md` §7.6.5): il Worker dichiara `done` **senza aver chiamato
   nessuno strumento di scrittura** nel **40% dei tentativi** (31 su 78), 17 dei quali al primo
@@ -1435,11 +1456,14 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   **Il messaggio dichiara lo stato del mondo** (lezione di LAD.6): dice che nessuna scrittura è
   avvenuta in questo tentativo, riporta l'uscita reale dell'oracolo, e nomina l'azione da fare.
 
-  **Ablazione:** `RG_WORKER_ABLATE=finishgate` → `worker_ablated("finishgate")`; bracci
-  `−finishgate` e `think-finishgate` in `bench/ladder/run_agentic.py::ARMS`, B2 e B4.
+  **Accensione:** `RG_FINISH_GATE=1` → `roles/worker.py::finish_gate_enabled()`; bracci
+  `+finishgate` e `think+finishgate` in `bench/ladder/run_agentic.py::ARMS`, B2 e B4.
+  **Convenzione di polarità nei bracci:** `−x` abla un componente **attivo**, `+x` accende un
+  componente **spento** (verdetto negativo ma aperto).
 
-  **Verifica:** unit test sui due rami del gate + sul tetto + sull'ablazione; poi A/B su L5 e
-  **su L7** (dove è la cura candidata di LAD.8), 20 run per braccio.
+  **Verifica:** 8 unit test — i due rami del gate, il non-mordere dove la regola 11 autorizza,
+  il check sconosciuto, il tetto, il default spento, i bracci registrati con la polarità
+  giusta.
 - [ ] **LAD.10** 🤖 **`bad_args` che insegna** (stessa fonte): `calculator` riceve
   `expression=None` in **27 chiamate su 67 (40%)**; il router risponde col dump grezzo di
   pydantic e il modello ci cicla 5 step prima di arrendersi. **Riscrive in parte LAD.4:** parte
@@ -1464,9 +1488,27 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   numeri destinati al README e a `data.md`; gli attuali sono GPU e dichiarati tali.
   Stima: ~6 bracci × 3 gradini × 20 run su CPU — va pianificata come campagna notturna, non
   lanciata a cuor leggero.
-- [ ] **LAD.8** 🔎 Diagnosi di L7: quando arriva a scrivere produce **8 fatti su 8 e la somma
-  esatta**, ma di norma non ci arriva. Il problema è di **completamento**, non di correttezza —
-  quindi **LAD.9 è la sua prima candidata cura** e L7 va rimisurato subito dopo LAD.9.
+- [x] **LAD.8** 🔎 **Diagnosi di L7. RISOLTA — e non era nessuna delle due ipotesi.**
+  Non è correttezza né completamento: **è capienza.**
+  ```
+  llm error: prompt of 9323 tokens exceeds budget (ctx_size=8192)
+  ```
+  Su 92 tentativi, il Worker usa **8,5 passi di media, massimo 18** su 60 disponibili —
+  **nessuno esaurisce il budget di passi**. I tentativi muoiono perché la catena append-only
+  dei risultati sfonda la finestra: ogni risultato di ricerca su 400 documenti pesa fino a
+  `_RESULT_MAX_CHARS = 6000` caratteri (~1500 token), e cinque o sei saturano gli 8192.
+  *(Onestà: una prima classificazione automatica li aveva letti come "budget di passi esaurito"
+  — il grep matchava `exceeds budget`. La diagnosi giusta è arrivata leggendo le motivazioni
+  per esteso.)*
+  **Conseguenza: L7 è un problema di F5, non del percorso Worker** — la ladder ha motivato
+  "Dwarf Star" dal basso, con un numero invece che con un'intuizione. Leve candidate in F5.1:
+  risultati di ricerca più stretti; compattazione dei risultati vecchi (**che rompe il riuso
+  append-only della KV cache — F0.5: 65 token contro 7971 — è un compromesso da MISURARE, non
+  da assumere**); scarico dei fatti trovati su un artefatto di appoggio.
+  **Numero da non perdere:** L7 col codice attuale passa **11/20**, contro il rosso in ogni
+  braccio delle misure precedenti e lo **0/3** nudo — merito dei fix precedenti (corpus
+  uniforme, giudice non rivelatore, guardia di coerenza, `refusal_state`, budget di passi
+  proporzionale alla taglia), **non** di LAD.9.
 
 **ESITO (2026-08-03, GPU, `@da8df90`, **20 run per braccio** — `data.md` §7.6):**
 `full` **18/20 (90%)** contro `−coherence` **9/20 (45%)** — 45 punti, **Fisher esatto

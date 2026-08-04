@@ -9,14 +9,16 @@ config, mai in produzione. `RG_WORKER_ABLATE="search,verify,retry"`:
   (= "agente senza oracoli", il braccio che misura quanto vale la verifica)
 - retry: nessun secondo tentativo (un colpo solo, come il nudo ma con i tool)
 - calc: il catalogo perde `calculator` (aritmetica solo mentale)
-- finishgate: il gate sul finish (LAD.9) non gira, cioe' un `done` dichiarato
-  senza aver mai scritto niente chiude il tentativo come prima (braccio che
-  misura quanto vale intercettare il "finish fantasma" dentro il loop invece
-  che dopo — data.md §7.6.5)
 - coherence: la guardia di coerenza aritmetica in scrittura non gira, cioe'
   un artefatto con un totale sbagliato finisce sul disco (braccio che misura
   quanto vale togliere l'operazione dalle mani del modello invece di
   raccomandargliela — data.md §7.5)
+
+NOTA — non tutto sta qui: un componente MISURATO COME NON PAGANTE non si abla,
+si spegne. Il gate sul finish (LAD.9) vive dietro `RG_FINISH_GATE=1` in
+`roles/worker.py::finish_gate_enabled`, spento di default, come il planner
+(D11) e il thinking (TH3). La convenzione dei bracci lo rispecchia: `-x` abla
+un componente attivo, `+x` accende uno spento.
 """
 
 from __future__ import annotations

@@ -563,11 +563,74 @@ risultato è sempre giusto.
 volte (guardia di coerenza, `refusal_state`) — struttura invece di istruzione, ed errori che
 dicono cosa fare e com'è rimasto il mondo. Vedi LAD.9 e LAD.10 nel piano.
 
+## 7.7 LAD.9 — il gate sul finish: risultato NULLO, e perché è comunque utile saperlo
+
+Il gate (`Worker._finish_gate`) rifiuta un `done` dichiarato quando l'artefatto promesso non
+esiste, o quando il tentativo non ha mutato nulla e l'oracolo è rosso. Bersaglio: il **finish
+fantasma** di §7.6.5, misurato al 40% dei tentativi.
+
+### 7.7.1 La misura (dev-fast, 20 run per braccio, `@699ed56`)
+
+| Gradino | `full` (gate acceso) | ablato | Fisher bilaterale |
+|---|---|---|---|
+| **L5** | 18/20 · 725 s | 16/20 · 633 s | **p = 0.66** |
+| **L7** | 11/20 · 629 s | 11/20 · 623 s | **p = 1.00** |
+
+**Nessun effetto su nessuno dei due gradini, e un costo del +15% in tempo su L5.**
+
+**Perché — ed è questo il vero risultato:** *il loop di retry pagava già per il finish
+fantasma.* La verifica esterna lo intercetta e il tentativo successivo di solito scrive il file.
+Abbiamo trovato una patologia reale che l'architettura **tollerava già**. Il gate è ridondante
+rispetto a un componente che esisteva.
+
+**Verdetto: SPENTO di default** (`RG_FINISH_GATE=1` per accenderlo), stesso trattamento di D11
+(planner) e TH3 (thinking) — costruito, misurato, spento, verdetto **aperto**. Condizione di
+retest scritta: sui task coding larghi un tentativo sprecato costa **100K+ token** invece di 25
+secondi (T032 ha bruciato 140K token in loop), e lì convertirlo in un passo potrebbe pagare. Va
+rimisurato su T040–T042 prima di dichiararlo inutile.
+
+**Corollario di metodo:** una patologia frequente non è automaticamente una patologia costosa.
+Il 40% di finish fantasma sembrava enorme, ma il sistema aveva già chi lo assorbiva. Prima di
+costruire una difesa, va misurato **chi sta già pagando** per il problema.
+
+### 7.7.2 LAD.8 risolto: L7 non finisce i passi, finisce il CONTESTO
+
+L'A/B su L7 ha prodotto la diagnosi che cercavamo da giorni, e non è né correttezza né
+completamento:
+
+```
+llm error: prompt of 9323 tokens exceeds budget (ctx_size=8192)
+```
+
+Su 92 tentativi di L7, i tentativi usano **8,5 passi di media e al massimo 18** su 60
+disponibili: **nessuno esaurisce il budget di passi**. Muoiono perché la catena append-only dei
+risultati sfonda la finestra di contesto. Ogni risultato di ricerca su 400 documenti pesa fino
+a `_RESULT_MAX_CHARS = 6000` caratteri (~1500 token): cinque o sei bastano a saturare 8192.
+
+*(Nota di onestà: una prima classificazione automatica aveva letto quei blocked come "budget di
+passi esaurito" — il grep matchava `exceeds budget`. La diagnosi corretta è arrivata leggendo
+le motivazioni per esteso, non i conteggi.)*
+
+**Conseguenza:** L7 è un problema di **capienza**, non di intelligenza né di disciplina. È il
+territorio di **F5 "Dwarf Star"** (contesto e KV cache) — che la ladder ha ora motivato dal
+basso con un numero invece che con un'intuizione. Le leve candidate: risultati di ricerca più
+stretti, compattazione dei risultati vecchi (che però rompe il riuso append-only della KV
+cache: F0.5, 65 token contro 7971 — è un compromesso da misurare, non da assumere), oppure far
+scaricare al modello i fatti trovati su un artefatto di appoggio.
+
+**Numero secondario ma notevole:** L7 con il codice attuale passa **11/20**, contro il rosso in
+ogni braccio delle misure precedenti e lo 0/3 nudo. Il merito non è di LAD.9 (identico nei due
+bracci): è dei fix precedenti — corpus uniforme, giudice che non regala la risposta, guardia di
+coerenza, `refusal_state`, budget di passi proporzionale alla taglia.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
 - [ ] L5 con la guardia su `severino-sim` (il 18/20 è GPU, va confermato sul profilo ufficiale)
-- [ ] Gate sul finish in-loop (LAD.9) e `bad_args` che insegna (LAD.10) — i due modi di fallire di §7.6.5
+- [x] ~~Gate sul finish in-loop (LAD.9)~~ — **fatto e spento**: risultato nullo, §7.7
+- [ ] `bad_args` che insegna (LAD.10) — il secondo modo di fallire di §7.6.5, non ancora affrontato
+- [ ] Retest di LAD.9 sui task coding larghi T040–T042 (dove un tentativo sprecato costa 100K+ token)
+- [ ] **F5**: L7 muore per contesto pieno (§7.7.2) — la ladder ha motivato la fase dal basso
 - [ ] Ladder B4 post-fix (workflow + thinking, con le stesse ablazioni) — il blocco pre-fix è da buttare
 - [ ] **Ladder ufficiale su severino-sim**: B2 + B4 col codice fixato, run multiple → i numeri che andranno nel README
 - [ ] Diagnosi di L7 (perché 60 passi non bastano)

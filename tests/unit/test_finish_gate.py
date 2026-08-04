@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 
 from redgiant.config import Config
-from redgiant.roles.worker import _MAX_FINISH_REFUSALS, Worker
+from redgiant.roles.worker import (_MAX_FINISH_REFUSALS, Worker,
+                                   finish_gate_enabled)
 from redgiant.state.models import Budget, SubtaskSpec
 from redgiant.state.store import StateStore
 from redgiant.tools.base import Scope
@@ -108,28 +109,31 @@ def test_no_subtask_no_gate(worker):
     assert w._finish_gate(_Ctx(None), tid, mutated=False) is None
 
 
-def test_gate_is_ablatable_and_capped():
-    """Le due valvole di sicurezza: la leva di ablazione esiste (attribuzione)
-    e il tetto ai rifiuti impedisce di sostituire un loop degenere con un
-    altro."""
-    import os
-
-    from redgiant.core.ablate import worker_ablated
-    os.environ["RG_WORKER_ABLATE"] = "finishgate"
-    try:
-        assert worker_ablated("finishgate")
-    finally:
-        os.environ.pop("RG_WORKER_ABLATE")
-    assert not worker_ablated("finishgate")
+def test_gate_is_off_by_default_and_capped(monkeypatch):
+    """VERDETTO LAD.9: spento di default. L5 18/20 vs 16/20 (p=0.66), L7 11/20
+    vs 11/20 (p=1.00), +15% di tempo — il retry pagava gia' per il finish
+    fantasma. Il tetto ai rifiuti resta come valvola per quando lo si accende."""
+    monkeypatch.delenv("RG_FINISH_GATE", raising=False)
+    assert not finish_gate_enabled()
+    for off in ("", "0", "false"):
+        monkeypatch.setenv("RG_FINISH_GATE", off)
+        assert not finish_gate_enabled()
+    monkeypatch.setenv("RG_FINISH_GATE", "1")
+    assert finish_gate_enabled()
     assert _MAX_FINISH_REFUSALS == 2
 
 
-def test_ablation_arms_are_registered():
-    """Regola di metodo: ogni componente nasce col suo braccio in B2 E in B4."""
+def test_arms_are_registered_with_the_right_polarity():
+    """Regola di metodo: ogni componente ha il suo braccio in B2 E in B4.
+    Polarita': '-x' abla un componente attivo, '+x' accende uno spento."""
     p = Path(__file__).resolve().parents[2] / "bench" / "ladder" / "run_agentic.py"
     src = p.read_text(encoding="utf-8")
-    assert '"-finishgate": ("finishgate", "")' in src
-    assert '"think-finishgate": ("finishgate", "worker")' in src
+    assert '"+finishgate": {"RG_FINISH_GATE": "1"}' in src
     b2 = next(l for l in src.splitlines() if l.startswith("B2 = ["))
     b4 = src.split("\nB4 = [")[1].split("]")[0]
-    assert '"-finishgate"' in b2 and '"think-finishgate"' in b4
+    assert '"+finishgate"' in b2 and '"think+finishgate"' in b4
+    # nessun braccio deve restare orfano nel dizionario ARMS
+    import re
+    arms = set(re.findall(r'^    "([^"]+)":', src, re.M))
+    declared = set(re.findall(r'"([^"]+)"', b2 + b4))
+    assert declared <= arms, f"bracci non definiti in ARMS: {declared - arms}"

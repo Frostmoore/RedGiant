@@ -24,30 +24,34 @@ os.chdir(ROOT)
 
 from redgiant.eval.harness import run_eval
 
-# (nome braccio) -> (RG_WORKER_ABLATE, RG_THINKING_ROLES)
+# (nome braccio) -> variabili d'ambiente del braccio (le altre vengono azzerate)
 # B2 = workflow senza thinking (full + ablazioni) · B4 = workflow CON thinking
+# Convenzione: "-x" ABLA un componente attivo, "+x" ACCENDE un componente che
+# il progetto tiene spento (verdetto negativo ma aperto, come D11 e TH3).
+_ENV_VARS = ("RG_WORKER_ABLATE", "RG_THINKING_ROLES", "RG_FINISH_GATE")
 ARMS = {
-    "full": ("", ""),
-    "-search": ("search", ""),
-    "-verify": ("verify", ""),
-    "-retry": ("retry", ""),
-    "-calc": ("calc", ""),                      # la calcolatrice deterministica
-    "-coherence": ("coherence", ""),            # la guardia F4 sull'aritmetica
-    "-finishgate": ("finishgate", ""),          # il gate sul finish fantasma
-    "think": ("", "worker"),                    # B4: percorso diretto = Giano
-    "think-search": ("search", "worker"),       # B4 SPECCHIA B2 ablazione per
-    "think-verify": ("verify", "worker"),       # ablazione: il ragionamento
-    "think-retry": ("retry", "worker"),         # compensa il pezzo mancante?
-    "think-calc": ("calc", "worker"),
-    "think-coherence": ("coherence", "worker"),
-    "think-finishgate": ("finishgate", "worker"),
+    "full": {},
+    "-search": {"RG_WORKER_ABLATE": "search"},
+    "-verify": {"RG_WORKER_ABLATE": "verify"},
+    "-retry": {"RG_WORKER_ABLATE": "retry"},
+    "-calc": {"RG_WORKER_ABLATE": "calc"},           # la calcolatrice deterministica
+    "-coherence": {"RG_WORKER_ABLATE": "coherence"},  # la guardia F4 sull'aritmetica
+    "+finishgate": {"RG_FINISH_GATE": "1"},          # LAD.9: spento di default
+    "think": {"RG_THINKING_ROLES": "worker"},        # B4: percorso diretto = Giano
+    "think-search": {"RG_WORKER_ABLATE": "search", "RG_THINKING_ROLES": "worker"},
+    "think-verify": {"RG_WORKER_ABLATE": "verify", "RG_THINKING_ROLES": "worker"},
+    "think-retry": {"RG_WORKER_ABLATE": "retry", "RG_THINKING_ROLES": "worker"},
+    "think-calc": {"RG_WORKER_ABLATE": "calc", "RG_THINKING_ROLES": "worker"},
+    "think-coherence": {"RG_WORKER_ABLATE": "coherence",
+                        "RG_THINKING_ROLES": "worker"},
+    "think+finishgate": {"RG_FINISH_GATE": "1", "RG_THINKING_ROLES": "worker"},
 }
 # simmetria obbligatoria (utente 2026-08-03): stesse ablazioni nei due blocchi
-B2 = ["full", "-search", "-verify", "-retry", "-calc", "-coherence", "-finishgate"]
+B2 = ["full", "-search", "-verify", "-retry", "-calc", "-coherence", "+finishgate"]
 B4 = ["think", "think-search", "think-verify", "think-retry", "think-calc",
-      "think-coherence", "think-finishgate"]
+      "think-coherence", "think+finishgate"]
 # smoke GPU: i bracci piu' informativi, con N run per avere statistica
-SMOKE = ["full", "-finishgate", "-coherence", "-search"]
+SMOKE = ["full", "-coherence", "-search", "-verify"]
 
 
 def main(profile: str, task_ids: list[str], arms: list[str],
@@ -62,13 +66,11 @@ def main(profile: str, task_ids: list[str], arms: list[str],
     print(f"LADDER AGENTICA @ {sha} — {task_ids} × {arms}\n", flush=True)
     out = ROOT / "bench" / "results"
     for arm in arms:
-        ablate, thinking = ARMS[arm]
-        for var, val in (("RG_WORKER_ABLATE", ablate),
-                         ("RG_THINKING_ROLES", thinking)):
-            if val:
-                os.environ[var] = val
-            else:
-                os.environ.pop(var, None)
+        env = ARMS[arm]
+        for var in _ENV_VARS:          # sempre azzerate: nessuna perdita tra bracci
+            os.environ.pop(var, None)
+        for var, val in env.items():
+            os.environ[var] = val
         greens = {t: 0 for t in task_ids}
         t0 = time.time()
         for n in range(runs):
@@ -88,8 +90,8 @@ def main(profile: str, task_ids: list[str], arms: list[str],
         print(f"[{arm}] TOTALE "
               + " ".join(f"{k}={v}/{runs}" for k, v in greens.items())
               + f" in {time.time()-t0:.0f}s", flush=True)
-    os.environ.pop("RG_WORKER_ABLATE", None)
-    os.environ.pop("RG_THINKING_ROLES", None)
+    for var in _ENV_VARS:
+        os.environ.pop(var, None)
     print("\nLADDER AGENTICA COMPLETA")
     return 0
 
