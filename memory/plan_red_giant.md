@@ -627,6 +627,56 @@ la fonte di verità**.)*
 routing di **F6** userà i dati di PS6 come input (quando pianificare: i micro-task NON si
 pianificano — misurato due volte; i task larghi solo se il plansys converte post-thinking).
 
+## 🧭 LA TESI E LA FASE — leggere questo PRIMA di proporre qualunque passo
+
+*(Enunciato dall'utente il 2026-08-04, e vincolante per come si sceglie cosa fare.)*
+
+> **"Un buon motore migliora l'efficienza di un modello microscopico fino a farlo diventare
+> effettivamente utile."**
+
+**Quattro conseguenze, in quest'ordine — non è una lista, è una sequenza:**
+
+1. La **baseline dev'essere la più capace possibile** con gli strumenti disponibili. Un motore
+   confrontato con un modello mal sfruttato misura la nostra pigrizia, non il motore.
+2. Bisogna **capire dove fallisce, come e perché**. Sapere *che* fallisce non basta a costruire
+   niente.
+3. Dev'essere **possibile costruire un motore**.
+4. **Solo allora inizia la ricerca vera**: come alzare il pavimento.
+
+### ⚠️ La tesi alza il PAVIMENTO, non il soffitto
+
+Non *"rendere il modello più intelligente"* ma *"rendere affidabilmente utile quello che c'è"*.
+Sono due assi diversi, e **chi li confonde misura la cosa sbagliata**. Metà delle discussioni
+confuse di questa campagna nascono da lì.
+
+### 📍 Dove siamo davvero: stiamo COMPRENDENDO, non ottimizzando
+
+Le misure fatte finora hanno scoperto leve di cui **ignoravamo l'esistenza** — il flag
+`--swa-full`, la card che orienta la scelta dello strumento, la compattazione della catena, il
+pensiero sui task a recupero largo — e **sei difetti di misura nostri**. Abbiamo pagato
+l'ignoranza in tempo, ed è ciò che la ricerca è.
+
+**Conseguenza operativa, che vale come regola:**
+
+- **In fase di comprensione i micro-test uno per volta VANNO BENE**, purché ognuno *spieghi*
+  qualcosa. Non sono inefficienza: sono il lavoro.
+- **È PREMATURO** congelare il codice per una campagna di verifica lunga (le ~22 ore della
+  matrice completa): misurerebbe con precisione un sistema che stiamo ancora scoprendo.
+- **Ottimizzare prima di aver capito non ha senso.**
+
+### 🎯 Il traguardo che apre la fase successiva: il "tetto del pavimento"
+
+Il punto in cui **la baseline è massimizzata e capita**. Da lì in poi la tesi si confronta con
+strumenti *compresi*, non indovinati — ed è lì che la campagna completa diventa la cosa giusta
+da fare.
+
+**Indicatore pratico di quale fase stiamo vivendo: il TASSO DI SORPRESA.** Finché gli
+esperimenti ribaltano previsioni registrate (2 su 3 finora) e scoprono difetti di misura (6 in
+pochi giorni), siamo in comprensione. Quando le misure smettono di sorprendere, la comprensione
+è matura e si passa a ottimizzare.
+
+---
+
 ## 🔬 LA MATRICE DI MISURA — regola di metodo PERMANENTE e NON NEGOZIABILE
 
 **(decisione utente, 2026-08-03: "da adesso in poi tutti i test dovranno essere svolti come
