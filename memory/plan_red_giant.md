@@ -1471,6 +1471,28 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   respinto da un errore che non nominava l'argomento mancante. **Intervento:** in
   `ToolRouter.dispatch`, l'errore `bad_args` nomina i campi obbligatori mancanti e mostra una
   chiamata d'esempio derivata dall'`input_model`, invece di `e.errors()`.
+
+  ⚠️ **Attenzione all'ambito:** LAD.10 è un fix **del router**, non della calcolatrice —
+  migliora *ogni* strumento del catalogo. La calcolatrice è solo il posto dove l'abbiamo
+  misurato.
+
+- [ ] **LAD.13** 🔎 **La calcolatrice merita il catalogo? — A/B a n=20, DOPO LAD.10.**
+  Anomalia rilevata rileggendo lo stato degli interruttori: `calculator` è **acceso senza
+  prove**, in mezzo a un insieme di decisioni prese tutte coi numeri. È invocato nel ~40% delle
+  occasioni, e nelle run vincenti di L5 spesso **mai**; la sua ablazione (`−calc`) non ha mai
+  mostrato differenze — ma a n=5, quindi non concludente. Occupa spazio nella card dei tool
+  (token di prompt su ogni step) senza aver dimostrato di servire.
+
+  **Ordine OBBLIGATO — prima LAD.10, poi questa:** misurare `−calc` adesso significherebbe
+  condannare uno strumento che sappiamo **rotto sull'interfaccia** (il 40% delle chiamate non
+  arriva nemmeno a eseguirsi per `expression=None`). Si ripara, poi si giudica. Invertire
+  l'ordine produrrebbe un verdetto sull'implementazione, non sullo strumento.
+
+  **Esecuzione:** `full` vs `−calc` su L5, 20 run per braccio, Fisher allegato. Esiti:
+  (a) `−calc` peggiora ⇒ lo strumento resta, e LAD.4 andrà riletto (il problema era
+  l'interfaccia, non l'obbedienza); (b) nessuna differenza ⇒ **si rimuove dal catalogo**, e si
+  registra che la guardia di coerenza lo aveva reso superfluo — il control plane calcola, il
+  modello non deve nemmeno chiedere.
 - [ ] **LAD.11** 🔎 **Rimisura di L6 e del blocco B4 (thinking) post-fix, su GPU.**
   ⚠️ **Il blocco B4 pre-fix è stato BUTTATO** (girava su codice precedente ai fix del corpus e
   del giudice, quindi non comparabile): nella matrice c'è un **buco dichiarato**, non un dato
