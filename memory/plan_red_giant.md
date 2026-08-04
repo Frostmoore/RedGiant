@@ -739,10 +739,20 @@ sono APERTI, non tombali):**
    dimostrano i delta, solo i benchmark pubblici dimostrano la posizione assoluta.
 
    **Decisioni fissate il 2026-08-05 (utente):**
-   - Si eseguono **su Severino vero** (non sim), **dopo l'implementazione del tool web**
-     (F7.2) — sono il collaudo del deployment reale.
+   - Si eseguono **su Severino vero** (non sim), e **solo dopo che TUTTI i tool necessari ai
+     benchmark scelti sono implementati** (web incluso, F7.2) — sono il collaudo del
+     deployment reale, non un collaudo parziale.
    - Il **simulatore d'utente con LLM più grandi è ammesso** (τ-bench): è infrastruttura di
      *test*, non parte del motore — D16 vincola il sistema, non chi lo esamina.
+   - **IFEval è SCARTATO, si usa solo IFBench**: il nudo pubblicato fa 94,6 su IFEval — il
+     margine residuo è rumore, e per la regola di ammissibilità (se il nudo passa, il task non
+     misura l'harness) IFEval non misura niente di nostro. IFBench (nudo 38,0) sì.
+   - **Requisito di adattamento, vincolante per OGNI adapter:** ogni test deve produrre un
+     **log leggibile per-item** dal quale si possa estrarre *come* e *cosa* sbaglia — input,
+     output del modello, output atteso, verdetto del giudice, e per i benchmark agentici la
+     traccia passi/tool-call. È l'applicazione della lezione di progetto "i difetti si trovano
+     leggendo artefatti, non punteggi" (6 difetti di misura trovati così, 0 dai tassi di
+     successo): un benchmark che restituisce solo un numero è mezzo benchmark.
 
    **Candidati con stime (base: prefill CPU 6,8 s/1K · 30,7 s/4K · 69,6 s/8K, gen 35,8 tok/s,
    passo caldo append-only ~10 s; 1 passata per item è lo standard di leaderboard e le
@@ -755,7 +765,7 @@ sono APERTI, non tombali):**
 
    | Benchmark | Volume | Adattamento | Run CPU stimata | **Nudo pubblicato (E2B bf16+think)** | Note |
    |---|---|---|---|---|---|
-   | IFEval | 541 prompt | ~½ giorno | ~2-3 h/braccio | **94,6** (IFBench: 38,0) | il nudo pubblicato è già alto: il margine per l'harness è su IFBench, non su IFEval |
+   | **IFBench** (IFEval scartato) | ~300 prompt (volume da confermare in adattamento) | ~½-1 giorno | ~2-3 h/braccio | **38,0** | successore duro di IFEval; il nudo a 38 lascia margine misurabile all'harness, IFEval a 94,6 no |
    | BFCL single-turn AST | ~1.700 entry (campione 500 ok) | ~1 giorno | ~7 h/braccio (2 h campione) | **non pubblicato** per E2B | comparabili: xLAM-2-1b 53,97%, Qwen3-1.7B 55,49%; community: 26B-A4B ≈ 89% non-live |
    | RULER @8K (4-5 task) | 100 item/task | ~1 giorno | ~10 h nudo + 6-12 h harness | RULER no; **MRCR v2 (8-needle, 128k): 19,1** | l'ancora long-context pubblicata è MRCR; il nostro harness gioca proprio dove il nudo crolla |
    | τ-bench / Tau2 | 165+ task multi-turn | ~2-4 giorni | ~11-19 h a trial (pass^1) | **airline 31,0 · retail 34,6 · telecom 19,7** (model card: media 24,5) | pubblicato! Il target è battere il nudo-con-thinking di Google col nostro workflow |
@@ -770,12 +780,13 @@ sono APERTI, non tombali):**
    tesi. Riferimenti per E4B (stessa fonte): IFEval 96,7 · MRCR 25,4 · TB-Hard 8,0 · Tau2
    52,0/67,1/18,4.
 
-   **Ordine consigliato:** IFEval → BFCL → RULER (pacchetto "starter": ~2-3 giorni di adapter
-   + ~25-30 h CPU) → GAIA e τ-bench (post-F7) → Terminal-Bench → SWE-bench Lite. Prima di
-   impegnare le ore: **passata di taratura** (20 entry BFCL + 5 item RULER, ~1 h) per
-   sostituire il fattore GPU→CPU stimato (5-10×) con un numero misurato. Letteratura di
-   riferimento (D22): TinyLLM (arXiv:2511.22138) va letto prima di fissare la suite — valuta
-   SLM su task agentici su edge, il nostro esatto regime.
+   **Ordine consigliato:** IFBench → BFCL → RULER (pacchetto "starter": ~2-3 giorni di adapter
+   + ~25-30 h CPU) → Tau2 e Terminal-Bench Hard (i due con nudo pubblicato in fascia dinamica:
+   24,5-34,6 e 3,0) → GAIA (post-F7.2) → SWE-bench Lite. Prima di impegnare le ore: **passata
+   di taratura** (20 entry BFCL + 5 item RULER, ~1 h) per sostituire il fattore GPU→CPU stimato
+   (5-10×) con un numero misurato. Letteratura di riferimento (D22): TinyLLM
+   (arXiv:2511.22138) va letto prima di fissare la suite — valuta SLM su task agentici su
+   edge, il nostro esatto regime.
 
 ---
 
