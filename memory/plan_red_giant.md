@@ -739,6 +739,11 @@ sono APERTI, non tombali):**
    dimostrano i delta, solo i benchmark pubblici dimostrano la posizione assoluta.
 
    **Decisioni fissate il 2026-08-05 (utente):**
+   - **La campagna ladder ufficiale su `severino-sim` è ANNULLATA.** I numeri assoluti
+     ufficiali del progetto verranno dai **benchmark pubblici eseguiti su Severino vero**;
+     la GPU (`dev-fast`) resta il profilo di iterazione per testare e misurare i **delta**
+     (ablazioni, A/B) prima del collaudo finale. D6 resta rispettato nello spirito: i numeri
+     ufficiali sono comunque CPU, ma sul deployment reale invece che sul simulatore.
    - Si eseguono **su Severino vero** (non sim), e **solo dopo che TUTTI i tool necessari ai
      benchmark scelti sono implementati** (web incluso, F7.2) — sono il collaudo del
      deployment reale, non un collaudo parziale.

@@ -1610,7 +1610,10 @@ migrerà in appendice nella versione da submission.
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
-- [ ] L5 con la guardia su `severino-sim` (il 18/20 è GPU, va confermato sul profilo ufficiale)
+- [x] ~~L5 con la guardia su `severino-sim`~~ — **ANNULLATA 2026-08-05 (utente)**, come ogni
+      conferma ladder su severino-sim: i numeri assoluti ufficiali verranno dai **benchmark
+      pubblici su Severino vero** (v. piano, sezione benchmark); la GPU resta per iterazione e
+      delta interni
 - [x] ~~Gate sul finish in-loop (LAD.9)~~ — **fatto e spento**: risultato nullo, §7.7
 - [ ] `bad_args` che insegna (LAD.10) — il secondo modo di fallire di §7.6.5, non ancora affrontato
 - [x] ~~LAD.13: `calculator` merita il catalogo?~~ — **no**: p = 1,000, spenta di default (§7.9)
@@ -1622,11 +1625,11 @@ migrerà in appendice nella versione da submission.
       2026-08-04: i test attuali non sono invalidi ma vanno rifatti per sicurezza dopo i fix
 - [x] ~~Ladder B4 post-fix~~ — **fatto** (§7.10): B2 43/60 contro B4 47/60, p = 0,528, +55% tempo
 - [ ] B4 **con le ablazioni** (simmetria della matrice): finora solo il braccio `think` completo
-- [ ] **Ladder ufficiale su severino-sim**: B2 + B4 col codice fixato, run multiple → i numeri che andranno nel README
+- [x] ~~**Ladder ufficiale su severino-sim**~~ — **ANNULLATA 2026-08-05 (utente)**: sostituita dai benchmark pubblici su Severino vero. I numeri per il README saranno quelli
 - [ ] Diagnosi di L7 (perché 60 passi non bastano)
 - [x] ~~Disambiguazione del confondimento B3/L5 (budget di pensiero 256)~~ — fatta, §6.2 nota 1
 - [x] ~~**LAD.14**: pensiero PIENO con materiale PIENO~~ — **fatto, e ha ribaltato il verdetto**: 20/20 contro 0/20, §7.8
-- [ ] LAD.14 su `severino-sim` (il 20/20 è GPU: va confermato sul profilo ufficiale prima di essere citato come verdetto)
+- [x] ~~LAD.14 su `severino-sim`~~ — **ANNULLATA 2026-08-05 (utente)**: stessa decisione di cui sopra
 - [ ] **F5 con il secondo obiettivo**: fare spazio al ragionamento oltre che al materiale (§7.8.5)
 - [ ] Retest dei verdetti aperti (planner e thinking) col router attivo, post-F6/F7
 - [ ] Benchmark pubblici a fine progetto (valori comparabili con la letteratura)
