@@ -99,9 +99,16 @@ def test_identical_repeat_counts_into_cumulative_guard(env):
         def with_appended_context(self, s):
             return self
 
+    # F5.0-bis: il Worker legge llm.cfg.ctx_size e llm.count_tokens per decidere
+    # se compattare la catena volatile — il doppio deve rispecchiarlo.
     class _Llm:
+        cfg = SimpleNamespace(ctx_size=8192)
+
         def complete(self, parts, **kw):
             return SimpleNamespace(parsed=step)
+
+        def count_tokens(self, text):
+            return len(text) // 4
 
     class _Asm:
         def build(self, *a, **k):
@@ -127,8 +134,13 @@ def test_identical_repeat_counts_into_cumulative_guard(env):
                                                           "args": {"cmd_id": "pytest"}}})
 
     class _LlmTests:
+        cfg = SimpleNamespace(ctx_size=8192)
+
         def complete(self, parts, **kw):
             return SimpleNamespace(parsed=step_tests)
+
+        def count_tokens(self, text):
+            return len(text) // 4
 
     w2 = Worker(llm=_LlmTests(), assembler=_Asm(), router=_Router())
     rep2 = w2.run(ctx, max_steps=12)

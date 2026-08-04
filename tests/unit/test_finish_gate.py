@@ -129,7 +129,8 @@ def test_arms_are_registered_with_the_right_polarity():
     p = Path(__file__).resolve().parents[2] / "bench" / "ladder" / "run_agentic.py"
     src = p.read_text(encoding="utf-8")
     assert '"+finishgate": {"RG_FINISH_GATE": "1"}' in src
-    b2 = next(l for l in src.splitlines() if l.startswith("B2 = ["))
+    # B2/B4 possono occupare piu' righe: si legge fino alla parentesi chiusa
+    b2 = src.split("\nB2 = [")[1].split("]")[0]
     b4 = src.split("\nB4 = [")[1].split("]")[0]
     assert '"+finishgate"' in b2 and '"think+finishgate"' in b4
     # nessun braccio deve restare orfano nel dizionario ARMS

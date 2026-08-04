@@ -57,10 +57,23 @@ class PromptParts:
 
     def with_appended_context(self, block: str) -> "PromptParts":
         """Append-only su S6 (D20): tutto il resto resta byte-identico."""
+        return self.with_volatile(self.volatile_context + block)
+
+    def with_volatile(self, volatile: str) -> "PromptParts":
+        """Sostituisce S6 per intero — le altre sezioni restano byte-identiche.
+
+        Serve alla compattazione di F5.0-bis: riscrivere la catena volatile
+        ROMPE l'append-only di D20, ed e' l'unico punto del sistema autorizzato
+        a farlo. Il costo del cambio a meta' prompt e' misurato (F5.0-ante,
+        `data.md` §7.11): **1 token** riprocessato con `--swa-full
+        --cache-reuse`, **2.748** senza. Per questo la compattazione va fatta
+        A ONDATE e non a ogni passo: dove i flag non ci sono, ogni ondata si
+        ripaga il prefisso una volta sola invece che sempre.
+        """
         return PromptParts(
             preamble=self.preamble, role_card=self.role_card, tool_card=self.tool_card,
             task_header=self.task_header, durable_state=self.durable_state,
-            volatile_context=self.volatile_context + block,
+            volatile_context=volatile,
             output_instruction=self.output_instruction)
 
 

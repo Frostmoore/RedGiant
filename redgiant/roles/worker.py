@@ -28,6 +28,28 @@ _RESULT_MAX_CHARS = 6000  # ~400 righe compatte; il troncamento e' dichiarato ne
 _MUTATING_TOOLS: frozenset[str] = frozenset({"write_file", "edit_file", "write_patch"})
 _MAX_FINISH_REFUSALS: int = 2  # tetto: non si sostituisce un loop degenere con un altro
 
+# F5.0-bis — compattazione della catena volatile.
+#
+# Misura che la motiva (data.md §7.12): la sezione CONTEXT e' l'UNICA che
+# cresce, e al punto di rottura vale 4.600 token — il 65% del prompt. Tutto il
+# resto e' costante. L7 muore li': 8,5 passi di media su 60 disponibili.
+#
+# COSA collassa: i risultati dei tool piu' vecchi vengono sostituiti dalla loro
+# `evidence` — la riga di verita' DETERMINISTICA che ogni tool produce gia' da
+# se' ("read x:1-40 (40 lines of 120)", "search 'foo' -> 12 matches"). Nessun
+# riassunto generato dal modello: un riassunto allucinato dentro la catena di
+# verita' sarebbe peggio del testo lungo (stessa ragione per cui lo
+# StateCompressor di F5.5 valida contro il DB).
+#
+# QUANDO: a ONDATE, non a ogni passo. La compattazione riscrive il prefisso;
+# con `--swa-full --cache-reuse` costa 1 token (F5.0-ante), ma su un runtime
+# senza quei flag costerebbe il riprocessamento completo — e un'ondata lo paga
+# UNA volta, mentre uno sfratto continuo lo pagherebbe sempre. E' anche cio'
+# che la letteratura riporta come differenza principale fra compattazione ed
+# eviction incrementale.
+_COMPACT_TRIGGER = 0.55   # frazione di ctx_size occupata dalla catena volatile
+_COMPACT_KEEP_LAST = 3    # ultimi N risultati sempre per intero
+
 
 def finish_gate_enabled() -> bool:
     """SPENTO DI DEFAULT (verdetto LAD.9, 2026-08-03) — `RG_FINISH_GATE=1` per
@@ -186,6 +208,13 @@ class Worker(Role):
         gate_on = finish_gate_enabled()
         mutated = False
         finish_refusals = 0
+        # F5.0-bis: la catena si tiene anche come LISTA di blocchi, non solo
+        # come stringa — serve a poterla ricostruire collassando i vecchi.
+        # `base_volatile` e' cio' che c'era prima del primo step (spec della
+        # sottofase, [PREVIOUS ATTEMPT FAILED], ripresa): non si tocca mai.
+        base_volatile = parts.volatile_context
+        blocks: list[tuple[int, str, str, str]] = []   # (k, tool, pieno, collassato)
+        compacted = False
         # TH0.3 (braccio T-J): pensiero per-step di J — il canale e' usa-e-getta
         # dentro complete() (TH-D2): la catena append-only 'parts' non lo vede mai
         from redgiant.plansys import thinking_budget, thinking_roles
@@ -287,12 +316,47 @@ class Worker(Role):
                                     f"write_file to rewrite the whole file) or finish "
                                     f"blocked.")
 
-            parts = parts.with_appended_context(
-                f"\n[STEP {k}] {step.model_dump_json()}"
-                f"\n[STEP {k} RESULT] {self._serialize(result)}{repeat_note}")
+            blocks.append((k, call.tool,
+                           f"\n[STEP {k}] {step.model_dump_json()}"
+                           f"\n[STEP {k} RESULT] {self._serialize(result)}"
+                           f"{repeat_note}",
+                           f"\n[STEP {k}] {call.tool} -> "
+                           + ("; ".join(result.evidence) if result.evidence
+                              else (result.error or "ok"))))
+            parts = parts.with_appended_context(blocks[-1][2])
+            parts, compacted = self._maybe_compact(parts, base_volatile, blocks,
+                                                   compacted, step_log)
 
         return FinishReport(status="blocked", summary="step budget exhausted",
                             evidence=[], verification_requested=[])
+
+    def _maybe_compact(self, parts, base_volatile: str, blocks: list,
+                       already: bool, step_log) -> tuple:
+        """F5.0-bis: un'ondata di compattazione quando la catena sfonda la soglia.
+
+        Ritorna (parts, compacted). Idempotente per ondata: `already` evita di
+        riscrivere il prefisso a ogni passo successivo — che e' esattamente la
+        differenza fra compattazione a ondate e sfratto continuo.
+        """
+        from redgiant.core.ablate import worker_ablated
+        if worker_ablated("compact") or already or len(blocks) <= _COMPACT_KEEP_LAST:
+            return parts, already
+        limit = int(self.llm.cfg.ctx_size * _COMPACT_TRIGGER)
+        if self.llm.count_tokens(parts.volatile_context) < limit:
+            return parts, already
+
+        keep = blocks[-_COMPACT_KEEP_LAST:]
+        old = blocks[:-_COMPACT_KEEP_LAST]
+        collapsed = "".join(b[3] for b in old)
+        note = (f"\n[{len(old)} EARLIER STEPS COLLAPSED to one line each: their "
+                f"full results are no longer shown. What you already found is "
+                f"summarised above — do NOT search for it again.]")
+        parts = parts.with_volatile(base_volatile + collapsed + note
+                                    + "".join(b[2] for b in keep))
+        if step_log is not None:
+            step_log(f"compattazione: {len(old)} risultati collassati "
+                     f"sulla loro evidence")
+        return parts, True
 
     @staticmethod
     def _serialize(result: ToolResult) -> str:

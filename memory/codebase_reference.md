@@ -187,6 +187,7 @@ class PromptParts
     def section_tokens(self, counter: Callable[[str], int]) -> dict[str, int]
     def static_prefix_len(self) -> int
     def with_appended_context(self, block: str) -> "PromptParts"
+    def with_volatile(self, volatile: str) -> "PromptParts"   # F5.0-bis: sostituisce S6 per intero
 class PromptAssembler
     def __init__(self, prompts_dir: Path) -> None
     def build(self, role: str, *, task: TaskState, subtask: SubtaskSpec | None, tools: Sequence["ToolSpec"], volatile: str, output_schema: dict | None = None, schema_name: str | None = None) -> PromptParts
