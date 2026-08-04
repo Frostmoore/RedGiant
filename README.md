@@ -331,6 +331,31 @@ Two design traps were found in the probe itself, both by measuring: cutting at a
 
 **The lesson, and it is the fifth of this campaign:** *a constraint that structures an entire phase must be re-measured before designing around it* — particularly when the number supporting it is old and was gathered to answer a different question.
 
+#### Then we found where the 8,192 tokens actually go, and moved the rung that resisted everything
+
+With the per-section breakdown persisted on every call, 140 calls on the hardest rung give the shape of the problem:
+
+| Step | CONTEXT | ROLE | TOOLS | PREAMBLE | TASK | STATE | OUTPUT | Total |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 284 | 1521 | 317 | 314 | 272 | 88 | 18 | 2,871 |
+| 15 | 4,077 | 1521 | 317 | 314 | 272 | 88 | 18 | 6,664 |
+| **at the ceiling** | **4,600** | 1521 | 317 | 314 | 272 | 88 | 18 | **7,186** |
+
+Two findings. **The tool-result chain is the only thing that grows**, and at the ceiling it is 65% of the prompt. And the **fixed cost is 2,530 tokens — 31% of the window** — spent before any work happens; the largest item inside it is the worker's role card at 837 tokens, which nobody had counted. That last number is uncomfortable: we spent the whole campaign *adding* rules to a document we pay for on every step, and measuring that they did not work.
+
+It also surfaced a bug. Rule 13 of the card ordered the model to route every sum through a `calculator` tool that had been removed from the catalogue two commits earlier — an impossible instruction, issued on every step, and the explanation for the eight calls to a non-existent tool we had filed as a curiosity. A permanent test now forbids any role card from naming a tool outside the default catalogue, because that class of error will recur every time a component is switched off.
+
+**The lever, and the result.** When the chain passes 55% of the window, older tool results collapse onto their own `evidence` line — the deterministic one-liner every tool already produces. No model-written summary: a hallucinated summary inside the chain of truth would be worse than the long text. It happens in **waves**, not continuously, because rewriting the prefix costs one token with the runtime flags above and a full reprocess without them — a wave pays that once, continuous eviction pays it always.
+
+| Arm (40 runs, hardest rung) | Verified | 95% CI | Steps per attempt |
+|---|---|---|---|
+| compaction active | **22/40 (55%)** | 40–69% | **13.2** |
+| ablated | **12/40 (30%)** | 18–45% | 7.7 |
+
+**Fisher exact two-sided p = 0.0411.** The rung that had been red in every previous arm, and 0/3 naked, now passes more than half the time. The **+53% wall-clock is the cost of not dying**: attempts in the ablated arm stop at 7.7 steps, which is precisely the context-exhaustion death diagnosed earlier — fast for the same reason `−retry` was fast.
+
+Method note, and it is the point of the section: a 20-run pilot (11/20 vs 6/20, p = 0.20) was used **only to size the experiment**; the power calculation said 40 per arm; a **fresh** confirmatory sample was then run, with no optional stopping. Pilot and confirmatory agree exactly. It is the lesson from the finish-gate retraction applied rather than repeated.
+
 #### What the full logs showed that no score did
 
 Reading the complete step-by-step logs of the last 40 runs surfaced **two failure modes larger than the arithmetic problem** we had been chasing:

@@ -83,6 +83,7 @@ plausible-but-unmeasured improvement is not an improvement.*
 | 11 | **Full reasoning budget with untruncated material** | **0/20** | **20/20** | **p = 1.45 × 10⁻¹¹** — but only where material and reasoning fit together within 8,192 tokens; on the full rung the material would be truncated and the gain disappears. A verdict about **hardware** | 6.4 |
 | 12 | **Actionable errors** (refusals that state disk state; argument errors that name the missing field) | spirals up to **6 consecutive steps**, **7 fatal sequences** | **max 1 step**, **0 fatal**, recovery **100%** | they do not reduce mistakes (18% of calls still malformed): they remove the **spirals** mistakes used to cause. They act on the *cost* of failing, not its frequency | 6.4-ter |
 | 13 | **Runtime cache flags** (full sliding-window cache + suffix shifting) | **2,748** tokens reprocessed to remove a block mid-prompt | **1** | the model family uses sliding-window attention; with a partial cache the runtime cannot reuse anything past a divergence. Costs memory, so adopted on the development profile only | 6.4-quinquies |
+| 14 | **Wave compaction of the tool-result chain** | hardest rung **12/40 (30%)**, attempts dying at **7.7 steps** | **22/40 (55%)**, **13.2 steps** | **p = 0.0411**, sample size fixed *before* looking. Older results collapse onto the deterministic evidence line each tool already emits — no model-written summary. The +53% wall is the cost of **not dying** | 6.4-sexies |
 
 **The common thread across all ten: none of them teaches the model anything.** Eight make an
 error *impossible to emit*; two grant more room or more attempts for the same work.
@@ -858,6 +859,52 @@ constrained reference profile.
 re-measured before designing around it*, especially when the number supporting it is old and was
 gathered to answer a different question. Ours was correct for prefix stability and simply did
 not transfer to removal.
+
+### 6.4-sexies Capacity, measured: where the window goes and what buying it back is worth
+
+Persisting the per-section composition of every prompt — a computation that already existed but
+was discarded except inside overflow errors — turns the capacity problem from a diagnosis into a
+target. On 140 calls of the hardest rung: the tool-result chain is **the only section that
+grows**, reaching **65% of the prompt** at the ceiling, while a **fixed 31% of the window** is
+spent before any work begins. The largest fixed item is the executor's role card, at 837 tokens
+per call — a figure nobody had computed, and an uncomfortable one, since the campaign was spent
+*adding* rules to that document and measuring that they did not work.
+
+The instrumentation also exposed a defect of a kind we expect to recur: a card rule mandating a
+tool that had been removed from the catalogue two commits earlier — an unexecutable instruction
+issued on every step, and the explanation for a set of calls to a non-existent tool we had
+recorded as a curiosity. A permanent test now forbids any role card from naming a tool outside
+the default catalogue.
+
+**The intervention.** Past a threshold, older tool results collapse onto the deterministic
+evidence line each tool already emits. No model-written summary is involved: a hallucinated
+summary inside the chain of record would be worse than the verbose text it replaces. Compaction
+happens **in waves** rather than continuously, because rewriting the prefix costs one token with
+the runtime flags of §6.4-quinquies and a full reprocess without them — a wave pays that once,
+continuous eviction pays it on every request.
+
+| Arm (40 runs, hardest rung) | Verified | 95% CI | Steps per attempt |
+|---|---|---|---|
+| compaction active | **22/40 (55%)** | 40–69% | **13.2** |
+| ablated | **12/40 (30%)** | 18–45% | 7.7 |
+
+**Fisher exact two-sided p = 0.0411.** The rung had been red in every previously measured arm
+and 0/3 naked. The 53% additional wall-clock is not compaction overhead but **the cost of not
+dying**: ablated attempts stop at 7.7 steps, matching the context-exhaustion death diagnosed in
+§5.9.5, and are fast for the same reason the no-retry arm was fast.
+
+**On the method, which is the transferable part.** A 20-run pilot (11/20 against 6/20,
+p = 0.20) was used *only to size the experiment*; the power calculation specified 40 per arm;
+a **fresh** confirmatory sample was then collected, with no optional stopping. Pilot and
+confirmatory agree to the percentage point. This is the retraction of §5.9.4 applied rather than
+repeated — and it is the first result in this project obtained under a pre-specified sample
+size.
+
+**What is not yet established.** The reuse ratio before and after compaction has not been
+measured, so we know what the lever buys and not what it costs in cache terms — and on the
+memory-constrained profile, which lacks the runtime flags, that cost may differ substantially
+from the development profile. The intervention is therefore reported as effective and **not yet
+accepted**.
 
 ### 6.5 On negative results
 

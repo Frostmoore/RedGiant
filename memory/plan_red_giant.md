@@ -2155,6 +2155,40 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   scende il baratto va **dichiarato in numeri** — quanto contesto si compra per quanto prefill
   si ripaga. Una leva che vince sui verdi e distrugge il riuso non è accettata senza quel conto.
 
+  ### ✅ FATTA (2026-08-04) — condizione (a) SODDISFATTA, (b) ancora aperta
+
+  **Meccanismo:** oltre il **55% del contesto**, i risultati dei tool più vecchi collassano
+  sulla loro **`evidence`** — la riga di verità deterministica che ogni tool produce già.
+  Ultimi 3 interi, testa della catena mai toccata, avviso esplicito al modello. **Nessun
+  riassunto generato dal modello** (allucinare dentro la catena di verità sarebbe peggio del
+  testo lungo). **A ondate**, non a ogni passo. Ablabile: `RG_WORKER_ABLATE=compact`.
+
+  **Verdetto (dev-fast, campione CONFERMATIVO da 40 run per braccio, `data.md` §7.13.4):**
+
+  | Braccio su L7 | Verificati | Passi/tentativo | Ondate |
+  |---|---|---|---|
+  | `full` | **22/40 = 55%** | **13,2** | 66 |
+  | `−compact` | **12/40 = 30%** | 7,7 | 0 |
+
+  **Fisher esatto bilaterale p = 0,0411.** Il gradino che resisteva a tutto — 400 documenti,
+  tre volte la finestra, rosso in ogni braccio precedente e 0/3 nudo — passa dal 30% al 55%.
+
+  **Costo: +53% di tempo, ed è il costo di NON MORIRE.** I 7,7 passi del braccio ablato
+  coincidono con la morte per contesto pieno di LAD.8; con la compattazione si arriva a 13,2.
+  Stessa forma di `−retry`, veloce perché falliva prima.
+
+  **Metodo — il primo risultato della campagna fatto come si deve:** pilota da 20 run
+  (11/20 vs 6/20, p = 0,200) usato **solo per dimensionare**, calcolo di potenza dichiarato
+  (servivano 40 per braccio, p atteso 0,041), campione confermativo **nuovo** — niente
+  *optional stopping*. È la lezione di LAD.9 applicata invece che ripetuta. Pilota e
+  confermativo concordano: 55% contro 30% in entrambi.
+
+  **⚠️ Condizione (b) ANCORA APERTA:** `avg_reuse_ratio` prima/dopo non è stato misurato —
+  serve F5.2. Finché non c'è, sappiamo quanto la compattazione compra ma **non quanto costa in
+  riuso della KV**, e su `severino-sim` (senza `--swa-full`) quel costo potrebbe essere ben
+  diverso da quello misurato su GPU. **La leva non è promossa a “accettata” finché il conto non
+  è fatto.**
+
 #### F5.1 — Context Builder
 
 - [ ] 🤖 **Obiettivo:** la selezione del contesto minimo per ruolo (specsheet §9), al posto dell'assemblaggio semplice usato finora.

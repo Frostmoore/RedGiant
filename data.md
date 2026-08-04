@@ -34,6 +34,8 @@ comparabili e numerosità adeguata; tutto ciò che è stato *osservato* ma non *
 | 10 | **Budget di passi proporzionale alla taglia** | L7 moriva senza mai scrivere il file | L7 **11/20** | 20 passi non bastano per 8 fatti in 400 documenti: non era incapacità, era budget | §7.7.2 |
 | 11 | **Pensiero a budget pieno, materiale intero** | **0/20** | **20/20** | **p = 1,45×10⁻¹¹** — ma solo dove materiale e pensiero **ci stanno insieme** in 8192: sul gradino vero il materiale verrebbe troncato e il guadagno sparisce. Verdetto sull'**hardware** | §7.8 |
 | 12 | **Errori azionabili** (`bad_args` LAD.10, `refusal_state` LAD.6) | spirali fino a **6 passi consecutivi**, **7 sequenze fatali** | **max 1 passo**, **0 fatali**, recupero **100%** | non riducono gli sbagli (18% di chiamate ancora malformate): **tolgono le spirali che gli sbagli causavano**. Agiscono sul *costo* del fallire, non sulla frequenza | §7.9.2 |
+| 13 | **Flag di runtime** (`--swa-full --cache-reuse`) | **2.748** token per rimuovere un blocco dal mezzo | **1** | Gemma è sliding-window: con la cache SWA parziale il runtime non riusa nulla dopo una divergenza. Costa memoria → adottato solo su GPU | §7.11 |
+| 14 | **Compattazione della catena volatile** (F5.0-bis) | L7 **12/40 = 30%**, tentativi morti a **7,7 passi** | **22/40 = 55%**, **13,2 passi** | **p = 0,0411**, campione dimensionato *prima* di guardare. Il +53% di tempo è il costo di **non morire** | §7.13.4 |
 
 **Il filo comune delle 10 righe:** nessuna insegna qualcosa al modello. Otto rendono
 *impossibile* un errore, due gli danno più spazio o più tentativi per lo stesso lavoro.
@@ -1158,6 +1160,82 @@ codice vecchio.
 ~68 (nomi esatti), ~70 (dire ≠ fare). Non sono cifre enormi da sole, ma sono pagate **su ogni
 chiamata di ogni run**, e la campagna ha dimostrato che quelle regole non producono obbedienza.
 **Da qui F5.0-ter nel piano**: misurare la card, invece di continuare ad aggiungerci righe.
+
+## 7.13 F5.0-bis — compattazione della catena volatile: il pilota
+
+*(2026-08-04, dev-fast, 20 run per braccio su L7, `@27f9cbc`. **Pilota**, non verdetto: v.
+§7.13.3.)*
+
+### 7.13.1 Il meccanismo
+
+Quando la catena volatile supera il **55% del contesto**, i risultati dei tool più vecchi
+vengono sostituiti dalla loro **`evidence`** — la riga di verità deterministica che ogni tool
+produce già da sé (*"read x:1-40 (40 lines of 120)"*, *"search 'foo' → 12 matches"*). Gli ultimi
+3 restano interi, la testa della catena (spec della sottofase, `[PREVIOUS ATTEMPT FAILED]`) non
+si tocca mai, e il modello viene avvisato che è successo.
+
+**Nessun riassunto generato dal modello.** Un riassunto allucinato dentro la catena di verità
+sarebbe peggio del testo lungo — la stessa ragione per cui lo StateCompressor di F5.5 valida
+contro il DB.
+
+**A ondate, non a ogni passo.** Riscrivere il prefisso costa **1 token** con `--swa-full
+--cache-reuse` e il riprocessamento completo senza (§7.11): un'ondata lo paga una volta sola,
+uno sfratto continuo lo pagherebbe sempre. È anche la differenza che la letteratura indica fra
+compattazione ed eviction incrementale.
+
+### 7.13.2 I numeri del pilota
+
+| Braccio | L7 verificati | Tempo | **Passi per tentativo** |
+|---|---|---|---|
+| `full` (compattazione attiva) | **11/20** | 1.028 s | **14,2** |
+| `−compact` (ablata) | **6/20** | 679 s | **7,0** |
+
+**Fisher bilaterale p = 0,200** — IC 95%: 34-74% contro 15-52%, ampiamente sovrapposti.
+
+**Il dato meccanicistico è più forte del punteggio: i passi per tentativo raddoppiano.** I 7,0
+del braccio ablato coincidono con la diagnosi di LAD.8 (8,5 passi di media, morte per contesto
+pieno); con la compattazione i tentativi arrivano a **14,2**. Il **+51% di tempo è il costo di
+NON morire** — la stessa forma di `−retry`, che era veloce perché falliva subito.
+
+### 7.13.3 Perché questo NON è un verdetto
+
+`p = 0,200` non risolve niente, ed è **esattamente la situazione in cui ho sbagliato con LAD.9**
+leggendo un nullo sotto-potenziato come "non funziona". Stavolta il calcolo è stato fatto prima
+di parlare:
+
+| Run per braccio | 55% contro 30% | p |
+|---|---|---|
+| 20 | 11/20 vs 6/20 | 0,200 |
+| 30 | 16/30 vs 9/30 | 0,115 |
+| **40** | 22/40 vs 12/40 | **0,041** ✅ |
+| 60 | 33/60 vs 18/60 | 0,009 |
+
+**Servono 40 run per braccio.** E le prime 20 **non si possono estendere**: aggiungere run dopo
+aver guardato l'esito è *optional stopping*, che gonfia il falso positivo. Quindi le 20 restano
+un **pilota che serve solo a dimensionare**, e il verdetto viene da un campione nuovo da 40.
+
+### 7.13.4 Il verdetto — campione confermativo (40 run per braccio)
+
+| Braccio | L7 verificati | IC 95% | Tempo | Passi/tentativo | Ondate |
+|---|---|---|---|---|---|
+| `full` (compattazione) | **22/40 = 55%** | 40-69% | 1.917 s | **13,2** | 66 |
+| `−compact` (ablata) | **12/40 = 30%** | 18-45% | 1.253 s | 7,7 | 0 |
+
+**Fisher esatto bilaterale p = 0,0411.** Pilota e confermativo concordano esattamente — 55%
+contro 30% in entrambi — e la dimensione del campione era **decisa prima di guardare**.
+
+**Il gradino che resisteva a tutto si muove.** L7 — 400 documenti, 25K token di materiale, tre
+volte la finestra — passa dal 30% al 55%. Era rosso in ogni braccio delle campagne precedenti e
+0/3 nudo.
+
+**Il costo è reale e va detto: +53% di tempo.** Ma non è overhead della compattazione: è il
+costo di **non morire**. I passi per tentativo passano da 7,7 a 13,2, e i 7,7 del braccio ablato
+coincidono con la morte per contesto pieno diagnosticata da LAD.8. Il braccio senza
+compattazione è veloce come lo era `−retry`: perché fallisce prima.
+
+**Nota di metodo — è il primo risultato della campagna fatto come si deve.** Pilota per
+dimensionare, calcolo di potenza dichiarato, campione confermativo nuovo, nessun *optional
+stopping*. È la lezione di LAD.9 applicata invece che ripetuta.
 
 ## 8. Cosa manca (aggiornamento previsto)
 
