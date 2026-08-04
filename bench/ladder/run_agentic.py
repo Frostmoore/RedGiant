@@ -28,28 +28,29 @@ from redgiant.eval.harness import run_eval
 # B2 = workflow senza thinking (full + ablazioni) · B4 = workflow CON thinking
 # Convenzione: "-x" ABLA un componente attivo, "+x" ACCENDE un componente che
 # il progetto tiene spento (verdetto negativo ma aperto, come D11 e TH3).
-_ENV_VARS = ("RG_WORKER_ABLATE", "RG_THINKING_ROLES", "RG_FINISH_GATE")
+_ENV_VARS = ("RG_WORKER_ABLATE", "RG_THINKING_ROLES", "RG_FINISH_GATE",
+             "RG_CALCULATOR")
 ARMS = {
     "full": {},
     "-search": {"RG_WORKER_ABLATE": "search"},
     "-verify": {"RG_WORKER_ABLATE": "verify"},
     "-retry": {"RG_WORKER_ABLATE": "retry"},
-    "-calc": {"RG_WORKER_ABLATE": "calc"},           # la calcolatrice deterministica
     "-coherence": {"RG_WORKER_ABLATE": "coherence"},  # la guardia F4 sull'aritmetica
+    "+calc": {"RG_CALCULATOR": "1"},                 # LAD.13: spenta di default
     "+finishgate": {"RG_FINISH_GATE": "1"},          # LAD.9: spento di default
     "think": {"RG_THINKING_ROLES": "worker"},        # B4: percorso diretto = Giano
     "think-search": {"RG_WORKER_ABLATE": "search", "RG_THINKING_ROLES": "worker"},
     "think-verify": {"RG_WORKER_ABLATE": "verify", "RG_THINKING_ROLES": "worker"},
     "think-retry": {"RG_WORKER_ABLATE": "retry", "RG_THINKING_ROLES": "worker"},
-    "think-calc": {"RG_WORKER_ABLATE": "calc", "RG_THINKING_ROLES": "worker"},
     "think-coherence": {"RG_WORKER_ABLATE": "coherence",
                         "RG_THINKING_ROLES": "worker"},
+    "think+calc": {"RG_CALCULATOR": "1", "RG_THINKING_ROLES": "worker"},
     "think+finishgate": {"RG_FINISH_GATE": "1", "RG_THINKING_ROLES": "worker"},
 }
 # simmetria obbligatoria (utente 2026-08-03): stesse ablazioni nei due blocchi
-B2 = ["full", "-search", "-verify", "-retry", "-calc", "-coherence", "+finishgate"]
-B4 = ["think", "think-search", "think-verify", "think-retry", "think-calc",
-      "think-coherence", "think+finishgate"]
+B2 = ["full", "-search", "-verify", "-retry", "-coherence", "+calc", "+finishgate"]
+B4 = ["think", "think-search", "think-verify", "think-retry",
+      "think-coherence", "think+calc", "think+finishgate"]
 # smoke GPU: i bracci piu' informativi, con N run per avere statistica
 SMOKE = ["full", "-coherence", "-search", "-verify"]
 

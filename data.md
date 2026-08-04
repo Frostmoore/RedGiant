@@ -49,6 +49,8 @@ domini non-coding, task larghi). Nessuna è stata chiusa per opinione.*
 | 2 | **Plan compiler** (PS-D9) | **2/13 contro 6/13**, e **2/13 contro 8/13** nella ri-misura · −44% token e +9,4 punti di token utili, ma i verdi non salgono | i gate spostano le morti **in profondità** (da 0 tool call a 20–38 con 80–93% di token utili) senza convertirle in verdi | task larghi multi-sessione, F6 |
 | 3 | **Thinking mode sul coding** (TH2) | **Δ verificati = 0** (1,5/13 contro 1,5/13) su 4 batterie ufficiali · **~787K contro ~652K token**, **1,9× tempo** | sul coding sintetico non converte; e la sua collocazione conta più della quantità (TH1: solo-Giano 4/20, tutti 1/20) | domini everyday/matematica post-F6/F7 |
 | ~~4~~ | ~~**Thinking sull'aritmetica**~~ | ⛔ **VERDETTO RIBALTATO il 2026-08-04** — v. §0.1 riga 11 e §7.8 | le tre prove precedenti erano confondute | — |
+| 5 | **Calcolatrice deterministica** (LAD.13) | `full` **16/20** contro `−calc` **17/20**, **Fisher p = 1,000** — e non per mancato uso: **27 chiamate riuscite** nel braccio completo | **la guardia di coerenza l'ha resa superflua**: due percorsi allo stesso esito, e quello deterministico non dipende da una scelta del modello | domini di F7 (matematica, everyday), dove la guardia non si applica |
+| 6 | **`bad_args` che insegna** (LAD.10) | chiamate malformate da **40% a 27%** — previsione registrata ("~0") **sbagliata** | migliorare il messaggio rende, ma poco: quarta conferma. *Resta in produzione* (gratis, vale per ogni strumento), ma non è una leva che cambia il sistema | — |
 | 4 | **Gate sul finish in-loop** (LAD.9) | L5 **18/20 contro 16/20**, **p = 0,66** · L7 **11/20 contro 11/20**, **p = 1,00** · **+15% di tempo** | la patologia era reale (40% dei tentativi) ma **il retry la pagava già**: difesa ridondante rispetto a un componente esistente | task coding larghi T040–T042, dove un tentativo sprecato costa 100K+ token invece di 25 s |
 
 **La lezione che unisce le prime tre:** tutto ciò che abbiamo spento è "intelligente"
@@ -62,7 +64,7 @@ prima di costruire una difesa, misurare **chi sta già pagando** per il problema
 | # | Cosa | Stato della prova | Cosa manca | Rischio se sbagliata |
 |---|---|---|---|---|
 | 1 | **`refusal_state`** — il rifiuto dichiara lo stato del disco | meccanismo **osservato** sui log: recuperi da **2 su 4** a **4 su 4** dopo il fix; e la causa è certa (`edit_file` su un file mai creato, due volte nella stessa run) | mai isolato con un A/B suo: il 18/20 di §0.1 riga 9 è stato misurato **coi due fix insieme** | bassa: costa nulla e non può nuocere, ma il merito attribuito alla guardia potrebbe essere in parte suo |
-| 2 | **`calculator` nel catalogo** | ⚠️ **acceso senza prove**, unico caso: invocato nel ~40% delle occasioni, spesso **mai** nelle run vincenti di L5; ablazione senza differenze **ma a n=5** | LAD.13 (A/B a n=20) — **dopo** LAD.10, perché il 40% delle chiamate fallisce sull'interfaccia (`expression=None`) e giudicarlo ora condannerebbe l'implementazione | media: occupa token di prompt a ogni step per un servizio forse già svolto dalla guardia di coerenza |
+| ~~2~~ | ~~**`calculator` nel catalogo**~~ | ✅ **RISOLTA il 2026-08-04** (§7.9): **p = 1,000** a n=20 — spenta di default. Il sospetto era fondato: la guardia di coerenza l'aveva resa superflua | resta da rimisurare nei domini di F7, dove la guardia non si applica | — |
 | 3 | **Tutti i numeri della ladder** | GPU `dev-fast`, non `severino-sim` | **LAD.7**: run ufficiale su CPU, 20 run per braccio | media: la direzione è solida, l'ampiezza no (IC 95% del 18/20: **70–97%**) |
 | 4 | **L7 = 11/20** | misurato a n=20 su GPU | attribuzione: è il cumulo di 5 fix, nessuno isolato | bassa sul numero, alta sull'interpretazione |
 | ~~5~~ | ~~Il verdetto TH3 su L5~~ | ✅ **RISOLTA il 2026-08-04, ed era sbagliata** (§7.8): il pensiero pieno con materiale intero fa **20/20 contro 0/20**. Il rischio che avevo dichiarato "alto" si è materializzato: è un verdetto sull'**hardware**, e F5 cambia obiettivo | resta da confermare su `severino-sim` | — |
@@ -812,13 +814,70 @@ la curva che F5 deve ottimizzare.
    invece di isolarla non è un controllo — produce un nullo illeggibile che sembra una conferma.
    Il 256 sembrava rigore; era il confondimento speculare.
 
+## 7.9 LAD.13 e LAD.10 — la calcolatrice esce dal catalogo, e il quarto no
+
+*(2026-08-04, dev-fast, 20 run per braccio, `@a6f7ed2`)*
+
+### 7.9.1 LAD.13 — lo strumento non paga
+
+| Braccio su L5 | Verificati | Tempo |
+|---|---|---|
+| `full` (calcolatrice presente) | **16/20** | 611 s |
+| `−calc` (ablata) | **17/20** | 577 s |
+
+**Fisher esatto bilaterale p = 1,000.** L'ablazione è persino nominalmente migliore.
+
+Il punto decisivo: **non è che lo strumento non venga chiamato.** Nel braccio completo ci sono
+**27 chiamate riuscite** con l'espressione giusta (`693+228+196+428+247`) — e il risultato è lo
+stesso di quando lo strumento non c'è.
+
+**Causa: la guardia di coerenza l'ha resa superflua.** Il totale finisce corretto perché il
+control plane rifiuta l'incoerenza e restituisce il numero. Sono due percorsi verso lo stesso
+esito, e quello deterministico non dipende da una scelta del modello — che è esattamente la
+proprietà che ci interessa.
+
+**Verdetto: fuori dal catalogo di default** (`RG_CALCULATOR=1` per riaccenderla), stesso
+trattamento di D11, TH2 e LAD.9. **APERTO**: la guardia copre solo i *totali in file di testo*;
+nei domini di F7 (matematica, everyday) l'aritmetica non ha quella forma e la guardia non si
+applica — lì la calcolatrice potrebbe essere l'unico meccanismo.
+
+**Beneficio concreto della rimozione:** la sua voce nella card dei tool era pagata a **ogni step
+di ogni task**. Un test permanente asserisce che la card si accorcia quando è spenta.
+
+### 7.9.2 LAD.10 — verifica della previsione: migliora di un terzo, non risolve
+
+Avevo pre-registrato: *"il tasso di `bad_args` su `calculator` dev'essere ~0 nella prossima
+campagna"*. Misurato sui soli task **post-fix** (41 chiamate nella campagna LAD.13):
+
+| | Chiamate con `expression=None` |
+|---|---|
+| Prima di LAD.10 | **27 su 67 — 40%** |
+| Dopo LAD.10 | **11 su 41 — 27%** |
+
+**La previsione è sbagliata.** Un errore che nomina il campo mancante *e* mostra la forma esatta
+della chiamata riduce le invocazioni malformate di circa un terzo, e un quarto continua ad
+arrivare vuoto.
+
+**È la quarta conferma della stessa cosa** (dopo la regola sulla calcolatrice, la regola 8 della
+card e il messaggio del giudice riportato nel retry): **migliorare il messaggio rende, ma rende
+poco.** Il fix resta — è gratis, vale per ogni strumento del catalogo e un terzo è un terzo — ma
+non va contato fra le leve che cambiano il sistema.
+
+### 7.9.3 Lettura d'insieme delle due
+
+Messe accanto, dicono una cosa sola: **su questo modello l'unica leva affidabile è togliere la
+scelta, non facilitarla.** La guardia di coerenza — che non chiede nulla al modello — vale 45
+punti; la calcolatrice — che gliela chiede — vale zero, anche quando la usa; e l'errore che
+gliela spiega meglio vale un terzo delle chiamate malformate.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
 - [ ] L5 con la guardia su `severino-sim` (il 18/20 è GPU, va confermato sul profilo ufficiale)
 - [x] ~~Gate sul finish in-loop (LAD.9)~~ — **fatto e spento**: risultato nullo, §7.7
 - [ ] `bad_args` che insegna (LAD.10) — il secondo modo di fallire di §7.6.5, non ancora affrontato
-- [ ] LAD.13: `calculator` merita il catalogo? A/B a n=20 **dopo** LAD.10 — è l'unico componente acceso senza prove
+- [x] ~~LAD.13: `calculator` merita il catalogo?~~ — **no**: p = 1,000, spenta di default (§7.9)
+- [ ] Rimisurare la calcolatrice nei domini di F7 (matematica/everyday), dove la guardia di coerenza non si applica
 - [ ] Retest di LAD.9 sui task coding larghi T040–T042 (dove un tentativo sprecato costa 100K+ token)
 - [ ] **F5**: L7 muore per contesto pieno (§7.7.2) — la ladder ha motivato la fase dal basso
 - [ ] Ladder B4 post-fix (workflow + thinking, con le stesse ablazioni) — il blocco pre-fix è da buttare

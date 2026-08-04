@@ -1480,7 +1480,27 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   migliora *ogni* strumento del catalogo. La calcolatrice è solo il posto dove l'abbiamo
   misurato.
 
-- [ ] **LAD.13** 🔎 **La calcolatrice merita il catalogo? — A/B a n=20, DOPO LAD.10.**
+- [x] **LAD.13** ✅ **FATTA — NO: la calcolatrice esce dal catalogo.** (dev-fast, 20 run per
+  braccio, `data.md` §7.9) `full` **16/20** contro `−calc` **17/20**, **Fisher p = 1,000** —
+  l'ablazione è persino nominalmente migliore. **E non per mancato uso:** nel braccio completo
+  ci sono **27 chiamate riuscite** con l'espressione giusta.
+  **Causa: la guardia di coerenza (LAD.5) l'ha resa superflua** — due percorsi allo stesso
+  esito, e quello deterministico non dipende da una scelta del modello.
+  **Esito (b) della pre-registrazione, applicato:** spenta di default dietro `RG_CALCULATOR=1`
+  (`router.calculator_enabled`), braccio `+calc` in B2 e `think+calc` in B4. Si risparmia la sua
+  voce nella card, pagata a ogni step di ogni task (test permanente che lo asserisce).
+  **APERTO:** la guardia copre solo i *totali in file di testo*; nei domini di F7 (matematica,
+  everyday) l'aritmetica non ha quella forma → **rimisurare lì** prima di dichiararla inutile
+  in generale.
+  **Verifica della previsione di LAD.10, nella stessa campagna:** avevo registrato "il tasso di
+  `bad_args` su calculator dev'essere ~0". **Sbagliata**: da **40%** (27 su 67) a **27%**
+  (11 su 41). Migliorare il messaggio rende un terzo, non risolve — **quarta conferma** che
+  l'istruzione non è una superficie di controllo. Il fix resta (è gratis e vale per ogni
+  strumento) ma non va contato fra le leve che cambiano il sistema.
+
+  Specifica originale conservata qui sotto.
+
+- [ ] ~~**LAD.13** 🔎 **La calcolatrice merita il catalogo? — A/B a n=20, DOPO LAD.10.**~~
   Anomalia rilevata rileggendo lo stato degli interruttori: `calculator` è **acceso senza
   prove**, in mezzo a un insieme di decisioni prese tutte coi numeri. È invocato nel ~40% delle
   occasioni, e nelle run vincenti di L5 spesso **mai**; la sua ablazione (`−calc`) non ha mai

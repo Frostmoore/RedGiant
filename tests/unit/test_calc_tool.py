@@ -30,13 +30,46 @@ def test_not_an_eval_in_disguise():
     assert not calc("1/0").ok               # divisione per zero come dato
 
 
-def test_calc_is_in_catalog_and_ablatable(tmp_path, monkeypatch):
+def test_calculator_is_off_by_default(tmp_path, monkeypatch):
+    """VERDETTO LAD.13 (2026-08-04): fuori dal catalogo di default.
+    A/B su L5, 20 run per braccio: full 16/20 contro -calc 17/20, Fisher
+    p = 1.000 — la guardia di coerenza l'ha resa superflua, e la sua voce nella
+    card costava token a ogni step. Riaccendibile con RG_CALCULATOR=1; verdetto
+    APERTO per i domini di F7, dove la guardia non si applica."""
+    from redgiant.tools.router import calculator_enabled
     cfg = Config.load("dev-fast", CONFIG_DIR)
     scope = Scope(tmp_path, ["*.txt"])
     monkeypatch.delenv("RG_WORKER_ABLATE", raising=False)
+
+    monkeypatch.delenv("RG_CALCULATOR", raising=False)
+    assert not calculator_enabled()
+    assert "calculator" not in default_catalog(cfg, scope, {})
+
+    monkeypatch.setenv("RG_CALCULATOR", "1")
+    assert calculator_enabled()
     assert "calculator" in default_catalog(cfg, scope, {})
+
+    # riaccesa MA ablata: l'ablazione storica continua a funzionare
     monkeypatch.setenv("RG_WORKER_ABLATE", "calc")
     assert "calculator" not in default_catalog(cfg, scope, {})
+
+
+def test_the_tool_card_shrinks_when_the_calculator_is_off(tmp_path, monkeypatch):
+    """Il beneficio concreto della rimozione: token di prompt risparmiati a
+    OGNI step di OGNI task."""
+    from redgiant.prompts.assemble import PromptAssembler
+    cfg = Config.load("dev-fast", CONFIG_DIR)
+    scope = Scope(tmp_path, ["*.txt"])
+    monkeypatch.delenv("RG_WORKER_ABLATE", raising=False)
+
+    monkeypatch.setenv("RG_CALCULATOR", "1")
+    with_calc = PromptAssembler._tool_card(
+        sorted(default_catalog(cfg, scope, {}).values(), key=lambda s: s.name))
+    monkeypatch.delenv("RG_CALCULATOR", raising=False)
+    without = PromptAssembler._tool_card(
+        sorted(default_catalog(cfg, scope, {}).values(), key=lambda s: s.name))
+    assert len(without) < len(with_calc)
+    assert "calculator" not in without
 
 
 def test_unknown_tool_error_is_actionable(tmp_path):
@@ -58,13 +91,19 @@ def test_unknown_tool_error_is_actionable(tmp_path):
     assert not r2.ok and "placeholder" in r2.data["hint"]
 
 
-def test_bad_args_error_is_actionable(tmp_path):
+def test_bad_args_error_is_actionable(tmp_path, monkeypatch):
     """LAD.10: 27 chiamate su 67 (40%) a `calculator` arrivavano con
     expression=None e il router rispondeva col dump di pydantic; il modello ci
     ciclava 5 step prima di arrendersi (data.md §7.6.5). L'errore deve NOMINARE
-    il campo mancante e mostrare la forma esatta della chiamata."""
+    il campo mancante e mostrare la forma esatta della chiamata.
+
+    (La calcolatrice va accesa esplicitamente: dopo LAD.13 e' fuori dal
+    catalogo di default. Il fix di LAD.10 vale per OGNI strumento — vedi le due
+    asserzioni su read_file — ma qui si riproduce il caso storico esatto.)"""
     from redgiant.state.store import StateStore
     from redgiant.tools.router import ToolRouter
+    monkeypatch.setenv("RG_CALCULATOR", "1")
+    monkeypatch.delenv("RG_WORKER_ABLATE", raising=False)
     cfg = Config.load("dev-fast", CONFIG_DIR)
     scope = Scope(tmp_path, ["*.txt"])
     store = StateStore(tmp_path / "t.db")

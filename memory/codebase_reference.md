@@ -230,9 +230,15 @@ def arithmetic_check(path: Path, content: str) -> str | None   # messaggio azion
 
 Il messaggio contiene il numero corretto e l'espressione (`693 + 228 + … = 1792`, addendi troncati a 12): il giro successivo il modello trascrive invece di calcolare. Ablabile con `RG_WORKER_ABLATE=coherence` (l'ablazione è applicata da `fs.coherence_check`, non qui: `arithmetic_check` resta una funzione pura e testabile).
 
-### `redgiant/tools/calc.py` — calcolatrice deterministica (F4)
+### `redgiant/tools/calc.py` — calcolatrice deterministica — ⚠️ **SPENTA DI DEFAULT**
 
-AST-only: costanti numeriche e `+ - * / // % **`, niente nomi, chiamate, indexing o lambda (non è un `eval` travestito); `2**99999` e la divisione per zero sono errori-dato, non eccezioni. Registrata nel catalogo come `calculator` (rinominata da `calc` su richiesta utente 2026-08-03), descrizione "MANDATORY for every sum…". **Nota di misura:** il tool funziona ma viene invocato nel ~40% delle run — per questo esiste la guardia di coerenza qui sopra.
+AST-only: costanti numeriche e `+ - * / // % **`, niente nomi, chiamate, indexing o lambda (non è un `eval` travestito); `2**99999` e la divisione per zero sono errori-dato, non eccezioni.
+
+**VERDETTO LAD.13 (2026-08-04): fuori dal catalogo di default**, dietro `RG_CALCULATOR=1` (`router.calculator_enabled`). A/B su L5, 20 run per braccio: `full` **16/20** contro `−calc` **17/20**, **Fisher p = 1.000**. Non sposta nulla nemmeno quando *viene* invocata correttamente (27 chiamate riuscite nel braccio completo). **Causa:** la **guardia di coerenza** l'ha resa superflua — il totale finisce giusto perché il control plane rifiuta l'incoerenza e restituisce il numero, senza dipendere da una scelta del modello. Si risparmia la sua voce nella card, pagata a ogni step di ogni task.
+
+**Verdetto APERTO:** la guardia copre solo i *totali in file di testo*; nei domini di F7 (matematica, everyday) l'aritmetica non ha quella forma e la guardia non si applica — va rimisurata lì prima di dichiararla inutile in generale.
+
+**Storia della sua invocazione, che è il vero reperto:** presente senza regola → invocata nel 16% delle run; con regola numerata → ~40%; col nome pieno e la descrizione MANDATORY → 40%; e il **27%** delle chiamate arrivava comunque senza argomenti (dopo il fix di LAD.10; era il 40%).
 
 ```python
 class CalcArgs
@@ -287,6 +293,7 @@ def git_diff(scope: Scope, ref: str = "HEAD") -> ToolResult
 ```python
 def default_catalog(cfg: Config, scope: Scope, test_commands: dict[str, list[str]], persist_test_commands=None) -> dict[str, ToolSpec]
 def args_hint(spec: ToolSpec, args: dict, errors: list) -> str  # LAD.10: campi mancanti + forma esatta della chiamata
+def calculator_enabled() -> bool  # RG_CALCULATOR=1; SPENTA di default (verdetto LAD.13)
 class ToolRouter
     def __init__(self, catalog: dict[str, ToolSpec], scope: Scope, store: StateStore) -> None
     def allowed_for(self, role: str, domain: str) -> list[ToolSpec]

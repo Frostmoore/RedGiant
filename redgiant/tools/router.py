@@ -22,6 +22,36 @@ from redgiant.tools import fs, proc, search, web
 from redgiant.tools.base import Scope, ToolResult, ToolSpec
 
 
+def calculator_enabled() -> bool:
+    """SPENTA DI DEFAULT (verdetto LAD.13, 2026-08-04) — `RG_CALCULATOR=1` per
+    riaccenderla.
+
+    A/B su L5, 20 run per braccio: `full` **16/20** contro `−calc` **17/20**,
+    **Fisher p = 1.000**. Lo strumento non sposta nulla nemmeno quando viene
+    invocato correttamente (27 chiamate riuscite nel braccio completo).
+
+    Il perche' e' il risultato: **la guardia di coerenza (LAD.5) l'ha resa
+    superflua**. Il totale finisce giusto perche' il control plane rifiuta
+    l'incoerenza e restituisce il numero — non serve che il modello scelga di
+    calcolare. Due percorsi verso lo stesso esito, e quello deterministico non
+    dipende da una scelta del modello.
+
+    Costo che si risparmia: la sua voce nella card dei tool, pagata a OGNI step
+    di OGNI task.
+
+    Verdetto **APERTO**, condizione di retest scritta: la guardia copre solo i
+    *totali in file di testo*. Nei domini di F7 (matematica, everyday) l'aritmetica
+    non ha quella forma e la guardia non si applica — li' la calcolatrice
+    potrebbe essere l'unico meccanismo, e va rimisurata prima di dichiararla
+    inutile in generale.
+
+    Stesso trattamento di D11 (planner), TH2 (thinking sul coding) e LAD.9
+    (gate sul finish): costruito, misurato, spento, con la riapertura scritta.
+    """
+    import os
+    return os.environ.get("RG_CALCULATOR", "").strip() not in ("", "0", "false")
+
+
 def default_catalog(cfg: Config, scope: Scope,
                     test_commands: dict[str, list[str]],
                     persist_test_commands=None) -> dict[str, ToolSpec]:
@@ -97,7 +127,10 @@ def default_catalog(cfg: Config, scope: Scope,
     from redgiant.core.ablate import worker_ablated
     if worker_ablated("search"):
         specs = [s for s in specs if s.name != "search_code"]
-    if worker_ablated("calc"):
+    # LAD.13: la calcolatrice e' SPENTA di default (p = 1.000 contro l'ablazione,
+    # resa superflua dalla guardia di coerenza). `-calc` resta come ablazione
+    # quando la si riaccende, per non rompere i bracci storici.
+    if not calculator_enabled() or worker_ablated("calc"):
         specs = [s for s in specs if s.name != "calculator"]
     return {s.name: s for s in specs}
 
