@@ -2159,6 +2159,42 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   **"nessun danno grande rilevabile"**, non "equivalenti". Con un beneficio *certo* (414 token)
   e un danno *non rilevabile* l'adozione è ragionevole, ma va scritta così.
 
+  ### ❌ ESITO: RESPINTA — e ha insegnato più di quanto avrebbe fatto passando
+
+  | Gradino | `full` | `card-min` | Fisher |
+  |---|---|---|---|
+  | L5 (90 doc) | **20/20** | 18/20 | p = 0,487 |
+  | **L7 (400 doc)** | **15/20** | **1/20** | **p = 1,0 × 10⁻⁵** |
+
+  Il limite dichiarato non è servito: l'effetto è enorme e **opposto** all'attesa.
+
+  **La causa, sui log dei tool — non è una regola, è un comportamento:** con la card ridotta il
+  modello fa **440 `read_file` contro 169 `search_code`**; con quella intera, **294 ricerche
+  contro 146 letture**. **Legge invece di cercare** — su 400 documenti è esattamente il
+  comportamento del braccio `−search`, misurato a 0/5 su tutti i gradini. E infatti arriva a
+  scrivere l'artefatto **2 volte su 20** contro 46.
+
+  **Scoperta che non avevamo:** la card **non serve solo a enunciare regole, orienta la scelta
+  dello strumento** — e conta *esattamente dove* il recupero selettivo è indispensabile (su L5
+  nessuna differenza). Il componente che le ablazioni avevano eletto a portante, la card aiuta
+  il modello a **usarlo**.
+
+  **Il mio ragionamento a priori era plausibile e sbagliato.** "Già imposta dalla struttura",
+  "misurata inefficace", "duplicata da un errore azionabile": tre argomenti solidi, **nessuno
+  dei quali era una misura**. Che una regola sia non violabile per costruzione non dice nulla su
+  cosa faccia la sua **presenza nel testo**.
+
+  **Stato:** variante ridotta **nel repo ma spenta**, `RG_WORKER_CARD` resta `full`. I 414 token
+  restano sul tavolo: sappiamo che non sono gratis, non che siano intoccabili.
+
+- [ ] **F5.0-quater** 🔎 **Bisezione della card: QUALE pezzo orienta la ricerca?**
+  Si rimettono i gruppi di regole **uno alla volta** e si guarda quando L7 risale. Ordine
+  suggerito dalla diagnosi (dal più sospetto): (1) la regola *"one action per step / never
+  describe a multi-step plan"* — senza, il modello sembra pianificare "leggo tutto";
+  (2) *"se una chiamata fallisce, leggi l'errore e non ripeterla identica"*; (3) i due blocchi
+  sulle altre sottofasi. **20 run per braccio su L7**, che è l'unico gradino dove l'effetto si
+  manifesta. Esito atteso: sapere *quale* riga vale i suoi token, invece di indovinarlo.
+
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 
 - [ ] 🤖 **Obiettivo:** tenere la catena append-only dei risultati dentro un budget dichiarato,

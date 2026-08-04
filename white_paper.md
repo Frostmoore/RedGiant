@@ -121,6 +121,7 @@ one. Before building a defence, measure who is already paying for the problem.
 | ~~6~~ | ~~Reasoning × workflow (block B4)~~ | ✅ **CLOSED 2026-08-04** (§6.4-quater): both blocks re-measured on the **same commit**, 20 runs per rung. The ladder's 2×2 matrix is complete | the ablated arms of B4 | — |
 | 6 | Reasoning × workflow (block B4) | the pre-fix block was **discarded** as non-comparable | re-measurement | medium: half the 2×2 matrix on the ladder is empty |
 | 7 | Syntax gate, no-op-edit guard, near-name tool hints | validated by pilots (13 of 43 runs squandered steps on invented tool names; 15 consecutive no-op edits observed) | never passed through the ladder with ablated arms | low: documented pathologies, zero cost |
+| 9 | **Which part of the role card steers tool selection** | ablating the card collapses the widest rung (**15/20 → 1/20**) by turning search into blind reading — but *which* rules do it is unknown | bisection: restore rule groups one at a time | medium: 414 tokens per call are provably not free, and provably not all necessary either |
 | 8 | **Is the finish gate actually useless?** | ⚠️ its A/B was **underpowered** (§5.9.4): 18/20 against 16/20, and ten points need ~200 runs/arm. Mechanistic evidence now *favours* it — it targets 100% of residual failures on the rung the system wins | an A/B sized for the effect | **medium**: a component worth perhaps ten points on the won rung is currently switched off |
 
 ---
@@ -943,6 +944,31 @@ The second finding deserves emphasis because it inverts the usual direction of b
 campaign we repeatedly *added* prose to that card and repeatedly measured that the additions
 changed nothing. The instrumentation revealed we had also been paying for them, on every step of
 every run, in the scarcest resource the system has.
+
+**And then the A/B rejected the reduction, which is the most instructive result of the phase.**
+On the small corpus the two cards are indistinguishable (20/20 against 18/20). On the widest
+rung the reduced card collapses: **15/20 against 1/20, Fisher exact p = 1.0 × 10⁻⁵.** The tool
+logs identify the mechanism, and it is not the loss of any particular rule but a change of
+behaviour: with the reduced card the executor issues **440 file reads against 169 searches**,
+where the full card produces **294 searches against 146 reads**. It reads instead of searching —
+which across four hundred documents is exactly the behaviour of the search-ablated arm that
+scores zero on every rung, and it reaches the point of writing an answer twice in twenty runs
+against forty-six.
+
+Two conclusions follow, and the second is uncomfortable.
+
+**The role card is not merely a list of rules: it steers tool selection**, and it does so
+precisely where selective retrieval is indispensable. The component our ablations had identified
+as load-bearing turns out to require the card in order to be *used*. This is a coupling between
+prompt and capability that we had not measured and would not have predicted.
+
+**And our reasoning for the reduction was plausible and wrong.** Each removal carried an
+argument — the rule is already enforced by the type system; the rule was measured ineffective;
+the rule is duplicated by an actionable error delivered at the moment of failure. All three are
+sound arguments and **none is a measurement**. That a constraint is unviolable by construction
+says nothing about what its *presence in the prompt* does to the model's choices. We record this
+as the phase's clearest instance of a general hazard: an argument about why something should not
+matter is not evidence that it does not.
 
 ### 6.5 On negative results
 

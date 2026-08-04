@@ -36,6 +36,7 @@ comparabili e numerosità adeguata; tutto ciò che è stato *osservato* ma non *
 | 12 | **Errori azionabili** (`bad_args` LAD.10, `refusal_state` LAD.6) | spirali fino a **6 passi consecutivi**, **7 sequenze fatali** | **max 1 passo**, **0 fatali**, recupero **100%** | non riducono gli sbagli (18% di chiamate ancora malformate): **tolgono le spirali che gli sbagli causavano**. Agiscono sul *costo* del fallire, non sulla frequenza | §7.9.2 |
 | 13 | **Flag di runtime** (`--swa-full --cache-reuse`) | **2.748** token per rimuovere un blocco dal mezzo | **1** | Gemma è sliding-window: con la cache SWA parziale il runtime non riusa nulla dopo una divergenza. Costa memoria → adottato solo su GPU | §7.11 |
 | 14 | **Compattazione della catena volatile** (F5.0-bis) | L7 **12/40 = 30%**, tentativi morti a **7,7 passi**, **731** token riprocessati per chiamata | **22/40 = 55%**, **13,2 passi**, **550** per chiamata | **p = 0,0411**, campione dimensionato *prima* di guardare. Il +53% di tempo è il costo di **non morire** — e il riuso della KV **migliora** (89,3% contro 85,8%): l'ondata lascia un prompt più corto | §7.13.4, §7.13.5 |
+| 15 | **La card del Worker** (scoperto ablandola) | card ridotta: L7 **1/20**, e il modello **legge** invece di cercare (440 `read_file` contro 169 `search_code`) | card intera: **15/20**, 294 ricerche contro 146 letture | **p = 1,0×10⁻⁵**. Non serviva a dire regole: **orienta la scelta dello strumento**, e solo dove il recupero selettivo è indispensabile (su L5 nessuna differenza) | §7.16.1 |
 
 **Il filo comune delle 10 righe:** nessuna insegna qualcosa al modello. Otto rendono
 *impossibile* un errore, due gli danno più spazio o più tentativi per lo stesso lavoro.
@@ -1331,6 +1332,47 @@ comandi di test.
 ~40 punti, non di 5. Se l'A/B darà "nessuna differenza", la conclusione lecita sarà **"nessun
 danno grande rilevabile"**, non "equivalenti". Con un beneficio *certo* (414 token) e un danno
 *non rilevabile*, l'adozione è ragionevole — ma va detta così.
+
+### 7.16.1 L'esito: la card ridotta è RESPINTA, e ha insegnato più di una promossa
+
+| Gradino | `full` | `card-min` | Fisher |
+|---|---|---|---|
+| L5 (90 documenti) | **20/20** | 18/20 | p = 0,487 |
+| **L7 (400 documenti)** | **15/20** | **1/20** | **p = 1,0 × 10⁻⁵** |
+
+Non serviva il limite che avevo dichiarato: l'effetto è enorme e va nella direzione opposta a
+quella che mi aspettavo. **La card ridotta distrugge il gradino largo.**
+
+**La causa, letta sui log dei tool — e non è una regola, è un comportamento:**
+
+| Strumento | `card-min` | `full` |
+|---|---|---|
+| `read_file` | **440** | 146 |
+| `search_code` | **169** | 294 |
+| `write_file` | **2** | 46 |
+
+**Con la card ridotta il modello legge invece di cercare.** Su 400 documenti scorrere i file uno
+per uno è senza speranza: è *esattamente* il comportamento del braccio `−search`, che avevamo
+misurato a **0/5 su tutti i gradini**. E infatti non arriva quasi mai a scrivere la risposta
+(2 scritture contro 46).
+
+**Cosa abbiamo imparato, e non lo sapevamo:** la card **non serviva solo a dire regole — orienta
+la scelta dello strumento**. Su corpus piccoli non conta (L5: nessuna differenza); conta
+esattamente dove il recupero selettivo è indispensabile. È la stessa cosa che le ablazioni
+avevano eletto a componente portante, e scopriamo ora che **la card aiuta il modello a usarla**.
+
+**Il mio ragionamento a priori era plausibile e sbagliato.** Avevo classificato le regole in
+"già imposte dalla struttura", "misurate inefficaci" e "duplicate da un errore azionabile" —
+tre argomenti solidi, nessuno dei quali era una misura. Il fatto che una regola sia *non
+violabile* per costruzione non dice niente su cosa faccia la sua **presenza nel testo**.
+
+**Verdetto: la variante ridotta resta nel repo, spenta**, come banco di prova per il passo
+successivo. `RG_WORKER_CARD` resta su `full`.
+
+**Prossimo passo (LAD-style, non a intuito):** bisezione. Si rimettono i gruppi di regole uno
+alla volta e si guarda quando L7 risale — così sapremo *quale* pezzo orienta la ricerca, invece
+di indovinarlo. I 414 token restano sul tavolo: ora sappiamo che non sono gratis, non che siano
+intoccabili.
 
 ## 8. Cosa manca (aggiornamento previsto)
 

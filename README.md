@@ -391,7 +391,30 @@ It is not a cut by taste: every removed rule cites the reason it went.
 | **Measured ineffective, or inert** | "saying is not doing" · two rules about *other subtasks* | the first is violated in 40% of attempts; the others describe subtasks that **do not exist** while the planner is off |
 | **Duplicated by an actionable error** | exact tool names · f-string advice | the router now suggests the near name and the syntax hint arrives *at the moment of failure* — and actionable errors are the ones we measured to work |
 
-What stays, stays for a measured reason: the task description, the `done`/`blocked` semantics, the `edit_file` contract (the project's strongest single piece of evidence: 20+ failed calls down to 5–6), and test-command discovery. The A/B is running at the time of writing; the saving is certain, the question is only whether it costs accuracy.
+What stays, stays for a measured reason: the task description, the `done`/`blocked` semantics, the `edit_file` contract (the project's strongest single piece of evidence: 20+ failed calls down to 5–6), and test-command discovery.
+
+**And the measurement rejected it — informatively.**
+
+| Rung | full card | reduced card | Fisher |
+|---|---|---|---|
+| 90 documents | **20/20** | 18/20 | p = 0.487 |
+| **400 documents** | **15/20** | **1/20** | **p = 1.0 × 10⁻⁵** |
+
+We had pre-declared that 20 runs per arm could only see differences of about forty points. That caution proved unnecessary: the effect is enormous and points the opposite way.
+
+The tool logs say why, and it is not a rule — it is a behaviour:
+
+| Tool | reduced card | full card |
+|---|---|---|
+| `read_file` | **440** | 146 |
+| `search_code` | **169** | 294 |
+| `write_file` | **2** | 46 |
+
+**With the reduced card the model reads instead of searching.** Across 400 documents, walking files one by one is hopeless — it is precisely the behaviour of the arm with search ablated, which scored 0/5 on every rung. It reaches the point of writing an answer twice in twenty runs, against forty-six.
+
+So the card was doing something we had never attributed to it: **it steers tool choice**, and it matters exactly where selective retrieval is indispensable — on the small corpus there is no difference at all. The component the ablations had elected as load-bearing turns out to need the card to be *used*.
+
+**The a priori reasoning was plausible and wrong.** "Already enforced structurally", "measured ineffective", "duplicated by an actionable error" are three solid arguments and **none of them is a measurement**. That a rule is unviolable by construction says nothing about what its *presence in the text* does. The reduced card stays in the repository, switched off, as the bench for the next step: bisect the rules, add them back one group at a time, and find out which lines are worth their tokens instead of guessing.
 
 #### What the full logs showed that no score did
 
