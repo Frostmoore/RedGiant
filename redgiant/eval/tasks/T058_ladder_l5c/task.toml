@@ -1,0 +1,15 @@
+id = "T058"
+domain = "research_local"
+prompt = "The folder docs/ contains 40 service notes. Find these facts, reading ONLY what you need: the listen_port of service dorado; the retention_days of service draco; the worker_count of service gemini; the max_connections of service cygnus; the cache_size_mb of service atlas. Write answer.txt with one line per fact, exactly 'dorado_listen_port=<value>', 'draco_retention_days=<value>', 'gemini_worker_count=<value>', 'cygnus_max_connections=<value>', 'atlas_cache_size_mb=<value>'. Then add a final line 'total=<sum of all the values above>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
+success_cmd = "python judge.py"
+timeout_s = 3600
+tags = ["ladder", "l5c", "research_local"]
+writable_globs = ["answer.txt"]
+worker_max_steps = 23
+naked_materials = ["docs/*.md"]
+naked_instruction = "The folder docs/ contains 40 service notes. Find these facts, reading ONLY what you need: the listen_port of service dorado; the retention_days of service draco; the worker_count of service gemini; the max_connections of service cygnus; the cache_size_mb of service atlas. Write answer.txt with one line per fact, exactly 'dorado_listen_port=<value>', 'draco_retention_days=<value>', 'gemini_worker_count=<value>', 'cygnus_max_connections=<value>', 'atlas_cache_size_mb=<value>'. Then add a final line 'total=<sum of all the values above>'. Beware: other services have similar metrics — match the service name exactly. Verify with the 'check' command; it must pass."
+
+# LADDER L5c: 40 documenti, 5 fatti, totale calcolato — generato da bench/ladder/generate.py (seed fisso).
+
+[test_commands]
+check = ["python", "judge.py"]
