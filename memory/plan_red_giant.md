@@ -611,12 +611,16 @@ Il numero `vX.Y.Z` viene dalla tabella sotto per i completamenti di fase; i comm
 | *Interludio planner-system (PS0–PS7, 2026-08-02/03)* | `v3.1.0` → `v4.0.0` | v. `plan_planner_system.md` |
 | *Campagna thinking (TH0–TH3, 2026-08-03)* | `v4.1.0` → `v4.2.0` | v. `plan_thinking_ab.md` |
 | Fine F3-bis (micro-slice multi-dominio) | `v4.3.0` | media |
-| *Campagna LADDER (attribuzione modello↔workflow, 2026-08-03)* | `v4.4.0` → `v4.5.x` | v. §LADDER |
-| Fine F4 | `v5.0.0` | grande |
-| Fine F5 | `v6.0.0` | grande |
-| Fine F6 | `v6.1.0` | media |
-| Fine F7 | `v7.0.0` | grande |
-| Fine F8 | `v8.0.0` | grande |
+| *Campagna LADDER (attribuzione modello↔workflow, 2026-08-03/04)* | `v4.4.0` → `v5.0.0` | v. §LADDER — `v5.0.0` = verdetto TH3 ribaltato da LAD.14 |
+| **Fine F5** (contesto e KV cache) — **anticipata prima di F4** | `v6.0.0` | grande |
+| **Fine F4** (verifica continua e supervisione) | `v7.0.0` | grande |
+| Fine F6 (routing adattivo) | `v7.1.0` | media |
+| Fine F7 (domini non-coding completi) | `v8.0.0` | grande |
+| Fine F8 (benchmark reali + deploy) | `v9.0.0` | grande |
+
+*(Coda rinumerata il 2026-08-04 con l'inversione F5↔F4: prima F4 e F7 collidevano entrambe su
+`v7.0.0`. Gli header delle sezioni-fase riportano ancora i numeri vecchi — **questa tabella è
+la fonte di verità**.)*
 
 **Nota di riconciliazione (PS7.3 + TH3, 2026-08-03):** interludio planner-system =
 `v3.1.0`–`v4.0.0`; campagna thinking = `v4.1.0`–`v4.2.0`; F3-bis slitta a `v4.3.0`. Il
@@ -1493,7 +1497,26 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   l'interfaccia, non l'obbedienza); (b) nessuna differenza ⇒ **si rimuove dal catalogo**, e si
   registra che la guardia di coerenza lo aveva reso superfluo — il control plane calcola, il
   modello non deve nemmeno chiedere.
+- [ ] **LAD.15** 🔎 **Rimisura di B1 e B3 su TUTTA la ladder col fix dei marcatori.**
+  ⚠️ **Dubbio di validità sulle FONDAMENTA, aperto dal fix di LAD.14.** I numeri B1/B3 di
+  `data.md` §6.2 — cioè la base dell'affermazione più citata del progetto, *"il pavimento nudo
+  è ~5,8K token, 5 fatti, nessuna aggregazione"* — sono stati misurati **prima** che
+  `run_naked.strip_template_markers` esistesse, quindi con il difetto attivo: il modello emette
+  a volte i marcatori del chat template come testo e il giudice li cattura dentro il valore,
+  **bocciando anche una risposta esatta**.
+  **Argomento per cui probabilmente non cambia nulla:** i gradini che *passavano* (L1-L4) non
+  possono averne sofferto, e L6/L7 avevano il materiale troncato al 57-83% quindi sarebbero
+  caduti comunque. **Perché va fatto lo stesso:** "probabilmente" non è una misura, e il
+  difetto penalizzava proprio il braccio contro cui la nostra tesi si confronta — un errore che
+  gonfia i *nostri* risultati va tolto di mezzo, non spiegato.
+  Comandi: `python bench/ladder/run_naked.py dev-fast 20 T05` e lo stesso con `--think`.
+  **Bloccante per LAD.7:** il run ufficiale non parte finché queste fondamenta non sono pulite.
 - [ ] **LAD.11** 🔎 **Rimisura di L6 e del blocco B4 (thinking) post-fix, su GPU.**
+  **Priorità salita dopo LAD.14** (se il pensiero paga da solo, cosa fa dentro il workflow?), e
+  con una **previsione falsificabile da registrare prima di misurare**: su **L7**, che muore per
+  capienza (LAD.8), il pensiero dovrebbe **PEGGIORARE** l'esito, perché sottrae 1536 token a un
+  contesto già saturo. Se si conferma, è la dimostrazione diretta della tesi della capacità e
+  un argomento in più per l'ordine F5→F4.
   ⚠️ **Il blocco B4 pre-fix è stato BUTTATO** (girava su codice precedente ai fix del corpus e
   del giudice, quindi non comparabile): nella matrice c'è un **buco dichiarato**, non un dato
   mancante per dimenticanza. Nessuno vada a cercarlo in `bench/results/`.
@@ -1653,6 +1676,23 @@ hardware di `data.md` §1.3. La regola vale per la ladder e per ogni A/B futuro 
 
 ## Fase 4 — Verifica continua e supervisione → `v4.0.0`
 
+> ### 🔀 ORDINE INVERTITO: **F5 VIENE PRIMA DI F4** (decisione utente, 2026-08-04)
+>
+> **Perché:** due misure indipendenti della ladder hanno indicato la **capienza di contesto**
+> come il vincolo che morde davvero, non la sofisticazione del controllo.
+> - **LAD.8** — L7 muore perché la catena append-only sfonda gli 8192, usando 8,5 passi di
+>   media su 60 disponibili. Non è disciplina, non è completamento: è capienza.
+> - **LAD.14** — il ragionamento pieno risolve l'aritmetica 20/20 contro 0/20
+>   (p = 1,45×10⁻¹¹) ma **non ci sta in 8192 insieme al materiale**.
+>
+> **L'argomento:** F4 costruisce sofisticazione (Debugger, Supervisor, scala dei fallimenti)
+> **sopra** un sistema che sbatte contro il soffitto del contesto; F5 alza il soffitto sotto cui
+> tutto il resto lavora — incluse le diagnosi che F4 dovrà produrre, che a loro volta occupano
+> contesto. Costruire F4 prima significherebbe tararla su un regime che F5 cambierà.
+>
+> **Conseguenza sulle versioni:** F5 chiude a `v5.x`, F4 la segue. La tabella delle versioni
+> in testa al documento resta la fonte di verità sui numeri effettivamente usati.
+
 📎 **Specsheet:** §6.6, §6.7, §12, §13, §14 · **Decisioni:** D10, D11
 🎯 **Scope:** il sistema smette di fidarsi di sé: Debugger a due stadi, Supervisor con decisioni chiuse, scala dei fallimenti, anti-loop, checkpoint/rollback via git, BudgetManager per ruolo.
 🧭 **Perché questa fase, perché ora:** con la pianificazione attiva gli errori diventano *interessanti*: distinguere "codice sbagliato" da "test sbagliato" da "piano sbagliato" (specsheet §12) è ciò che permette di correggere al livello giusto invece di ritentare alla cieca. Prima di F3 non c'era un piano da incolpare; ora c'è, e serve l'apparato che lo incolpi a ragion veduta.
@@ -1772,6 +1812,8 @@ hardware di `data.md` §1.3. La regola vale per la ladder e per ogni A/B futuro 
 📎 **Specsheet:** §9 (Context Builder), §16 (KV cache) · **Decisioni:** D8, D9, D20
 🎯 **Scope:** Context Builder per ruolo, strumentazione del riuso, audit e ottimizzazione dei prefissi, slot save/restore, compressione verificata dello stato.
 
+> ### 🔀 F5 PRECEDE F4 (decisione utente, 2026-08-04) — motivazione nel riquadro in testa a F4.
+>
 > ### ⚠️ F5 È DIVENTATA UNA FASE DI CAPACITÀ, NON DI PRESTAZIONI (2026-08-04)
 >
 > Due misure indipendenti della ladder convergono qui e cambiano la natura della fase. Erano
