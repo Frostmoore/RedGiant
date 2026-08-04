@@ -749,15 +749,26 @@ sono APERTI, non tombali):**
    centinaia di item indipendenti risolvono il problema dell'unità sperimentale di §4.5 del
    white paper):**
 
-   | Benchmark | Volume | Adattamento | Run CPU stimata | Note |
-   |---|---|---|---|---|
-   | IFEval | 541 prompt | ~½ giorno | ~2-3 h/braccio | compliance a istruzioni verificabili → quantifica "instruction is not a control surface" su scala pubblica |
-   | BFCL single-turn AST | ~1.700 entry (campione 500 ok) | ~1 giorno | ~7 h/braccio (2 h campione) | comparabili diretti: xLAM-2-1b 53,97%, Qwen3-1.7B 55,49% |
-   | RULER @8K (4-5 task) | 100 item/task | ~1 giorno | ~10 h nudo + 6-12 h braccio harness | la versione pubblica della ladder (multi-needle + aggregazione); costo ≈ tutto prefill (69,6 s a item) |
-   | τ-bench (retail+airline) | 165 task multi-turn | ~2-4 giorni | ~11-19 h a trial (pass^1); pass^4 ×4 | serve user-sim via API esterna (~1-2M token, pochi €); partire da un solo dominio (retail, ~8-13 h) |
-   | GAIA (validation) | 165 domande (L1: ~53) | ~2-3 giorni **dopo F7.2** | ~14-27 h (solo L1: ~4-9 h) | richiede web_search+fetch_url → è anche il collaudo naturale di F7; ⚠️ verificare prima quante domande richiedono input visivo e se il modello lo supporta |
-   | Terminal-Bench 2.0 | 89 task Docker | ~3-5 giorni | ~8-12 h a passata | su TB lo stesso modello varia di 30-50 punti a seconda dell'harness: il benchmark dove la nostra tesi è più visibile |
-   | SWE-bench Lite | campione 50 di 300 | ~1 settimana | ~12-40 h | il più costoso in sviluppo; per ultimo |
+   **Risultati pubblicati del modello nudo** (Gemma 4 Technical Report, Table 5, colonna E2B —
+   bf16, **thinking mode**, harness di Google; estratti dal PDF con pypdf il 2026-08-05 dopo che
+   un'estrazione via web aveva shiftato le colonne assegnando a E2B i numeri del 31B):
+
+   | Benchmark | Volume | Adattamento | Run CPU stimata | **Nudo pubblicato (E2B bf16+think)** | Note |
+   |---|---|---|---|---|---|
+   | IFEval | 541 prompt | ~½ giorno | ~2-3 h/braccio | **94,6** (IFBench: 38,0) | il nudo pubblicato è già alto: il margine per l'harness è su IFBench, non su IFEval |
+   | BFCL single-turn AST | ~1.700 entry (campione 500 ok) | ~1 giorno | ~7 h/braccio (2 h campione) | **non pubblicato** per E2B | comparabili: xLAM-2-1b 53,97%, Qwen3-1.7B 55,49%; community: 26B-A4B ≈ 89% non-live |
+   | RULER @8K (4-5 task) | 100 item/task | ~1 giorno | ~10 h nudo + 6-12 h harness | RULER no; **MRCR v2 (8-needle, 128k): 19,1** | l'ancora long-context pubblicata è MRCR; il nostro harness gioca proprio dove il nudo crolla |
+   | τ-bench / Tau2 | 165+ task multi-turn | ~2-4 giorni | ~11-19 h a trial (pass^1) | **airline 31,0 · retail 34,6 · telecom 19,7** (model card: media 24,5) | pubblicato! Il target è battere il nudo-con-thinking di Google col nostro workflow |
+   | GAIA (validation) | 165 domande (L1: ~53) | ~2-3 giorni **dopo F7.2** | ~14-27 h (L1: ~4-9 h) | **non pubblicato** per E2B | collaudo naturale di F7; ⚠️ verificare quota domande visive |
+   | Terminal-Bench (Hard) | 89 task Docker | ~3-5 giorni | ~8-12 h a passata | **3,0** | il nudo pubblicato fa 3%: ogni punto convertito dall'harness è visibile e attribuibile |
+   | SWE-bench Lite | campione 50 di 300 | ~1 settimana | ~12-40 h | **non pubblicato** per E2B | il più costoso in sviluppo; per ultimo |
+
+   ⚠️ **Caveat di confronto:** i numeri pubblicati sono bf16 + thinking + harness di Google;
+   il nostro regime è Q4 QAT GGUF su llama.cpp, ctx 8192, thinking selettivo. Il delta fra il
+   loro nudo e il nostro nudo misura la **tassa di quantizzazione+runtime** (mai pubblicata da
+   Google per E2B: è un dato nostro); il delta fra il nostro nudo e il nostro workflow resta la
+   tesi. Riferimenti per E4B (stessa fonte): IFEval 96,7 · MRCR 25,4 · TB-Hard 8,0 · Tau2
+   52,0/67,1/18,4.
 
    **Ordine consigliato:** IFEval → BFCL → RULER (pacchetto "starter": ~2-3 giorni di adapter
    + ~25-30 h CPU) → GAIA e τ-bench (post-F7) → Terminal-Bench → SWE-bench Lite. Prima di
