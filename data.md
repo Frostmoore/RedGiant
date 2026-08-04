@@ -1534,6 +1534,33 @@ Non i concetti. **Il regime e i numeri.**
 lavori e posizionandosi rispetto a essi. Pubblicare una decomposizione senza citarli ci farebbe
 sembrare disinformati o disonesti — e su alcuni assi loro l'hanno fatta meglio.
 
+### 7.19.1 Esito editoriale: white paper riscritto (2026-08-04)
+
+✅ **Fatto.** `white_paper.md` riscritto alla luce di **tutte** le fonti raccolte in sessione,
+non solo quelle dell'audit finale. Bibliografia da **12 a 46 voci**, raggruppate per famiglia
+(decomposizione dell'affidabilità · strategia di recupero · falso successo · ragionamento
+condizionato · compattazione del contesto · KV cache e runtime · critici e specification-driven).
+Verifica meccanica: **0 citazioni senza voce, 0 voci mai citate**.
+
+Modifiche sostanziali, non solo aggiunta di riferimenti:
+
+| Sezione | Cosa è cambiato |
+|---|---|
+| Abstract | nuovo paragrafo di posizionamento: sette meccanismi su sette già noti; ciò che rivendichiamo è **regime, numeri, tabella di attribuzione a un commit, negativi pre-registrati, sostituzione fra leve** |
+| §1.3 Contributi | riscritti da 4 a 6 voci, **tutte più strette di prima**: nessun meccanismo rivendicato come nuovo |
+| §2.3 (nuova) | l'audit di priorità come tabella: nostra scoperta → arte nota → verdetto |
+| §2.4 (nuova) | cosa resta nostro, con il confronto esplicito a 2607.17044 e 2602.00887 sul regime |
+| §2.5 (nuova) | la lacuna dichiarata dal campo (niente disegni fattoriali) come obiettivo del progetto |
+| §0.1 | aggiunte le righe **15 (card)** e **16 (pensiero su recupero largo, 12/20 → 20/20, p = 0,0033)** |
+| §0.2 riga 3 | il rifiuto del pensiero **ristretto a coding e gradini stretti**: la condizione di riapertura è scattata ed è risultata positiva |
+| §6.4-quater | riscritta: da *"sostituti"* a **sostituti sul collo di bottiglia condiviso, complementari altrove**, con la 2×2 card × pensiero e la sintesi cercare-contro-leggere |
+| §6.1 | riconciliazione col +1,5pp di 2607.17044: numero giusto, metrica incompleta |
+| §8 | la campagna **fattoriale completa** promossa a lavoro principale pianificato, con la motivazione presa dai nostri stessi dati |
+
+**Motivo per cui §6.4-quater andava comunque riscritta, a prescindere dalle citazioni:** il
+paper affermava ancora *"sostituti, non complementi"*, tesi che **F5.6a ha falsificato** su L7.
+Era un'affermazione sbagliata rimasta nel documento pubblico.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)

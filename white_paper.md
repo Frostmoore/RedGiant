@@ -2,7 +2,7 @@
 
 ### A verification-first agentic architecture, and the measurements that judge it
 
-**Red Giant Project** · Working paper, revision of 2026-08-03
+**Red Giant Project** · Working paper, revision of 2026-08-04
 Model under test: Gemma 4 E2B (≈2B effective parameters), Q4 QAT GGUF, CPU-only inference
 Reference hardware: 4 CPU cores, 15 W, no usable GPU
 
@@ -56,6 +56,22 @@ the arithmetic at all. We also report the counterexample that bounds the princip
 analogous gate targeting an equally frequent pathology produced **no effect whatsoever**
 (p = 0.66 and p = 1.00), because an existing component was already absorbing it.
 
+Finally, we state our position with respect to prior art without flattery to ourselves. We
+audited seven mechanisms this project believed it had discovered against the published
+literature, searching for each one individually and specifically. **All seven are already
+documented** [13–37], several of them measured more precisely than we measured them, and one
+under the very name we had independently coined. What this paper contributes is therefore not
+the mechanisms but the **regime**: a single ~2B model performing every role, on 15 W of
+consumer CPU, with no frontier model anywhere in the pipeline — a configuration the nearest
+comparable work [13] does not target and explicitly does not report inference cost for. Within
+that regime we contribute the numbers (0/20 → 20/20 on a 400-document corpus), a
+**single-commit attribution table** across mutually ablatable levers, a catalogue of **negative
+results governed by pre-registered decision rules**, and evidence of **substitution between
+levers** — a role card and explicit reasoning each recovering what the other's absence costs.
+The last of these bears directly on the gap the literature names for itself: that scaffolding
+studies use "one-at-a-time ablation at best, never full factorial designs that reveal
+higher-order interactions" [16].
+
 ---
 
 ## 0. Summary of findings
@@ -84,9 +100,14 @@ plausible-but-unmeasured improvement is not an improvement.*
 | 12 | **Actionable errors** (refusals that state disk state; argument errors that name the missing field) | spirals up to **6 consecutive steps**, **7 fatal sequences** | **max 1 step**, **0 fatal**, recovery **100%** | they do not reduce mistakes (18% of calls still malformed): they remove the **spirals** mistakes used to cause. They act on the *cost* of failing, not its frequency | 6.4-ter |
 | 13 | **Runtime cache flags** (full sliding-window cache + suffix shifting) | **2,748** tokens reprocessed to remove a block mid-prompt | **1** | the model family uses sliding-window attention; with a partial cache the runtime cannot reuse anything past a divergence. Costs memory, so adopted on the development profile only | 6.4-quinquies |
 | 14 | **Wave compaction of the tool-result chain** | hardest rung **12/40 (30%)**, attempts dying at **7.7 steps**, **731** reprocessed tokens per call | **22/40 (55%)**, **13.2 steps**, **550** per call | **p = 0.0411**, sample size fixed *before* looking. Older results collapse onto the deterministic evidence line each tool already emits — no model-written summary. The +53% wall is the cost of **not dying**, and cache reuse *improves* (89.3% against 85.8%) | 6.4-sexies |
+| 15 | **The role card, discovered by ablating it** | stripped card: **1/20**, and the model **reads** instead of searching (440 `read_file` against 169 `search_code`) | full card: **15/20** (294 searches against 146 reads) | **p = 1.0 × 10⁻⁵**. Its function is not to state rules but to **steer tool choice**, and only where selective retrieval is indispensable — on the narrow rung the difference is nil | 5.9 |
+| 16 | **Explicit reasoning on wide-retrieval tasks** (not on coding: see §0.2 row 3) | **12/20** on the widest rung, 15.7 steps per attempt, 59 compaction waves | **20/20** (CI 84–100%), 12.4 steps, **13 waves** | **p = 0.0033**. Reasoning does not add context, it **reduces the need for** it: 168 searches against 5 reads. Yields the project's first measured routing rule | 6.4-quater |
 
-**The common thread across all ten: none of them teaches the model anything.** Eight make an
-error *impossible to emit*; two grant more room or more attempts for the same work.
+**The common thread across the first fourteen: none of them teaches the model anything.** Eight
+make an error *impossible to emit*; the rest grant more room, more attempts, or a better choice
+of tool for the same work. Rows 15 and 16 are the exception that defines the boundary: both act
+on a single behavioural variable — whether the model searches or reads — and they act on it
+interchangeably (§6.4-quater).
 
 ### 0.2 Rejected: interventions that do not raise the floor
 
@@ -98,14 +119,16 @@ tasks). None was closed by opinion.*
 |---|---|---|---|---|
 | 1 | In-loop planner | **2/10 vs 9/10** static baseline · 815K vs 710K tokens · ~10× LLM calls | on small tasks, planning costs more than it returns: the plan becomes one more thing that can be wrong | routing active |
 | 2 | Plan compiler | **2/13 vs 6/13**, and **2/13 vs 8/13** on re-measurement · −44% tokens, +9.4 points of useful tokens, no additional greens | the gates move deaths *deeper* (from 0 tool calls to 20–38 at 80–93% useful tokens) without converting them | multi-session tasks |
-| 3 | Explicit reasoning **inside the workflow** | Δ = 0 over four coding batteries · and on the ladder **43/60 vs 47/60**, **p = 0.528**, at **+55% wall** | **the workflow and reasoning resolve the same bottleneck — whichever arrives first takes all.** Alone, reasoning does the arithmetic (row 11); above a coherence gate that has already closed it, it adds nothing. Substitutes, not complements | on the hardest rung, if the context phase lifts the capacity ceiling — the one place neither covers the bottleneck |
+| 3 | Explicit reasoning **inside the workflow, on coding and narrow rungs** | Δ = 0 over four coding batteries · and on rungs L5–L6 **43/60 vs 47/60**, **p = 0.528**, at **+55% wall** | where the scaffolding already covers the bottleneck, reasoning has nothing to add: above a coherence gate that has made incoherent arithmetic unrepresentable, the work it would do is already done. **Substitutes on a shared bottleneck** | ⚠️ **the reopening condition fired and the answer was positive**: on the widest rung, once capacity was fixed, reasoning gives **20/20 against 12/20, p = 0.0033** (§0.1 row 16). The rejection now holds **only** for coding and narrow rungs |
 | ~~4~~ | ~~Explicit reasoning on arithmetic~~ | ⛔ **RETRACTED 2026-08-04** — see §0.1 row 11 and §6.4: all three prior measurements were confounded | — | — |
 | 4 | **The deterministic calculator** | `full` **16/20** vs ablated **17/20**, **Fisher p = 1.000** — and not for want of use: 27 successful calls in the full arm | the **coherence gate made it redundant**: the total is right because the control plane refuses incoherence and returns the number, without depending on the model choosing to compute | domains where the gate does not apply (it only understands totals in text files) |
 | 5 | In-loop finish gate | L5 **18/20 vs 16/20**, **p = 0.66** · L7 **11/20 vs 11/20**, **p = 1.00** · **+15% wall** | ⚠️ **not shown useless — underpowered** (corrected 2026-08-04): ten points require ~200 runs/arm. The original explanation ("retry already pays") was falsified: all seven failing runs of a later campaign failed by phantom finish in all three attempts | an A/B sized for the effect · and large coding tasks |
 
 **What unites the first three:** everything switched off is "intelligent" — planning, compiling
-plans, reasoning, self-supervision. Everything switched on in §0.1 is mechanical — searching,
-verifying, retrying, refusing the incoherent.
+plans, reasoning, self-supervision. Almost everything switched on in §0.1 is mechanical —
+searching, verifying, retrying, refusing the incoherent. The one intelligent mechanism that
+survived (§0.1 row 16) survived for a mechanical reason: it changes which *tool* the model
+reaches for, not how well it thinks.
 **The fourth teaches something else:** a *frequent* pathology is not automatically a *costly*
 one. Before building a defence, measure who is already paying for the problem.
 
@@ -160,15 +183,39 @@ model scale is held constant and cannot silently absorb design errors. Concretel
 
 ### 1.3 Contributions
 
-1. **A measurement matrix** that decomposes agentic performance into model capability,
-   scaffolding contribution, reasoning contribution, and per-component attribution (§4.2).
-2. **A difficulty ladder**: a deterministic task generator that isolates *breadth* from
-   cognition, allowing the naked model's ceiling to be located precisely, and the scaffolding
-   to be evaluated only where that ceiling has been exceeded (§4.4).
-3. **Twenty engineering findings** with their measurements, including four negative results
-   reported at full strength (§6).
-4. **An empirical demonstration that deterministic verification purchases honesty**, separable
-   from and independent of throughput (§5.7).
+We state these after a deliberate priority audit (§2.3), and they are narrower than the ones
+we would have claimed before it. None of the *mechanisms* below is new; what we claim is their
+behaviour in a regime the literature does not cover, measured in a way it largely does not use.
+
+1. **Results in an uncovered regime.** A single ~2B quantized model performs every role —
+   worker, judge, compactor — on four CPU cores at 15 W, with no frontier model anywhere in the
+   pipeline, not even as a generator, teacher or fallback. The closest published decomposition
+   of agent reliability [13] uses a frontier model to drive smaller specialists and does not
+   report inference on constrained hardware; the closest small-model agent system [18] reports
+   capability but not hardware. We report both, and the conversion they permit: **0/20 → 20/20**
+   on a rung requiring eight facts to be located across 400 documents (§5.8, §6.4).
+2. **A single-commit attribution table.** Every component is built with its own ablation lever
+   from the outset, so its contribution is measurable in isolation on *the same binary* as every
+   other (§0.1, §4.2). Published decompositions are typically assembled across systems,
+   benchmarks or model families; ours are fourteen levers on one commit.
+3. **A difficulty ladder with an admissibility rule.** A deterministic generator that scales
+   *breadth* at constant per-step cognition, plus the rule that governs its use: **if the naked
+   model passes a rung, that rung measures nothing about the harness** (§4.4). The principle
+   that baselines must precede architecture is established [15]; operationalizing it as a
+   generator with a pass/exclude criterion is our formulation.
+4. **Negative results with pre-registered decision rules.** Five rejections — an in-loop
+   planner, a plan compiler, in-workflow reasoning, a deterministic calculator, a finish gate —
+   each condemned by a rule written before the data existed, and one of them (§5.9.4) *corrected
+   in public* when we discovered the test that produced it was underpowered (§6.5).
+5. **Evidence of substitution between levers**, not merely of their individual effect: on the
+   widest rung, a full role card without reasoning (12/20) and a stripped card with reasoning
+   (19/20) both recover what their counterpart's absence costs (1/20). This is the class of
+   higher-order interaction that the scaffolding literature identifies as systematically
+   unmeasured [16], and the reason our next campaign is full-factorial rather than
+   one-lever-at-a-time (§6.4-quater, §8).
+6. **An empirical demonstration that deterministic verification purchases honesty**, separable
+   from and independent of throughput (§5.7) — a property known qualitatively [25–27] which we
+   quantify in this regime: 8 false completion claims in 5 unverified runs, 1 in 550+ verified.
 
 ---
 
@@ -186,7 +233,10 @@ reasoning failure, and is mechanically fixable [3]. Critically for our design, s
 **self**-critique degrades performance while external grounding improves it [4] — which is why
 in our architecture no model ever judges its own output. Harness quality alone moves agent
 benchmarks by 20–40 points at fixed model size [5], and a ~1B model inside a strict
-schema-validated harness beats GPT-3.5-Turbo at function calling [6].
+schema-validated harness beats GPT-3.5-Turbo at function calling [6]. The same effect is
+visible at leaderboard scale, where harness choice reorders systems built on identical models
+[17], and the position that small models are the appropriate substrate for agentic work is now
+argued explicitly [12] and surveyed [43].
 
 ### 2.2 What the literature also says, and we confirm
 
@@ -200,13 +250,83 @@ quantization-aware training weights.
 The honest summary of the field, which our own results reproduce: **the floor rises
 substantially; the ceiling does not move.**
 
-### 2.3 Where this work differs
+A third line of work is directly relevant to two of our rejections. Specification-driven and
+multi-agent decomposition — role-differentiated pipelines [44], test-driven governance of
+generated code [45], and the spec-first toolchains now shipping in industry [46] — is the family
+our plan compiler belongs to; we report it failing in this regime (§5.4, §5.5), which is a
+statement about 2B models on 15 W, not about the approach. Likewise, small dedicated critics
+[41] and self-healing orchestration loops [42] are the family our rejected supervisor and our
+in-loop finish gate belong to; the finish gate's rejection is now known to have been
+underpowered rather than negative (§5.9.4), so we regard that question as open rather than
+answered.
 
-The cited work is largely papers and benchmarks. Complete, engineered systems targeting
-genuinely constrained hardware are rare, and rarer still are systems that publish their own
-negative A/B results. This project is an existence proof with the receipts attached: every
-design decision carries the measurement that justifies it, and every mechanism that failed to
-justify itself is documented as such, with the numbers that condemned it.
+### 2.3 A priority audit of our own findings
+
+The remainder of this paper reports mechanisms we designed, measured and in several cases
+believed to be ours. Before publishing them we conducted a **priority audit**: for each
+mechanism separately — not for the topic, but for the specific phenomenon, searched under the
+words the phenomenon would attract rather than the words we had given it — we looked for prior
+art. We report the outcome without softening it.
+
+**Seven mechanisms audited, seven already documented.** The table below is the honest map of
+what belongs to the field and what, if anything, remains ours.
+
+| # | What we built and measured | Prior art | Verdict |
+|---|---|---|---|
+| 1 | Decomposing agent performance into scaffolding versus verification versus model capability, with per-component ablation | [13] performs exactly this decomposition across multiple benchmarks with contributions in percentage points: on SpreadsheetBench, **structure +9.5pp of 11.0 total, verification +1.5pp**. Also [14] (failure-localization taxonomy), [17] (leaderboard-scale harness effects) | **Known, and quantified more precisely than by us.** Their conclusion — scaffolding dominates, verification adds little to *success rate* — is ours, reached independently. Our addition: verification's value is not success rate but honesty (§5.7) |
+| 2 | The naked-baseline rule: *if the naked model passes a rung, the rung measures nothing about the harness* | [15] argues that architectural claims must be preceded by properly tuned baselines, and shows scaffolds that vanish once the baseline is honest | **Known as a principle.** Our formulation as a *generator with an admissibility criterion* (§4.4) is the operational form, not the idea |
+| 3 | Ablating groups of rules from the role card and measuring the outcome (15/20 → 1/20) | [20] removes individual rule categories from a system prompt and quantifies each one's impact ("output-contract rules have the highest impact") | **Known, and at finer granularity.** Our contribution is the *magnitude in this regime*: a prompt ablation that costs fourteen points on a task the full card wins |
+| 4 | "Searching instead of reading" as the single variable predicting success on wide corpora | [21] finds retrieval-by-grep competitive with or superior to embedding retrieval for agents; [22] and [23] extend it; [24] argues for direct corpus interaction over semantic similarity | **Known.** These works study the *harness*; we observed the same variable being determined by the *prompt* at a granularity they do not examine (§6.4-quater) |
+| 5 | The honesty gap: `completed ≠ verified`, an agent claiming success it did not achieve | [25] names the phenomenon **false success** and characterizes it as confident closing followed by silent failure; [26] detects near-miss latent policy failures; [27] studies agents deceiving their supervisor upward | **Known, under a name we independently reinvented.** We measure it as a *primary metric with an ablation attached* (8 in 5 versus 1 in 550+), which is less common than measuring it descriptively |
+| 6 | Explicit reasoning compensating for a weakened role card | [28] states the **compensation hypothesis** — reasoning structure substitutes for capability gaps; [16] studies cross-component interference in scaffolding directly; [29] and [30] establish that reasoning's value is conditional on model strength (CoT takes Qwen3-30B from 18% to 64% and **costs GPT-5 fifteen points**) | **Known.** Our 2×2 (card × reasoning: 12/20, 1/20, 20/20, 19/20) is a small instance of an effect the field has already named |
+| 7 | Wave compaction of the tool-result chain, collapsing old results onto deterministic evidence lines | An entire subfield: [31] learns compaction policies; [32] validates compaction against the trajectory; [33] has agents compact themselves; [34] compacts in parallel; [35] makes compacted content addressable for recall; [36] argues structured eviction beats compaction; [37] treats code as the harness for offloading. Production practice is documented by Anthropic, LangChain, Databricks, AgentScope and others [38] | **Known, thoroughly.** Our one non-obvious choice — collapsing onto the *tool's own evidence line* rather than a model-written summary — is a conservative variant of [32]'s concern, not a new idea |
+
+Two further items were checked and found equally well covered: **KV-prefix fragility** under
+any mutation of the prompt prefix, and the runtime cache flags that mitigate it for
+sliding-window models [39, 40]; and **small models failing to exploit error feedback** —
+[18] describes them retrying "the identical payload after an API error", which is the
+pathology our actionable-error work targets (§6.4-bis, §6.4-ter), while [19] reports the
+corresponding fix, that concrete errors ("re-read the file") outperform abstract ones
+("system problem").
+
+### 2.4 What this audit cost, and what it left standing
+
+The audit changes nothing about the measurements. It changes what may honestly be claimed on
+top of them:
+
+**Not ours:** the mechanisms, the decomposition, the naming, the direction of every effect.
+
+**Ours, and we believe defensible:**
+
+- **The regime.** One ~2B model, four cores, 15 W, fully local, every role played by the same
+  weights, no frontier model as generator, teacher, judge or fallback. [13] uses a frontier
+  generator with 0.5–3B specialists and reports cloud serving economics; [18] reports small-model
+  agent capability without constrained-hardware inference; [19] targets terminal coding agents at
+  a scale well above ours. We are aware of no published decomposition in this configuration.
+- **The numbers in that regime**, including the ones that flatter nobody: 0/20 naked to 20/20
+  scaffolded on a 400-document rung, and equally the four campaigns where the addition of
+  intelligence produced Δ = 0.
+- **Attribution on a single commit.** Fourteen levers, each ablatable independently, measured
+  against the same binary — as opposed to a decomposition assembled across systems or papers.
+- **A catalogue of negative results with pre-registered rules**, including a public correction
+  of one of our own verdicts (§5.9.4, §6.5). The field publishes few of these; [16] and [15]
+  both argue that this is precisely what is missing.
+
+### 2.5 The gap the literature names for itself
+
+One sentence from [16] identifies the methodological hole into which this project's next
+campaign is aimed:
+
+> previous work uses one-at-a-time ablation at best, **never full factorial designs that
+> reveal higher-order interactions**.
+
+Our own results already contain such an interaction and were nearly misread because of it: a
+stripped role card is catastrophic alone (1/20) and nearly harmless under reasoning (19/20),
+so a one-lever-at-a-time protocol would have assigned each lever a value that does not exist
+independently of the other. The full-factorial campaign described in §8 — every arm, coding and
+non-coding, with every ablation and every switch in both positions, on one commit and on the
+reference CPU profile — is therefore not thoroughness for its own sake. It is the design the
+literature says is missing, run in the regime the literature does not cover.
 
 ---
 
@@ -664,6 +784,16 @@ only aggregate success rate cannot distinguish these, and will attribute to capa
 actually honesty — or, worse, will ship a system that succeeds slightly more often while
 lying at an unmeasured rate.
 
+This distinction is what reconciles our results with [13], which decomposes the same three
+factors across several benchmarks and finds verification worth **+1.5pp against structure's
++9.5pp**. Read as a statement about success rate, that number is correct and ours agrees with
+it. Read as a statement about *value*, it is an artifact of the metric: the component
+contributing 1.5 points of throughput is the one contributing the difference between a system
+that reports its own state truthfully and one that does not. The literature on false success
+[25–27] measures the same pathology descriptively; our contribution is to place it under an
+ablation lever, so that the honesty cost of removing verification is a number rather than an
+observation.
+
 ### 6.2 Placement beats quantity
 
 The reasoning grid (§5.7) suggests a general principle for multi-role agent systems:
@@ -686,6 +816,13 @@ identical failed query five times.
 Each of these was fixed at the tool layer, not the prompt layer. The generalization:
 **a tool failure must be state-aware and actionable**, or the model will loop on it. This is
 ordinary software engineering, and it dominates prompt engineering in effect size.
+
+Both halves of this are documented elsewhere and we cite them rather than claim them: small
+models retrying "the identical payload after an API error" is reported in [18], and the
+corresponding remedy — concrete, state-naming errors outperforming abstract ones — in [19].
+What our measurement adds is the *shape* of the benefit (§6.4-ter): actionable errors do not
+reduce the frequency of malformed calls at all, they eliminate the spirals those calls used to
+cause.
 
 ### 6.4 A claim we published and then falsified ourselves
 
@@ -782,42 +919,90 @@ The operative question before building a defence therefore remains worth asking 
 currently happens when this occurs?* — but its answer must come from logs, not from the
 assumption that some other component is coping.
 
-### 6.4-quater Reasoning and scaffolding are substitutes, not complements
+### 6.4-quater Reasoning and scaffolding: substitutes on a shared bottleneck, complements otherwise
 
 The four-block matrix exists to answer one question no single arm can pose: *does reasoning
-substitute for a missing component?* With both workflow blocks now measured on the same commit,
-twenty runs per rung, it has an answer with two faces.
+substitute for a missing component?* With both workflow blocks measured on the same commit,
+twenty runs per rung, it has an answer that took three campaigns to reach and required us to
+narrow our own claim twice.
 
 | Comparison | Effect of reasoning |
 |---|---|
 | **B3 − B1** — naked model, controlled rung | **0/20 → 20/20**, p = 1.45 × 10⁻¹¹ |
-| **B4 − B2** — inside the workflow | 43/60 vs 47/60, **p = 0.528**, at **+55% wall** |
+| **B4 − B2** — inside the workflow, rungs L5–L6 | 43/60 vs 47/60, **p = 0.528**, at **+55% wall** |
+| **B4 − B2** — inside the workflow, **widest rung L7**, once capacity was fixed | **12/20 vs 20/20**, **p = 0.0033** |
 
-Per rung the signs alternate (−3, +3, +4) with p-values identical to three decimals: noise about
-zero. **Reasoning inside the workflow does not pay.**
+The middle row is what we published first, and read alone it says *reasoning inside the workflow
+does not pay*: per rung the signs alternate (−3, +3, +4) with p-values identical to three
+decimals, noise about zero. The explanation we gave for it was that scaffolding and reasoning
+resolve the same bottleneck and whichever arrives first takes all — unaided, reasoning performs
+the arithmetic the naked model cannot; above a coherence gate that has already made incoherent
+arithmetic unrepresentable, it has nothing left to contribute.
 
-Read together, the two rows say something more useful than either alone: **the scaffolding and
-the reasoning resolve the same bottleneck, and whichever arrives first takes all.** Unaided,
-reasoning performs the arithmetic the naked model cannot. Above a coherence gate that has
-already made incoherent arithmetic unrepresentable — zero incorrect artifacts in forty runs —
-it has nothing left to contribute. This turns the earlier reasoning verdict from a bare number
-into an explanation: reasoning is not useless in general, it is useless *on top of scaffolding
-that already covers its contribution*.
+**That explanation was too general, and the third row falsified it.** We registered the
+prediction before measuring: *"if the substitution thesis holds, reasoning's advantage must
+disappear now that wave compaction covers capacity."* The opposite happened — the advantage
+**grew**, from +4 to +8, with the reasoning arm at **20/20 and its confidence interval
+84–100%**. The claim therefore narrows to its defensible form:
 
-**A prediction we registered before measuring, and got wrong.** We predicted that on the
-hardest rung — which dies of context exhaustion — reasoning would make matters *worse* by
-consuming 1,536 tokens of an already-saturated window. It scored 12/20 against 8/20, nominally
-the reverse. The prediction rested on a wrong model of where the reasoning budget is spent: the
-two-call protocol discards the reasoning trace and never appends it to the durable chain, so its
-cost is **per call, not cumulative** — the context that overflows is composed of tool results,
-identical with or without it. Measurements confirm the trace closes naturally well below its
-fuse and does not compress as the prompt grows. An architectural decision taken for chain purity
-turns out to protect against a failure mode identified months later.
+> Scaffolding and reasoning are **substitutes where they cover the same bottleneck** (arithmetic
+> on L5: the coherence gate closes it, and reasoning adds nothing) and **complements where they
+> do not** (retrieval strategy on L7: nothing in the scaffolding chooses *how* to look).
 
-The one caveat worth stating: on that hardest rung both arms remain far from ceiling (95% CIs
-22–61% and 39–78%, heavily overlapping), and it is the only rung whose bottleneck — capacity —
-is covered by *neither*. If the context phase lifts that ceiling, this comparison must be
-repeated there; it is the one place where the two might stop being substitutes.
+**The mechanism, and why it unified three separate findings.** Reasoning does not add context —
+it *reduces the need for* context. On the widest rung the reasoning arm issues **168 searches
+against 5 reads**, where the non-reasoning arm issues 109 against 23. It finds material sooner,
+spends fewer steps, closes in half the attempts, and never approaches the window ceiling:
+**13 compaction waves against 59.** That same variable turned out to govern two earlier results:
+
+| Intervention | Effect on behaviour | Outcome on the widest rung |
+|---|---|---|
+| Ablating `search_code` (§5.8) | forced to read | **0/5 on every rung** |
+| Stripping the role card (§5.9) | 440 reads against 169 searches | **1/20** |
+| Adding reasoning (here) | 168 searches against 5 reads | **20/20** |
+
+> **On wide corpora the single variable predicting success is whether the model searches or
+> reads.** A tool, a piece of prose, and a reasoning channel all push that one lever, and their
+> outcomes order exactly as the force with which they push it.
+
+This is the same variable the retrieval literature has been converging on independently —
+grep-style direct corpus interaction outperforming embedding retrieval for agents [21, 22, 24].
+Our addition is the observation that the *prompt*, not only the harness, determines which
+strategy the model adopts.
+
+**The 2×2 that closes the argument.** If the three interventions push one lever, two of them
+should be interchangeable. Measured, twenty runs per cell, on the widest rung:
+
+| L7 | full role card | stripped role card |
+|---|---|---|
+| **without reasoning** | 12/20 | **1/20** |
+| **with reasoning** | **20/20** | **19/20** |
+
+The card is worth twelve points against one when reasoning is off, and one point against twenty
+when it is on. **The levers are largely interchangeable**, which has a direct design consequence:
+with reasoning active the card's 414 prompt tokens per call can be released for the price of
+1/20. One may pay in reasoning instead of in prompt tokens — a choice, not a constraint.
+
+This is an instance of the **compensation hypothesis** [28] — reasoning structure substituting
+for capability gaps — and of the cross-component interference [16] that scaffolding studies are
+criticized for not measuring. It is also why per-lever value is not a well-defined quantity here:
+each of these two levers is worth almost everything or almost nothing depending on the other's
+position, which is exactly the higher-order interaction a one-at-a-time protocol cannot see, and
+the reason our next campaign is full-factorial (§8).
+
+**A second registered prediction, also wrong, with an architectural payoff.** We predicted that
+on the widest rung reasoning would make matters *worse* by consuming 1,536 tokens of an already
+saturated window. The prediction rested on a wrong model of where the reasoning budget is spent:
+the two-call protocol discards the reasoning trace and never appends it to the durable chain, so
+its cost is **per call, not cumulative** — the context that overflows is composed of tool
+results, identical with or without it. An architectural decision taken for chain purity turns
+out to protect against a failure mode identified months later.
+
+**The operational consequence** is the project's first routing rule derived from a measurement
+rather than an intuition, and it matches the conditional-reasoning literature [30]: reasoning
+**on** for wide-retrieval tasks, **off** for coding — where four batteries measured Δ = 0 at
++55% wall time. Reasoning pays where a *retrieval strategy* is needed, not where reasoning in
+the abstract is needed.
 
 ### 6.4-quinquies A constraint that structured a phase, and belonged to our configuration
 
@@ -883,6 +1068,17 @@ summary inside the chain of record would be worse than the verbose text it repla
 happens **in waves** rather than continuously, because rewriting the prefix costs one token with
 the runtime flags of §6.4-quinquies and a full reprocess without them — a wave pays that once,
 continuous eviction pays it on every request.
+
+Context compaction is a crowded field and we adopt rather than propose: policies can be learned
+[31], validated against the trajectory [32], performed by the agent on itself [33], parallelized
+[34], made addressable for later recall [35], replaced by structured eviction [36], or offloaded
+into code [37], with production practice documented by several vendors [38]. Our only choice
+worth stating is the conservative one — collapsing onto the tool's own evidence line rather than
+onto generated prose — which is a stricter form of the concern [32] addresses by validation.
+Two things we do report that this literature generally does not: the interaction with KV prefix
+reuse (compaction *improved* reuse, 89.3% against 85.8%, contrary to the trade-off we had
+assumed), and the failure mode of compacting **once per attempt** — a re-arm counter was
+required, without which 49% of compacted attempts still died of context exhaustion.
 
 | Arm (40 runs, hardest rung) | Verified | 95% CI | Steps per attempt |
 |---|---|---|---|
@@ -1057,15 +1253,29 @@ acquires a second objective it did not previously have — making room for *reas
 central trade-off is measurable rather than assumable: any compaction of older step results buys
 window at the cost of the append-only prefix reuse worth 65 tokens against 7,971 (§5.1).
 
-Planned work, in order: (i) context and cache work under the two objectives above; (ii) a
-properly powered re-judgement of the calculator, now that its argument-error contract has been
-made actionable — it remains the only component enabled without evidence in a system where
-everything else was decided by measurement; (iii) reasoning *inside* the workflow, a cell whose
-interest rose sharply once reasoning was shown to pay alone; (iv) adaptive routing by task size,
-using the measured fact that micro-tasks must **not** be planned; (v) re-measurement of all
-remaining rejected verdicts with routing active and on non-coding domains, since all were
-measured on synthetic coding only; (vi) public benchmark runs; and (vii) the real-codebase
-examination.
+**The principal planned campaign is full-factorial, and the reason is in our own data.** The
+2×2 of §6.4-quater shows a lever worth twelve points in one configuration and one point in
+another, which means "the value of component X" is not a well-defined quantity in this system.
+One-lever-at-a-time ablation — which is what every campaign in this paper used, and what the
+literature identifies as its own standing limitation [16] — assigns each component a number that
+exists only conditionally on the position of the others. The planned campaign therefore runs
+every arm, coding and non-coding, with every ablation lever and every enable-switch in both
+positions, on a single commit and on the reference CPU profile. It is expensive (an estimated
+~22 hours of CPU wall time) and it is the only design that can produce an attribution table
+whose rows are simultaneously true.
+
+Planned work, in order: (i) the official campaign on the reference CPU profile, since every
+number in §5 and §6 was obtained on the development GPU and is directionally but not
+quantitatively transferable; (ii) the full-factorial campaign described above; (iii) bisection of
+the role card, to identify *which* rule group steers tool choice — 414 tokens per call are
+provably not free and provably not all necessary; (iv) a properly powered re-judgement of the
+calculator and of the finish gate, the latter because its rejection is now known to have been
+underpowered rather than negative; (v) the remaining context-and-cache components under the two
+objectives above; (vi) adaptive routing by task size and task kind, using two measured rules —
+micro-tasks must **not** be planned, and reasoning belongs on wide-retrieval tasks but not on
+coding; (vii) re-measurement of all remaining rejected verdicts with routing active and on
+non-coding domains, since all were measured on synthetic coding only; (viii) public benchmark
+runs, to place the system on scales others can read; and (ix) the real-codebase examination.
 
 ---
 
@@ -1100,7 +1310,23 @@ verification does not raise the success rate; it makes the system's statements a
 true. Measured: 8 false claims in 5 unverified runs, against 1 in over 550 verified ones.
 For a system intended to work unattended on hardware its owner already possesses, that is
 plausibly the property that matters most — and it is the one an aggregate success metric is
-structurally incapable of seeing.
+structurally incapable of seeing. It is also the reason we regard the published finding that
+verification is worth "+1.5 percentage points" [13] as correct and incomplete: those 1.5 points
+are the difference between a system that reports its own state truthfully and one that does not.
+
+**On what is new here, we are deliberately narrow.** A per-mechanism audit against the
+literature (§2.3) found prior art for every mechanism in this paper — decomposition of
+scaffolding versus verification [13, 14], baselines before architecture [15], prompt-rule
+ablation [20], search-over-read retrieval [21–24], false success [25–27], reasoning as
+compensation [16, 28–30], and context compaction in a dozen variants [31–38]. We claim none of
+them. What we claim is the regime — one ~2B model, four cores, 15 W, everything local, no
+frontier model anywhere in the pipeline — together with what the regime yields: numbers under
+that constraint, an attribution table built on a single commit from levers designed to be
+ablatable, negative results governed by rules written before the data, and a demonstration that
+two of these levers substitute for one another so completely that measuring either in isolation
+misstates its value. That last point is not a curiosity. It is the reason the next campaign is
+full-factorial, and it is the one place where our data speaks to a gap the field has named for
+itself.
 
 ---
 
@@ -1122,6 +1348,81 @@ Machines Lab, *Defeating Nondeterminism in LLM Inference* (batch-invariance)
 [11] llama.cpp issue #2838, cold versus cached prompt evaluation
 [12] NVIDIA, *Small Language Models are the Future of Agentic AI*, arXiv:2506.02153
 (position paper)
+
+**Decomposition of agent performance: harness, verification, model**
+
+[13] *Where Does Agent Reliability Come From? Decomposing Scaffolding, Verification and Model
+Capability*, arXiv:2607.17044 — the closest work to ours; contributions in percentage points
+(SpreadsheetBench: structure +9.5pp of 11.0 total, verification +1.5pp), 0.5–3B specialists
+driven by a frontier generator, no constrained-hardware inference reported
+[14] *Model or Harness? A Taxonomy for Localizing Agent Failures*, arXiv:2607.28802
+[15] *Baselines Before Architecture*, arXiv:2607.13085 — architectural claims require properly
+tuned baselines; several published scaffolds vanish once the baseline is honest
+[16] *More Is Not Always Better: Cross-Component Interference in LLM Agent Scaffolding*,
+arXiv:2605.05716 — source of the methodological gap this project aims at: *"previous work uses
+one-at-a-time ablation at best, never full factorial designs"*
+[17] *Holistic Agent Leaderboard*, arXiv:2510.11977 — harness effects at leaderboard scale
+[18] *EffGen: Small Language Models as Capable Autonomous Agents*, arXiv:2602.00887 — documents
+small models retrying an identical payload after an API error
+[19] *Building AI Coding Agents for the Terminal*, arXiv:2603.05344 — concrete errors
+("re-read the file") outperform abstract ones ("system problem")
+[20] *RubricRefine*, arXiv:2605.09730 — removal of individual system-prompt rule categories with
+per-category impact quantified
+
+**Retrieval strategy: searching versus reading**
+
+[21] *Is Grep All You Need?*, arXiv:2605.15184
+[22] *GrepSeek*, arXiv:2605.29307
+[23] *Towards Retrieving Interaction Spaces for Agentic Search*, arXiv:2606.06880
+[24] *Beyond Semantic Similarity: Direct Corpus Interaction*, arXiv:2605.05242
+
+**False success and the honesty gap**
+
+[25] *From Confident Closing to Silent Failure: Characterizing False Success in LLM Agents*,
+arXiv:2606.09863 — names the phenomenon we had independently called `completed ≠ verified`
+[26] *Near-Miss: Latent Policy Failure Detection*, arXiv:2603.29665
+[27] *Are Your Agents Upward Deceivers?*, arXiv:2512.04864
+
+**Reasoning: conditional value and compensation**
+
+[28] *Select-then-Solve*, arXiv:2604.06753 — the compensation hypothesis: reasoning structure
+substitutes for capability gaps
+[29] Wei et al., *Chain-of-Thought Prompting Elicits Reasoning in Large Language Models*,
+arXiv:2201.11903
+[30] *Think When Needed*, arXiv:2605.14448 — conditional reasoning; chain-of-thought takes
+Qwen3-30B from 18% to 64% and costs GPT-5 fifteen points
+
+**Context compaction and offloading**
+
+[31] *CompactionRL*, arXiv:2607.05378
+[32] *Slipstream: Trajectory-Grounded Compaction Validation*, arXiv:2605.08580
+[33] *Self-Compacting Language Model Agents*, arXiv:2606.23525
+[34] *Parallel Context Compaction*, arXiv:2605.23296
+[35] *Addressable Recall Compaction*, arXiv:2607.25066
+[36] *Beyond Compaction: Structured Context Eviction*, arXiv:2606.11213
+[37] *Code as Agent Harness*, arXiv:2605.18747
+[38] Engineering practice on the same problem: Anthropic, *Context engineering* (tool-use
+cookbook); LangChain, *Context management for Deep Agents*; Databricks, *Memex: a programmable
+scratchpad for LLM agents*; AgentScope context documentation; Arize, *Context management in
+agent harnesses*; *Context Offloading* (Agentic Coding Patterns)
+
+**KV cache behaviour and runtime**
+
+[39] *Practical Online KV Cache Compaction*, arXiv:2608.00902; *IntentKV*, arXiv:2606.09916;
+*When KV Cache Reuse Fails in Multi-Agent Systems*, arXiv:2601.08343; *KVCOMM*, arXiv:2510.12872
+[40] llama.cpp discussion #20574, sliding-window attention and full-cache reuse (`--swa-full`),
+with cache-reuse shifting — the mechanism of §6.4-quinquies
+
+**Critics, orchestration, specification**
+
+[41] *Steer, Don't Solve: Training Small Critic Models*, arXiv:2606.21811
+[42] *Self-Healing Agentic Orchestrators*, arXiv:2606.01416
+[43] *A survey of small language models for agentic systems*, arXiv:2510.03847
+[44] *MetaGPT: Meta Programming for Multi-Agent Collaborative Frameworks*, arXiv:2308.00352
+(ICLR)
+[45] *Test-driven governance in multi-agent code generation*, arXiv:2604.26615; and
+*Test-driven agentic development with mutation probes*, arXiv:2603.08806
+[46] Spec-driven development toolkits: GitHub *Spec Kit*; AWS *Kiro*
 
 ---
 
