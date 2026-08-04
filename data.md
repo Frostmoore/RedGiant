@@ -341,7 +341,41 @@ chiede la stessa cosa banale ("il `listen_port` del servizio X è N"); cresce so
 | L6 | 200 | 9.428 | 12.727 | 6 | — | 58 |
 | L7 | 400 | 18.773 | 25.343 | 8 | **somma** | 60 |
 
-### 6.2 B1 e B3 — il modello nudo (severino-sim, 3 run per gradino)
+### 6.2 B1 e B3 — il modello nudo
+
+#### 6.2.1 La misura definitiva (LAD.15 — dev-fast, **20 run per gradino**, `@9f075a9`)
+
+Rifatta da zero col fix dei marcatori di template (§7.8) e a potenza statistica piena. È
+**questa** la tabella da citare; quella a 3 run qui sotto è conservata solo per la storia.
+
+| Gradino | Compito | **B1** nudo | **B3** + pensiero | Materiale visto (B1 / B3) |
+|---|---|---|---|---|
+| L1 | 2 fatti | **20/20** | **20/20** | intero / intero |
+| L2 | 3 fatti | **20/20** | **20/20** | intero / intero |
+| L3 | 4 fatti | **20/20** | **20/20** | intero / intero |
+| L4 | 5 fatti | **20/20** | **20/20** | 7.536 (−6%) / 6.000 (−25%) |
+| **L5** | **5 fatti + somma** | **0/20** | **0/20** | 7.536 / 6.000 — *entrambi troncati* |
+| L6 | 6 fatti | **0/20** | **0/20** | 7.536 (−57%) / 6.000 (−66%) |
+| L7 | 8 fatti + somma | **0/20** | **0/20** | 7.536 (−79%) / 6.000 (−83%) |
+| **L5c** | **5 fatti + somma** | **0/20** | **20/20** | **3.587 / 3.587 — nessun troncamento** |
+
+**Le due righe da leggere insieme sono L5 e L5c: sono lo STESSO COMPITO.** Cinque fatti più la
+somma; cambia solo l'ampiezza del pagliaio (90 documenti contro 40), cioè **se il materiale
+entra nella finestra accanto al pensiero**. Il braccio col ragionamento passa da **0/20 a 20/20**
+non perché il task diventi più facile — il braccio nudo resta **0/20 in entrambi** — ma perché
+smette di essere troncato.
+
+**Due conclusioni indipendenti, entrambe a n=20:**
+1. **Il soffitto del modello nudo è confermato**, e più solido di prima: 5 fatti sì, la somma
+   no, indipendentemente dall'ampiezza (L5c ha *meno* materiale di L4 e resta 0/20).
+2. **Il ragionamento supera quel soffitto quando ci sta.** Non è una questione di capacità del
+   modello: è una questione di capienza della finestra.
+
+*(Nota di validità: questa serie ha anche chiuso il dubbio aperto da LAD.15 — i numeri
+precedenti erano stati presi col difetto dei marcatori attivo. L'esito è **identico**: i
+gradini che passavano passano, quelli che cadevano cadono. Le fondamenta reggono.)*
+
+#### 6.2.2 La misura originale (severino-sim, 3 run per gradino) — *storica*
 
 | Gradino | **B1** nudo | Troncamento B1 | **B3** nudo+thinking | Troncamento B3 |
 |---|---|---|---|---|
