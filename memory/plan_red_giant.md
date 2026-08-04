@@ -1504,7 +1504,45 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   resta **0/3**. *(Era finita fra le cose da fare per un mio errore di trascrizione da una
   lista "cosa manca" non aggiornata: la sottofase esisteva già come misura eseguita.)*
 
-- [ ] **LAD.14** 🔎 **Il pensiero a budget PIENO e materiale PIENO — la cella mai misurata.**
+- [x] **LAD.14** ✅ **FATTA — E HA RIBALTATO IL VERDETTO.** (dev-fast, 20 run per braccio,
+  `@81179c3`, `data.md` §7.8)
+
+  | Braccio su L5c | Verificati |
+  |---|---|
+  | B1 nudo | **0/20** |
+  | B3 nudo + pensiero pieno (1536) | **20/20** |
+
+  **Fisher esatto bilaterale p = 1,45 × 10⁻¹¹.** Condizione di validità verificata *col
+  tokenizer del modello prima di leggere gli esiti*: materiale reale **3.587 token** contro
+  budget 7.536 (nudo) e 6.000 (col pensiero) — **nessun troncamento in nessuno dei due bracci**,
+  margine 2.413 token. I due bracci hanno visto materiale identico; l'unica differenza era il
+  canale di pensiero.
+
+  **RIBALTA** la tesi *"il ragionamento esplicito non compra l'aritmetica"*, che era scritta in
+  `data.md` §6.2, nel README e nel whitepaper §6.4. Era vera **solo nel regime misurato**, e il
+  regime era il confondimento stesso: due prove davano pensiero pieno e materiale troncato, la
+  terza materiale alla pari e pensiero **mutilato a 256** (che TH0 aveva già misurato come "mai
+  una chiusura naturale, tutte le chiamate tagliate a metà frase").
+
+  **NON ribalta** TH2 sulla batteria ufficiale di coding (Δ = 0 su 4 batterie): altro dominio,
+  altra misura, thinking resta spento lì.
+
+  **Formulazione corretta:** *il ragionamento compra l'aritmetica, ma non entra in 8192 token
+  insieme al materiale.* Verdetto sull'**hardware**, non sul modello.
+
+  **CONSEGUENZE, tutte da propagare:**
+  1. **F5 acquista un secondo obiettivo** — fare spazio al *ragionamento*, non solo al
+     materiale. Da fase di prestazioni a fase di **capacità**. Vedi la nota in F5 sotto.
+  2. **LAD.11 (blocco B4) sale di priorità**: se il pensiero paga da solo, cosa fa dentro il
+     workflow?
+  3. **Da confermare su `severino-sim`** prima di essere citato come verdetto (D6).
+  4. **Regola di metodo nuova:** *un controllo che MUTILA la variabile invece di isolarla non è
+     un controllo* — produce un nullo illeggibile che sembra una conferma. Prima di accettare
+     un controllo, dimostrare che non disabilita il meccanismo in prova.
+
+  Specifica originale conservata qui sotto.
+
+- [ ] ~~**LAD.14** 🔎 **Il pensiero a budget PIENO e materiale PIENO — la cella mai misurata.**~~
   (obiezione dell'utente, 2026-08-04: *"non ha senso RIDURRE i token del pensiero, bisogna
   AUMENTARE i token di contesto se c'è il pensiero"*.)
 
@@ -1733,6 +1771,28 @@ hardware di `data.md` §1.3. La regola vale per la ladder e per ogni A/B futuro 
 
 📎 **Specsheet:** §9 (Context Builder), §16 (KV cache) · **Decisioni:** D8, D9, D20
 🎯 **Scope:** Context Builder per ruolo, strumentazione del riuso, audit e ottimizzazione dei prefissi, slot save/restore, compressione verificata dello stato.
+
+> ### ⚠️ F5 È DIVENTATA UNA FASE DI CAPACITÀ, NON DI PRESTAZIONI (2026-08-04)
+>
+> Due misure indipendenti della ladder convergono qui e cambiano la natura della fase. Erano
+> intuizioni, ora sono numeri:
+>
+> 1. **LAD.8** — il gradino più duro (L7) non muore per passi né per disciplina: muore perché
+>    la catena append-only sfonda gli 8192 (8,5 passi di media su 60 disponibili). *La capienza
+>    è il muro.*
+> 2. **LAD.14** — il ragionamento pieno risolve l'aritmetica **20/20 contro 0/20**
+>    (p = 1,45×10⁻¹¹), ma **non ci sta in 8192 insieme al materiale**: sul gradino vero il
+>    materiale verrebbe troncato e il guadagno sparisce. *Il contesto è ciò che separa il
+>    sistema da una capacità che il modello ha già.*
+>
+> **Secondo obiettivo di F5, che prima non aveva:** fare spazio **al ragionamento**, non solo al
+> materiale. Il budget di contesto non è più una voce di costo, è la risorsa che decide quali
+> capacità sono accessibili.
+>
+> **Il compromesso centrale è MISURABILE, non assumibile:** qualunque compattazione dei
+> risultati vecchi compra finestra al prezzo del riuso append-only del prefisso — F0.5,
+> **65 token contro 7.971**. Va misurato con la matrice come tutto il resto, non deciso a
+> tavolino.
 🧭 **Perché questa fase, perché ora:** è il cuore ingegneristico del progetto — l'ispirazione dichiarata a Dwarf Star: lavorare forte sul prefill per ridurne i tempi. Arriva DOPO F4 per una ragione di metodo sperimentale: solo con la pipeline completa ogni ottimizzazione ha un prima/dopo onesto sull'intero set dell'Evaluator. Ottimizzare prima significherebbe ottimizzare un sistema che non esiste ancora. Su CPU il prefill è il costo dominante: qui si decide se Red Giant è *usabile* o solo dimostrativo.
 
 #### F5.1 — Context Builder

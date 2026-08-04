@@ -32,6 +32,7 @@ comparabili e numerosità adeguata; tutto ciò che è stato *osservato* ma non *
 | 8 | **Retry (2 tentativi)** | 0/3, muore **veloce e a buon mercato** (−59% token) | — | è il **carburante**: assorbe i fallimenti transitori, incluso il finish fantasma | §6.5, §7.7 |
 | 9 | **Guardia di coerenza aritmetica** | **9/20 (45%)** · 797 s | **18/20 (90%)** · 500 s | **Fisher p = 0,0057**; e **−37% di tempo**: rifiutare presto costa meno che fallire tardi | §7.6 |
 | 10 | **Budget di passi proporzionale alla taglia** | L7 moriva senza mai scrivere il file | L7 **11/20** | 20 passi non bastano per 8 fatti in 400 documenti: non era incapacità, era budget | §7.7.2 |
+| 11 | **Pensiero a budget pieno, materiale intero** | **0/20** | **20/20** | **p = 1,45×10⁻¹¹** — ma solo dove materiale e pensiero **ci stanno insieme** in 8192: sul gradino vero il materiale verrebbe troncato e il guadagno sparisce. Verdetto sull'**hardware** | §7.8 |
 
 **Il filo comune delle 10 righe:** nessuna insegna qualcosa al modello. Otto rendono
 *impossibile* un errore, due gli danno più spazio o più tentativi per lo stesso lavoro.
@@ -46,7 +47,8 @@ domini non-coding, task larghi). Nessuna è stata chiusa per opinione.*
 |---|---|---|---|---|
 | 1 | **Planner in-loop** (D11) | **2/10 contro 9/10** (baseline statica) · 815K contro 710K token · ~10× chiamate LLM | su task piccoli pianificare **costa più di quanto renda**: il piano diventa un'altra cosa che può sbagliare | col router attivo, F6 |
 | 2 | **Plan compiler** (PS-D9) | **2/13 contro 6/13**, e **2/13 contro 8/13** nella ri-misura · −44% token e +9,4 punti di token utili, ma i verdi non salgono | i gate spostano le morti **in profondità** (da 0 tool call a 20–38 con 80–93% di token utili) senza convertirle in verdi | task larghi multi-sessione, F6 |
-| 3 | **Thinking mode** (TH3) | **Δ verificati = 0** (1,5/13 contro 1,5/13) su 4 batterie ufficiali · **~787K contro ~652K token**, **1,9× tempo** · su L5 **0/3 in tre configurazioni** (fusibile 1536, fusibile 256, e col materiale ridotto) | il ragionamento esplicito **non compra l'aritmetica**; e la sua collocazione conta più della quantità (TH1: solo-Giano 4/20, tutti 1/20) | domini everyday/matematica post-F6/F7 · e la cella mai misurata di **LAD.14** |
+| 3 | **Thinking mode sul coding** (TH2) | **Δ verificati = 0** (1,5/13 contro 1,5/13) su 4 batterie ufficiali · **~787K contro ~652K token**, **1,9× tempo** | sul coding sintetico non converte; e la sua collocazione conta più della quantità (TH1: solo-Giano 4/20, tutti 1/20) | domini everyday/matematica post-F6/F7 |
+| ~~4~~ | ~~**Thinking sull'aritmetica**~~ | ⛔ **VERDETTO RIBALTATO il 2026-08-04** — v. §0.1 riga 11 e §7.8 | le tre prove precedenti erano confondute | — |
 | 4 | **Gate sul finish in-loop** (LAD.9) | L5 **18/20 contro 16/20**, **p = 0,66** · L7 **11/20 contro 11/20**, **p = 1,00** · **+15% di tempo** | la patologia era reale (40% dei tentativi) ma **il retry la pagava già**: difesa ridondante rispetto a un componente esistente | task coding larghi T040–T042, dove un tentativo sprecato costa 100K+ token invece di 25 s |
 
 **La lezione che unisce le prime tre:** tutto ciò che abbiamo spento è "intelligente"
@@ -63,7 +65,7 @@ prima di costruire una difesa, misurare **chi sta già pagando** per il problema
 | 2 | **`calculator` nel catalogo** | ⚠️ **acceso senza prove**, unico caso: invocato nel ~40% delle occasioni, spesso **mai** nelle run vincenti di L5; ablazione senza differenze **ma a n=5** | LAD.13 (A/B a n=20) — **dopo** LAD.10, perché il 40% delle chiamate fallisce sull'interfaccia (`expression=None`) e giudicarlo ora condannerebbe l'implementazione | media: occupa token di prompt a ogni step per un servizio forse già svolto dalla guardia di coerenza |
 | 3 | **Tutti i numeri della ladder** | GPU `dev-fast`, non `severino-sim` | **LAD.7**: run ufficiale su CPU, 20 run per braccio | media: la direzione è solida, l'ampiezza no (IC 95% del 18/20: **70–97%**) |
 | 4 | **L7 = 11/20** | misurato a n=20 su GPU | attribuzione: è il cumulo di 5 fix, nessuno isolato | bassa sul numero, alta sull'interpretazione |
-| 5 | **Il verdetto TH3 su L5** | 0/3 in tre configurazioni | **LAD.14**: pensiero pieno **e** materiale pieno, mai provati insieme | **alta**: se passasse, TH3 diventerebbe un verdetto sull'**hardware** ("il thinking paga e non ci sta in 8192") e cambierebbe l'obiettivo di F5 |
+| ~~5~~ | ~~Il verdetto TH3 su L5~~ | ✅ **RISOLTA il 2026-08-04, ed era sbagliata** (§7.8): il pensiero pieno con materiale intero fa **20/20 contro 0/20**. Il rischio che avevo dichiarato "alto" si è materializzato: è un verdetto sull'**hardware**, e F5 cambia obiettivo | resta da confermare su `severino-sim` | — |
 | 6 | **Buco nella matrice: B4** | il blocco pre-fix è stato **buttato** (codice non comparabile) | **LAD.11** | media: metà della matrice 2×2 sulla ladder è vuota |
 | 7 | **Syntax gate, `no_op_edit`, hint su `unknown_tool`** | validati da piloti e collaudi (es. 13 task su 43 sprecavano passi su nomi inventati; 15 edit no-op consecutivi osservati) | mai passati dalla ladder con bracci ablati | bassa: patologie documentate e costo nullo |
 
@@ -376,8 +378,12 @@ cambierebbe l'obiettivo di F5.
 | workflow **con** `calc` | **4/5** | lettura selettiva |
 | workflow **senza** `calc` | 0/5 | lettura selettiva |
 
-**Il ragionamento esplicito non compra l'aritmetica; un tool deterministico sì.** Tre
-configurazioni di pensiero falliscono, una calcolatrice AST da poche righe risolve il gradino.
+> ~~**Il ragionamento esplicito non compra l'aritmetica; un tool deterministico sì.**~~
+> ⛔ **AFFERMAZIONE FALSIFICATA il 2026-08-04 da LAD.14 (§7.8).** Era vera solo *nel regime
+> misurato*: tutte e tre le configurazioni sopra erano confondute — o pensiero pieno e materiale
+> troncato, o materiale intero e pensiero mutilato. Con **pensiero pieno E materiale intero** il
+> gradino passa **20/20 contro 0/20**, p = 1,45×10⁻¹¹. La formulazione corretta è: *il
+> ragionamento compra l'aritmetica, ma non entra in 8192 token insieme al materiale.*
 
 **Il pavimento nudo del modello su questo asse: ~5.8K token di materiale, 5 fatti, nessuna
 aggregazione.** Sopra: zero.
@@ -694,6 +700,84 @@ ogni braccio delle misure precedenti e lo 0/3 nudo. Il merito non è di LAD.9 (i
 bracci): è dei fix precedenti — corpus uniforme, giudice che non regala la risposta, guardia di
 coerenza, `refusal_state`, budget di passi proporzionale alla taglia.
 
+## 7.8 LAD.14 — il pensiero a budget pieno E materiale pieno: **verdetto ribaltato**
+
+*(2026-08-04, dev-fast, 20 run per braccio, `@81179c3`. Origine: obiezione dell'utente —
+"non ha senso RIDURRE i token del pensiero, bisogna AUMENTARE i token di contesto".)*
+
+### 7.8.1 Il disegno
+
+Le due prove precedenti erano **entrambe confondute**, in direzioni opposte: pensiero pieno con
+materiale troncato (6.000 contro 7.536), oppure materiale alla pari con pensiero **mutilato**
+(256 token, che TH0 aveva già misurato come *"mai una chiusura naturale, tutte le chiamate
+tagliate a metà frase"*). Un esito nullo a 256 token non distingue *"il ragionamento non serve"*
+da *"256 token non bastano per ragionare"*.
+
+Allargare il contesto avrebbe richiesto di riavviare `llama-server` fuori dal vincolo D8.
+Disegno alternativo: **rimpicciolire il materiale** invece di allargare il contesto — gradino
+**L5c** (`T058`), stesso compito di L5 (5 fatti **+ somma**) su 40 documenti.
+
+**Condizione di validità, verificata col tokenizer del modello prima di leggere gli esiti:**
+
+| | Budget materiale | Materiale reale | Troncamento |
+|---|---|---|---|
+| B1 nudo | 7.536 | **3.587** | NO |
+| B3 nudo + pensiero 1536 | 6.000 | **3.587** | NO (margine 2.413) |
+
+I due bracci vedono **esattamente lo stesso materiale**. L'unica differenza è il canale di
+pensiero.
+
+### 7.8.2 Il risultato
+
+| Braccio | L5c verificati |
+|---|---|
+| **B1** — nudo | **0/20** |
+| **B3** — nudo + pensiero pieno | **20/20** |
+
+**Fisher esatto bilaterale p = 1,45 × 10⁻¹¹.** Costo: ~3 s per run contro <1 s.
+
+Il braccio nudo sbaglia la somma in modo stabile (`total=1104`, `1054`, `1144` contro 1913
+vero); quello col pensiero la azzecca **venti volte su venti**.
+
+### 7.8.3 Cosa viene ribaltato, e cosa no
+
+**RIBALTATO** — la tesi *"il ragionamento esplicito non compra l'aritmetica"*, che avevo scritto
+in `data.md` §6.2, nel README e nel whitepaper (§6.4). Era vera **solo nel regime misurato**, e
+il regime era il confondimento stesso.
+
+**NON ribaltato** — il verdetto **TH2** sulla batteria ufficiale di coding (Δ verificati = 0 su
+4 batterie, 1,9× tempo): è un altro dominio e un'altra misura. Il thinking resta spento di
+default lì.
+
+**La formulazione corretta:** *il ragionamento compra l'aritmetica, ma non entra in 8192 token
+insieme al materiale.* È un verdetto sull'**hardware**, non sul modello — esattamente il ramo
+che avevo pre-registrato come "se passa, cambia natura" (§0.3 riga 5).
+
+### 7.8.4 Le due soluzioni allo stesso gradino, e quale è spedibile
+
+Ora abbiamo **due** vie indipendenti per l'aritmetica, e occupano regimi diversi:
+
+| Via | Dove funziona | Dove no |
+|---|---|---|
+| **Guardia di coerenza** (§7.6) | L5 vero, 90 documenti, **18/20** a ctx 8192 | — |
+| **Pensiero pieno** (qui) | L5c, materiale ≤ ~4K token, **20/20** | su L5 vero il materiale verrebbe troncato a 6.000 → il gradino ridiventa 0/3 |
+
+**La guardia è la soluzione spedibile oggi; il pensiero è quella che chiede un contesto più
+grande.** Non sono alternative: sono due punti diversi della stessa curva costo/capienza — ed è
+la curva che F5 deve ottimizzare.
+
+### 7.8.5 Conseguenze operative
+
+1. **F5 acquista un secondo obiettivo**: fare spazio *anche al ragionamento*, non solo al
+   materiale. Prima era una fase di prestazioni, ora è una fase di capacità.
+2. **LAD.11 (blocco B4) diventa molto più interessante**: se il pensiero paga da solo su un
+   gradino che ci sta, cosa fa *dentro* il workflow?
+3. **Da rimisurare su `severino-sim`** prima di essere ufficiale (regola D6: la GPU classifica,
+   non decide).
+4. **Lezione di metodo, la terza di questa campagna:** un controllo che *mutila* la variabile
+   invece di isolarla non è un controllo — produce un nullo illeggibile che sembra una conferma.
+   Il 256 sembrava rigore; era il confondimento speculare.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
@@ -707,6 +791,8 @@ coerenza, `refusal_state`, budget di passi proporzionale alla taglia.
 - [ ] **Ladder ufficiale su severino-sim**: B2 + B4 col codice fixato, run multiple → i numeri che andranno nel README
 - [ ] Diagnosi di L7 (perché 60 passi non bastano)
 - [x] ~~Disambiguazione del confondimento B3/L5 (budget di pensiero 256)~~ — fatta, §6.2 nota 1
-- [ ] **LAD.14**: pensiero PIENO (1536) con materiale PIENO (ctx 9728) — la cella mai misurata, §6.2
+- [x] ~~**LAD.14**: pensiero PIENO con materiale PIENO~~ — **fatto, e ha ribaltato il verdetto**: 20/20 contro 0/20, §7.8
+- [ ] LAD.14 su `severino-sim` (il 20/20 è GPU: va confermato sul profilo ufficiale prima di essere citato come verdetto)
+- [ ] **F5 con il secondo obiettivo**: fare spazio al ragionamento oltre che al materiale (§7.8.5)
 - [ ] Retest dei verdetti aperti (planner e thinking) col router attivo, post-F6/F7
 - [ ] Benchmark pubblici a fine progetto (valori comparabili con la letteratura)

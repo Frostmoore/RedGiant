@@ -268,6 +268,27 @@ The path there taught as much as the destination. At n=5 the guard fired in **4 
 
 **The generalizable lesson:** an error that says *what was wrong* but not *how the world was left* leaves the model reasoning about a state that does not exist. That holds for every gate that refuses an action.
 
+#### ⛔ And then we falsified our own headline claim
+
+For three measurements this project asserted that *explicit reasoning cannot be argued into correct arithmetic, whereas a deterministic tool can*. **That claim is retracted**, and the retraction is worth more than the claim was.
+
+All three measurements were confounded, in opposite directions. Two gave reasoning its full 1536-token budget but, on a rung already near the context limit, thereby **truncated the material** (6,000 tokens against 7,536 for the naked arm). The third equalized material by shrinking reasoning to 256 tokens — a budget our own mechanics measurements had already shown *never* permits a natural close, cutting every trace mid-sentence. A null result under that control cannot distinguish "reasoning does not help" from "256 tokens are not enough to reason". **A control that mutilates the variable instead of isolating it is not a control**; it produces an unreadable null that reads as confirmation.
+
+The correct experiment holds both at full size. Rather than enlarge the context beyond the platform's measured ceiling, we shrank the corpus: a **controlled variant** of the aggregation rung — same task, 40 documents instead of 90. Material parity was verified *with the model's own tokenizer before any outcome was read*: **3,587 tokens against budgets of 7,536 and 6,000 — no truncation in either arm**, margin 2,413.
+
+| Arm (20 runs each) | Verified |
+|---|---|
+| naked | **0/20** |
+| naked + full reasoning budget | **20/20** |
+
+**Fisher exact two-sided p = 1.45 × 10⁻¹¹.**
+
+What this does *not* overturn: the official coding verdict (Δ = 0 verified across four batteries at 1.9× wall). Different domain, different measurement; reasoning stays off there. What it does overturn is the extension of that verdict to arithmetic. The defensible statement is narrower and far more useful: **reasoning does buy arithmetic, and it does not fit into 8,192 tokens alongside the material.** That is a verdict about *hardware*, not about the model.
+
+So there are now **two independent solutions to the same rung, in different regimes**: the coherence gate delivers 18/20 on the *full* rung at the shipping context size, while full reasoning delivers 20/20 only where material and reasoning fit together — which the full rung does not permit. The gate is the deployable answer today; reasoning is the one that needs a bigger window. They are two points on one cost-versus-capacity curve, and that curve is what the context phase now exists to optimize.
+
+The retracted claim agreed with the literature we cited for it, which is precisely why it survived three measurements. **Agreement with prior work is not evidence; it is a reason to check the control harder.**
+
 #### What the full logs showed that no score did
 
 Reading the complete step-by-step logs of the last 40 runs surfaced **two failure modes larger than the arithmetic problem** we had been chasing:

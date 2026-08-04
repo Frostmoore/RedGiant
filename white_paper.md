@@ -80,6 +80,7 @@ plausible-but-unmeasured improvement is not an improvement.*
 | 8 | Retry (2 attempts) | 0/3, dies **fast and cheap** (−59% tokens) | — | absorbs transient failures, including the phantom finish (§5.9.4) | 5.8 |
 | 9 | **Write-time arithmetic coherence gate** | **9/20 (45%)** · 797 s | **18/20 (90%)** · 500 s | **Fisher exact two-sided p = 0.0057**, and **37% faster**: refusing early costs less than failing late | 5.9 |
 | 10 | Step budget proportional to task size | L7 died without ever writing the file | L7 **11/20** | 20 steps cannot collect 8 facts from 400 documents: not incapacity, budget | 5.9.5 |
+| 11 | **Full reasoning budget with untruncated material** | **0/20** | **20/20** | **p = 1.45 × 10⁻¹¹** — but only where material and reasoning fit together within 8,192 tokens; on the full rung the material would be truncated and the gain disappears. A verdict about **hardware** | 6.4 |
 
 **The common thread across all ten: none of them teaches the model anything.** Eight make an
 error *impossible to emit*; two grant more room or more attempts for the same work.
@@ -94,7 +95,8 @@ tasks). None was closed by opinion.*
 |---|---|---|---|---|
 | 1 | In-loop planner | **2/10 vs 9/10** static baseline · 815K vs 710K tokens · ~10× LLM calls | on small tasks, planning costs more than it returns: the plan becomes one more thing that can be wrong | routing active |
 | 2 | Plan compiler | **2/13 vs 6/13**, and **2/13 vs 8/13** on re-measurement · −44% tokens, +9.4 points of useful tokens, no additional greens | the gates move deaths *deeper* (from 0 tool calls to 20–38 at 80–93% useful tokens) without converting them | multi-session tasks |
-| 3 | Explicit reasoning | **Δ verified = 0** (1.5/13 vs 1.5/13) over four official batteries · ~787K vs ~652K tokens · **1.9× wall** · **0/3 on L5 in three configurations** | reasoning does not buy arithmetic; and placement dominates quantity (worker-only 4/20 vs everyone 1/20) | non-coding domains · and the never-measured cell (§8) |
+| 3 | Explicit reasoning **on synthetic coding** | **Δ verified = 0** (1.5/13 vs 1.5/13) over four official batteries · ~787K vs ~652K tokens · **1.9× wall** | no conversion in that domain; and placement dominates quantity (worker-only 4/20 vs everyone 1/20) | non-coding domains, with routing active |
+| ~~4~~ | ~~Explicit reasoning on arithmetic~~ | ⛔ **RETRACTED 2026-08-04** — see §0.1 row 11 and §6.4: all three prior measurements were confounded | — | — |
 | 4 | In-loop finish gate | L5 **18/20 vs 16/20**, **p = 0.66** · L7 **11/20 vs 11/20**, **p = 1.00** · **+15% wall** | the pathology was real (40% of attempts) but **retry was already paying for it**: a defence redundant with an existing component | large coding tasks, where a wasted attempt costs 100K+ tokens instead of 25 s |
 
 **What unites the first three:** everything switched off is "intelligent" — planning, compiling
@@ -111,7 +113,7 @@ one. Before building a defence, measure who is already paying for the problem.
 | 2 | The calculator's place in the catalogue | **switched on without proof** — the only such case: invoked ~40% of the time, often never in winning runs; ablation showed no difference **but at n=5** | an n=20 A/B, and only *after* the argument-error fix: 40% of its calls fail at the interface, so judging it now would condemn the implementation | medium: it consumes prompt tokens every step for a service the coherence gate may already provide |
 | 3 | All ladder numbers | GPU profile, not the capped reference CPU profile | the official CPU campaign | medium: direction solid, magnitude not (95% CI on 18/20 is **70–97%**) |
 | 4 | L7 = 11/20 | measured at n=20 | attribution: it is the sum of five fixes, none isolated | low on the number, high on its interpretation |
-| 5 | The reasoning verdict on L5 | 0/3 in three configurations | full reasoning budget **and** full material — never tested together (§8) | **high**: if it passed, the verdict becomes one about *hardware* ("reasoning pays and does not fit in 8192"), redirecting the context-optimization phase |
+| ~~5~~ | ~~The reasoning verdict on arithmetic~~ | ✅ **RESOLVED 2026-08-04, and it was wrong** (§6.4): 20/20 against 0/20 at full budget and full material. The risk we had labelled "high" materialized exactly as pre-registered | confirmation on the reference CPU profile | — |
 | 6 | Reasoning × workflow (block B4) | the pre-fix block was **discarded** as non-comparable | re-measurement | medium: half the 2×2 matrix on the ladder is empty |
 | 7 | Syntax gate, no-op-edit guard, near-name tool hints | validated by pilots (13 of 43 runs squandered steps on invented tool names; 15 consecutive no-op edits observed) | never passed through the ladder with ablated arms | low: documented pathologies, zero cost |
 
@@ -665,14 +667,56 @@ Each of these was fixed at the tool layer, not the prompt layer. The generalizat
 **a tool failure must be state-aware and actionable**, or the model will loop on it. This is
 ordinary software engineering, and it dominates prompt engineering in effect size.
 
-### 6.4 What the model cannot be argued into
+### 6.4 A claim we published and then falsified ourselves
 
-Three configurations of explicit reasoning — including one controlled to see the same material
-as the non-reasoning arm — failed to make the model add five numbers correctly. A 40-line
-AST-restricted calculator did. Where a deterministic mechanism exists, offloading beats
-reasoning in this regime; this is consistent with the tool-verification literature [2] and with
-the finding that small models' self-directed reasoning does not reliably improve their own
-correctness [4].
+An earlier version of this section asserted that *explicit reasoning cannot be argued into
+producing correct arithmetic, whereas a deterministic tool can*. Three configurations of
+reasoning had failed the aggregation rung, one of them apparently controlled for context
+consumption. We retract that claim, and the retraction is more informative than the claim was.
+
+**All three configurations were confounded, in opposite directions.** Two granted the reasoning
+channel its full budget but, on a rung already near the context limit, thereby *truncated the
+material* (6,000 tokens of material against 7,536 for the non-reasoning arm). The third
+equalized the material by shrinking the reasoning budget to 256 tokens — a budget our own
+mechanics measurements had already shown never permits a natural close, cutting every trace
+mid-sentence. A null result under that control cannot distinguish "reasoning does not help"
+from "256 tokens are not enough to reason". **A control that mutilates the variable instead of
+isolating it is not a control**; it produces an unreadable null that reads as confirmation.
+
+The correct experiment holds *both* at full size, which requires either a larger context window
+— beyond the platform's measured ceiling — or a smaller corpus. We took the second route: a
+controlled variant of the aggregation rung, same task, corpus small enough that the material
+fits in both arms with margin. Verified with the model's own tokenizer before reading any
+outcome: 3,587 tokens of material against budgets of 7,536 and 6,000; **no truncation in either
+arm**, the two arms seeing byte-identical material.
+
+| Arm (20 runs each) | Verified |
+|---|---|
+| naked | **0/20** |
+| naked + full reasoning budget | **20/20** |
+
+**Fisher exact two-sided p = 1.45 × 10⁻¹¹.** The non-reasoning arm mis-sums stably; the
+reasoning arm is correct twenty times out of twenty.
+
+**What this does and does not overturn.** It does *not* overturn the official coding verdict
+(Δ = 0 verified across four batteries at 1.9× wall): that is a different domain and a different
+measurement, and reasoning remains disabled there. It does overturn the extension of that
+verdict to arithmetic. The defensible statement is narrower and more useful: **reasoning does
+buy arithmetic, and does not fit into 8,192 tokens alongside the material.** That is a verdict
+about *hardware*, not about the model — and it converts the context-and-cache programme from a
+performance concern into a capability one, with a second objective it did not previously have:
+make room for reasoning, not only for material.
+
+**Two independent solutions now exist for the same rung, and they occupy different regimes.**
+The write-time coherence gate delivers 18/20 on the *full* rung at the shipping context size;
+full reasoning delivers 20/20 only where material and reasoning fit together, which the full
+rung does not permit. The gate is therefore the deployable answer today and reasoning is the
+one that requires more context. They are not alternatives but two points on the same
+cost-versus-capacity curve — and it is that curve the next phase must optimize.
+
+We note that the retracted claim was consistent with the literature we cited for it [2][4],
+which is precisely why it survived three measurements. Agreement with prior work is not
+evidence; it is a reason to check the control harder.
 
 ### 6.4-bis Errors must state the world, not only the fault
 
@@ -740,13 +784,21 @@ invalidates them. We mitigate by asserting judge satisfiability against referenc
 implementations in the automated test suite, but the risk of subtly mis-specified tasks
 remains.
 
-**Benchmark artifacts — two found, both by reading artifacts rather than scores.** The ladder's
+**Confounded controls.** §6.4 documents a claim we published internally and then falsified: a
+control that equalized one variable by *mutilating* another produced a null result that read as
+confirmation for three measurements. We now require of any control that it be shown not to
+disable the mechanism under test, and we verify material-parity with the model's tokenizer
+before reading outcomes rather than after.
+
+**Benchmark artifacts — three found, all by reading artifacts rather than scores.** The ladder's
 first generation contained a formatting artifact that selectively disadvantaged the treatment
 arm (§4.4). Separately, its judge printed the expected value alongside the observed one, so any
 run that consulted the checker was handed the answer: for a period, that rung measured the
-reading of an error message rather than retrieval and aggregation. Neither defect was visible
-in any score. On the base rate demonstrated by these two discoveries, we assume that further
-such artifacts exist.
+reading of an error message rather than retrieval and aggregation. Third, in the naked arm the
+model intermittently emits chat-template markers as literal text, which the judge captures
+inside the value — failing even a *correct* answer, and doing so specifically in the arm
+against which our thesis is measured. None of the three was visible in any score. On the base
+rate demonstrated by these discoveries, we assume that further such artifacts exist.
 
 **Absence of public benchmarks.** All numbers here are internally comparable but externally
 unanchored. Public benchmark runs are planned specifically to place the system on scales
@@ -760,26 +812,23 @@ The system does not yet convert multi-session software-engineering tasks: both a
 on the three tasks designed to exceed a single executor session, with or without the plan
 compiler, with or without reasoning. This is the project's principal open failure.
 
-**One experimental cell has never been measured, and it determines the nature of a verdict.**
-The reasoning arm has been tested with a full budget but reduced material, and with full
-material but a *crippled* 256-token budget. Neither answers the question, and the second cannot:
-a null result at 256 tokens does not distinguish "reasoning does not help" from "256 tokens are
-not enough to reason". Full budget with full material requires a context window beyond the
-platform's measured ceiling. We will run it on the development profile, where the cost is
-affordable, using a controlled rung whose material fits comfortably in both arms. The two
-outcomes differ in kind: continued failure makes the reasoning verdict final on this axis;
-success reclassifies it from *"reasoning does not pay"* to **"reasoning pays and does not fit in
-8,192 tokens"** — a verdict about hardware, not about the model, which would redirect the
-context-optimization programme.
+**The context budget is now a capability constraint, not a performance one.** Two independent
+results converge on it. The hardest rung dies from context exhaustion rather than step budget or
+discipline (§5.9.5), and full-budget reasoning solves the aggregation rung outright but cannot
+coexist with untruncated material inside 8,192 tokens (§6.4). Context and cache work therefore
+acquires a second objective it did not previously have — making room for *reasoning* — and its
+central trade-off is measurable rather than assumable: any compaction of older step results buys
+window at the cost of the append-only prefix reuse worth 65 tokens against 7,971 (§5.1).
 
-Planned work, in order: (i) the missing reasoning cell above; (ii) an actionable
-argument-error contract at the tool router, followed by a properly powered re-judgement of the
-calculator itself — currently the only component enabled without evidence in a system where
-everything else was decided by measurement; (iii) context and cache work, now motivated from
-below by §5.9.5 rather than by intuition; (iv) adaptive routing by task size, using the measured
-fact that micro-tasks must **not** be planned; (v) re-measurement of all rejected verdicts with
-routing active and on non-coding domains, since all were measured on synthetic coding only;
-(vi) public benchmark runs; and (vii) the real-codebase examination.
+Planned work, in order: (i) context and cache work under the two objectives above; (ii) a
+properly powered re-judgement of the calculator, now that its argument-error contract has been
+made actionable — it remains the only component enabled without evidence in a system where
+everything else was decided by measurement; (iii) reasoning *inside* the workflow, a cell whose
+interest rose sharply once reasoning was shown to pay alone; (iv) adaptive routing by task size,
+using the measured fact that micro-tasks must **not** be planned; (v) re-measurement of all
+remaining rejected verdicts with routing active and on non-coding domains, since all were
+measured on synthetic coding only; (vi) public benchmark runs; and (vii) the real-codebase
+examination.
 
 ---
 
