@@ -160,7 +160,22 @@ class LlamaClient:
             raise LlmError(str(e)) from e
 
         timings = res.get("timings", {})
-        cached = int(res.get("tokens_cached", 0) or 0)
+        # F5.2 (2026-08-04) — CORREZIONE DI CONTABILITA'. Prima qui c'era
+        # `res["tokens_cached"]`, che NON e' il riuso: e' quanti token stanno
+        # nella cache adesso, cioe' prompt+1 SEMPRE. Misurato sul server:
+        #
+        #   scenario     prompt reale   tokens_cached   timings.prompt_n
+        #   freddo           721            722              721
+        #   identico         721            722                1
+        #   append           724            725                4
+        #
+        # Il numero vero e' `timings.prompt_n`: i token effettivamente
+        # processati. Conseguenza del bug: `MAX(prompt - cached, 0)` in
+        # `budget_used` valeva SEMPRE 0 — il budget dei task ha contato solo la
+        # generazione, mai il prefill. Qui si salva il RIUSO reale, cosi' la
+        # sottrazione a valle torna a significare "token davvero pagati".
+        reprocessed = int(timings.get("prompt_n", n_prompt) or 0)
+        cached = max(n_prompt - reprocessed, 0)
         result = LlmResult(
             text=res.get("content", ""), parsed=None,
             prompt_tokens=n_prompt, cached_tokens=cached,

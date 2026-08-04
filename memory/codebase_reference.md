@@ -503,6 +503,16 @@ def worker_ablated(component: str) -> bool
 def active_ablations() -> list[str]
 ```
 
+### `redgiant/core/cache_probe.py` — strumentazione del riuso KV (F5.2)
+
+```python
+class ReuseStats   # role, calls, avg_reuse_ratio, prompt_tokens, cached_tokens, reprocessed_tokens, avg_prefill_ms
+def reuse_stats(db: Path, task_ids: list[str] | None = None) -> list[ReuseStats]
+def reuse_by_step(db: Path, task_ids: list[str]) -> list[tuple[int, float, int]]
+```
+
+**⚠️ TRAPPOLA DISINNESCATA — `tokens_cached` NON è il riuso (2026-08-04).** Il campo restituito da llama-server è *quanti token stanno nella cache dopo la chiamata*, cioè **prompt+1 sempre**, identico a freddo e a caldo. Misurato: prompt 721 → `tokens_cached` 722 sia alla prima chiamata sia alla ripetizione; il numero vero è **`timings.prompt_n`** (721 → 1 → 4 su freddo/identico/append). **Conseguenza del bug:** in `budget_used` la sottrazione `MAX(prompt_tokens - cached_tokens, 0)` valeva **sempre 0**, quindi il budget dei task **ha contato solo la generazione, mai il prefill**. Corretto in `client.complete`: `cached = max(n_prompt - timings.prompt_n, 0)` — il riuso reale. *Sintomo che l'ha rivelato: un `avg_reuse_ratio` del **102%** — un rapporto sopra 1 vuol dire che il numeratore non è quello che si crede.*
+
 ### `redgiant/core/budget.py` — BudgetTracker (F1.7)
 
 ```python
