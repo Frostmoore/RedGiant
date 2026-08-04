@@ -35,7 +35,7 @@ comparabili e numerosità adeguata; tutto ciò che è stato *osservato* ma non *
 | 11 | **Pensiero a budget pieno, materiale intero** | **0/20** | **20/20** | **p = 1,45×10⁻¹¹** — ma solo dove materiale e pensiero **ci stanno insieme** in 8192: sul gradino vero il materiale verrebbe troncato e il guadagno sparisce. Verdetto sull'**hardware** | §7.8 |
 | 12 | **Errori azionabili** (`bad_args` LAD.10, `refusal_state` LAD.6) | spirali fino a **6 passi consecutivi**, **7 sequenze fatali** | **max 1 passo**, **0 fatali**, recupero **100%** | non riducono gli sbagli (18% di chiamate ancora malformate): **tolgono le spirali che gli sbagli causavano**. Agiscono sul *costo* del fallire, non sulla frequenza | §7.9.2 |
 | 13 | **Flag di runtime** (`--swa-full --cache-reuse`) | **2.748** token per rimuovere un blocco dal mezzo | **1** | Gemma è sliding-window: con la cache SWA parziale il runtime non riusa nulla dopo una divergenza. Costa memoria → adottato solo su GPU | §7.11 |
-| 14 | **Compattazione della catena volatile** (F5.0-bis) | L7 **12/40 = 30%**, tentativi morti a **7,7 passi** | **22/40 = 55%**, **13,2 passi** | **p = 0,0411**, campione dimensionato *prima* di guardare. Il +53% di tempo è il costo di **non morire** | §7.13.4 |
+| 14 | **Compattazione della catena volatile** (F5.0-bis) | L7 **12/40 = 30%**, tentativi morti a **7,7 passi**, **731** token riprocessati per chiamata | **22/40 = 55%**, **13,2 passi**, **550** per chiamata | **p = 0,0411**, campione dimensionato *prima* di guardare. Il +53% di tempo è il costo di **non morire** — e il riuso della KV **migliora** (89,3% contro 85,8%): l'ondata lascia un prompt più corto | §7.13.4, §7.13.5 |
 
 **Il filo comune delle 10 righe:** nessuna insegna qualcosa al modello. Otto rendono
 *impossibile* un errore, due gli danno più spazio o più tentativi per lo stesso lavoro.
@@ -1236,6 +1236,56 @@ compattazione è veloce come lo era `−retry`: perché fallisce prima.
 **Nota di metodo — è il primo risultato della campagna fatto come si deve.** Pilota per
 dimensionare, calcolo di potenza dichiarato, campione confermativo nuovo, nessun *optional
 stopping*. È la lezione di LAD.9 applicata invece che ripetuta.
+
+### 7.13.5 Condizione (b) — quanto costa in riuso della KV: **niente**
+
+L'accettazione di F5.0-bis richiedeva anche il conto opposto: la compattazione riscrive il
+prefisso, quindi *quanto paga* in riuso? Misurato con la contabilità corretta (§7.14), su dati
+nuovi, 10 run per braccio:
+
+| Braccio | Chiamate | Riuso medio | Token riprocessati **per chiamata** | Prefill medio |
+|---|---|---|---|---|
+| `full` (compattazione) | 290 | **89,3%** | **550** | **63 ms** |
+| `−compact` (ablata) | 187 | 85,8% | 731 | 81 ms |
+
+**Non costa: rende.** Con `--swa-full --cache-reuse` l'ondata costa ~1 token (§7.11) e lascia un
+prompt **più corto**, quindi ogni passo successivo ne processa meno: **−25% di token
+riprocessati per chiamata** e prefill medio più basso.
+
+**Curva per posizione dello step** (la firma dell'append-only di D20): parte bassa allo step 1
+— prefisso freddo — e sale a **90-95%** dal terzo passo in poi, in entrambi i bracci. D20
+funziona come progettato, e la compattazione non la rompe.
+
+⚠️ **Vale su GPU, dove i flag ci sono.** Su `severino-sim`, senza `--swa-full`, la riscrittura
+costerebbe il riprocessamento completo e questo conto andrebbe rifatto da zero. **La leva è
+ACCETTATA sul profilo di sviluppo e resta da validare su quello ufficiale.**
+
+## 7.14 Il sesto difetto di misura: `tokens_cached` non è il riuso
+
+Trovato costruendo la strumentazione di F5.2: il riuso risultava del **102%**. Un rapporto sopra
+1 significa che il numeratore non è quello che si crede, quindi ho interrogato il server invece
+di aggiustare la formula.
+
+| Scenario | Prompt reale | `tokens_cached` | `timings.prompt_n` |
+|---|---|---|---|
+| freddo | 721 | 722 | **721** |
+| identico | 721 | 722 | **1** |
+| append | 724 | 725 | **4** |
+
+`tokens_cached` è **quanti token stanno nella cache dopo la chiamata** — prompt+1, identico a
+freddo e a caldo. Il numero vero è `timings.prompt_n`.
+
+**Conseguenza, ed è seria:** in `budget_used` la sottrazione `MAX(prompt_tokens - cached_tokens,
+0)` valeva **sempre 0**. Il budget dei task **ha contato solo la generazione, mai il prefill**,
+da F1.2 a oggi. Corretto: `cached = max(n_prompt - timings.prompt_n, 0)`.
+
+*Nota che salva i numeri storici:* il bench F0.5 usava già `prompt_n` ed era corretto — per
+questo il 65-contro-7.971 reggeva. Il difetto stava **solo** nella contabilità di runtime, non
+nelle misure di riuso pubblicate.
+
+**Sesto difetto in pochi giorni, e come i precedenti non era visibile in nessun punteggio.** Si
+è rivelato solo perché una metrica derivata è finita fuori dal suo intervallo ammissibile — che
+è un buon argomento per calcolare sempre quantità che *hanno* un intervallo ammissibile.
 
 ## 8. Cosa manca (aggiornamento previsto)
 

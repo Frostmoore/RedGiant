@@ -2183,11 +2183,21 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   *optional stopping*. È la lezione di LAD.9 applicata invece che ripetuta. Pilota e
   confermativo concordano: 55% contro 30% in entrambi.
 
-  **⚠️ Condizione (b) ANCORA APERTA:** `avg_reuse_ratio` prima/dopo non è stato misurato —
-  serve F5.2. Finché non c'è, sappiamo quanto la compattazione compra ma **non quanto costa in
-  riuso della KV**, e su `severino-sim` (senza `--swa-full`) quel costo potrebbe essere ben
-  diverso da quello misurato su GPU. **La leva non è promossa a “accettata” finché il conto non
-  è fatto.**
+  **✅ Condizione (b) CHIUSA (F5.2, `data.md` §7.13.5) — non costa riuso: rende.**
+
+  | Braccio | Riuso medio | Token riprocessati **per chiamata** | Prefill medio |
+  |---|---|---|---|
+  | `full` | **89,3%** | **550** | **63 ms** |
+  | `−compact` | 85,8% | 731 | 81 ms |
+
+  Con `--swa-full --cache-reuse` l'ondata costa ~1 token e lascia un prompt **più corto**:
+  ogni passo successivo ne processa meno. **−25% di token riprocessati per chiamata.** La curva
+  per posizione dello step sale a 90-95% dal terzo passo in entrambi i bracci: D20 funziona e
+  la compattazione non la rompe.
+
+  **LEVA ACCETTATA sul profilo di sviluppo.** ⚠️ Su `severino-sim`, senza `--swa-full`, la
+  riscrittura costerebbe il riprocessamento completo: **il conto va rifatto là** prima di
+  dichiararla accettata sull'ufficiale.
 
 #### F5.1 — Context Builder
 
