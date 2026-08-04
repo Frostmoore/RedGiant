@@ -1494,6 +1494,24 @@ una**, sono state trovate **tutte e cinque**, più una sesta che non era nemmeno
 | Ragionamento condizionato al dominio | **Noto come concetto** (routing base/CoT). ⚠️ Ma il canone dice che il CoT aiuta l'**aritmetica** e ReAct il **recupero**: il nostro dato va nella direzione opposta |
 | La forbice `completed ≠ verified` | **Noto**, con lo stesso nome: [*Characterizing False Success in LLM Agents*](https://arxiv.org/pdf/2606.09863), e lo stesso rimedio (controllore deterministico) |
 | Guardia di coerenza in scrittura | **Noto** — è il pattern *reject-and-regenerate* dei guardrail di output, applicato a totali e somme |
+| Il pensiero **compensa** una card indebolita (§7.18) | **Noto** — [*Cross-Component Interference*](https://arxiv.org/html/2605.05716) studia le interazioni fra componenti; [*Select-then-Solve*](https://arxiv.org/pdf/2604.06753) formula l'**ipotesi della compensazione**: la struttura di ragionamento compensa i divari di capacità e vale **di più quanto più il modello è debole** (CoT: Qwen3-30B da 18% a 64%, **GPT-5 −15 punti**) |
+
+### ⚠️ La lacuna che il campo dichiara, e che ci riguarda
+
+Dal primo di quei due lavori, sul limite dello stato dell'arte:
+
+> *«Il lavoro precedente usa nel migliore dei casi ablazioni una-alla-volta, **mai disegni
+> fattoriali completi** che rivelino interazioni di ordine superiore.»*
+
+**È esattamente la campagna completa proposta dall'utente** (~22 h, tutti i bracci × tutte le
+famiglie × tutte le leve). Il campo dichiara che manca, e noi siamo in posizione di farla **su
+un regime che nessuno misura**. Non cambia l'ordine — prima si capisce, poi si misura (§tesi e
+fase) — ma dice **perché** quella misura varrà la pena: non per convincere noi, ma perché è il
+pezzo che manca a tutti.
+
+E l'altra metà della loro conclusione è il nostro F6, enunciato da fuori:
+> *«I default da agente massimamente equipaggiato andrebbero sostituiti da una selezione di
+> sottoinsiemi specifica per task.»*
 
 E la decomposizione che stiamo facendo esiste già, fatta meglio su alcuni assi:
 [*Where Does Agent Reliability Come From?*](https://arxiv.org/html/2607.17044) misura
