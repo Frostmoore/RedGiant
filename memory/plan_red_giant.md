@@ -735,10 +735,36 @@ sono APERTI, non tombali):**
    default (`[plansys] enabled=false`, `RG_THINKING_ROLES` non settata), riattivabili in
    qualunque momento senza toccare codice.
 2. **Benchmark pubblici (fine progetto, pre/post F8):** eseguire i benchmark più utilizzati
-   e pertinenti (candidati in `memory/ambition.md` §2: BFCL per function calling,
-   structured-output benchmarks, GSM8K-class per la matematica col thinking) per avere
-   **valori pubblicamente comparabili** — le batterie interne dimostrano i delta, solo i
-   benchmark pubblici dimostrano la posizione assoluta.
+   e pertinenti per avere **valori pubblicamente comparabili** — le batterie interne
+   dimostrano i delta, solo i benchmark pubblici dimostrano la posizione assoluta.
+
+   **Decisioni fissate il 2026-08-05 (utente):**
+   - Si eseguono **su Severino vero** (non sim), **dopo l'implementazione del tool web**
+     (F7.2) — sono il collaudo del deployment reale.
+   - Il **simulatore d'utente con LLM più grandi è ammesso** (τ-bench): è infrastruttura di
+     *test*, non parte del motore — D16 vincola il sistema, non chi lo esamina.
+
+   **Candidati con stime (base: prefill CPU 6,8 s/1K · 30,7 s/4K · 69,6 s/8K, gen 35,8 tok/s,
+   passo caldo append-only ~10 s; 1 passata per item è lo standard di leaderboard e le
+   centinaia di item indipendenti risolvono il problema dell'unità sperimentale di §4.5 del
+   white paper):**
+
+   | Benchmark | Volume | Adattamento | Run CPU stimata | Note |
+   |---|---|---|---|---|
+   | IFEval | 541 prompt | ~½ giorno | ~2-3 h/braccio | compliance a istruzioni verificabili → quantifica "instruction is not a control surface" su scala pubblica |
+   | BFCL single-turn AST | ~1.700 entry (campione 500 ok) | ~1 giorno | ~7 h/braccio (2 h campione) | comparabili diretti: xLAM-2-1b 53,97%, Qwen3-1.7B 55,49% |
+   | RULER @8K (4-5 task) | 100 item/task | ~1 giorno | ~10 h nudo + 6-12 h braccio harness | la versione pubblica della ladder (multi-needle + aggregazione); costo ≈ tutto prefill (69,6 s a item) |
+   | τ-bench (retail+airline) | 165 task multi-turn | ~2-4 giorni | ~11-19 h a trial (pass^1); pass^4 ×4 | serve user-sim via API esterna (~1-2M token, pochi €); partire da un solo dominio (retail, ~8-13 h) |
+   | GAIA (validation) | 165 domande (L1: ~53) | ~2-3 giorni **dopo F7.2** | ~14-27 h (solo L1: ~4-9 h) | richiede web_search+fetch_url → è anche il collaudo naturale di F7; ⚠️ verificare prima quante domande richiedono input visivo e se il modello lo supporta |
+   | Terminal-Bench 2.0 | 89 task Docker | ~3-5 giorni | ~8-12 h a passata | su TB lo stesso modello varia di 30-50 punti a seconda dell'harness: il benchmark dove la nostra tesi è più visibile |
+   | SWE-bench Lite | campione 50 di 300 | ~1 settimana | ~12-40 h | il più costoso in sviluppo; per ultimo |
+
+   **Ordine consigliato:** IFEval → BFCL → RULER (pacchetto "starter": ~2-3 giorni di adapter
+   + ~25-30 h CPU) → GAIA e τ-bench (post-F7) → Terminal-Bench → SWE-bench Lite. Prima di
+   impegnare le ore: **passata di taratura** (20 entry BFCL + 5 item RULER, ~1 h) per
+   sostituire il fattore GPU→CPU stimato (5-10×) con un numero misurato. Letteratura di
+   riferimento (D22): TinyLLM (arXiv:2511.22138) va letto prima di fissare la suite — valuta
+   SLM su task agentici su edge, il nostro esatto regime.
 
 ---
 
