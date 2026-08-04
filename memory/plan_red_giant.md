@@ -2408,23 +2408,45 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
     rumore binomiale. Avevo commentato "oscillazione a blocchi in diretta" guardando il
     parziale — era una lettura affrettata di un campione in corso, esattamente l'errore che il
     divieto di optional stopping esiste per prevenire.
-  - `card-bisB` (perimetro/focus/stile) = **6/10 in 461 s** → **≥4/10: il gruppo B CONTIENE
-    le regole che orientano** (vs ancora min 1/20: p = 0,0021). E non solo: 6/10 = 60% è lo
-    STESSO tasso della card intera (12/20) — **il gruppo B da solo recupera tutto** (vs full:
-    p = 1,0).
-  - **LA PREVISIONE REGISTRATA ERA SBAGLIATA** (terza su quattro): avevo previsto A ≥4/10 e
-    B ≤1/10; è uscito quasi l'opposto. Le regole che orientano la ricerca NON sono quelle
-    sulla disciplina d'azione (one action, errori, nomi esatti) ma quelle su
-    **perimetro/focus/stile** (thought ≤300 · scope · solo il TUO obiettivo · fuori confine →
-    done · stile stringhe). Candidata principale a posteriori (da verificare, NON misurata):
-    la regola 10 ("il TASK è sfondo, tu fai SOLO il tuo obiettivo") — plausibilmente tiene il
-    modello sull'obiettivo di recupero invece di farlo vagare a leggere; anche la 2
-    (thought ≤300) può sopprimere il "pianifico di leggere tutto". Distinguere le due è
-    un'eventuale bisezione di secondo livello DENTRO il gruppo B.
-  - Nota di disciplina: bisB a n=10 è uno screening; il 60% ha IC 95% ~31–83%. La
-    classificazione "contiene le regole" regge (p = 0,0021 contro l'ancora); l'equivalenza
-    esatta con la card intera no (p = 1,0 su campioni piccoli non è una dimostrazione di
-    equivalenza).
+  - `card-bisB` (perimetro/focus/stile) = **9/20** (6/10 + 3/10, 461 s + 674 s), IC 95%
+    **26–66%**. Contro `card-min` (1/20): **p = 0,0084 — significativamente meglio della card
+    ridotta**. Contro `card-full` (12/20): **p = 0,527 — indistinguibile dalla card intera**.
+    → **VERDETTO: il gruppo B contiene le regole che orientano.** (Blocchi 6/10 e 3/10
+    omogenei: p = 0,370.)
+
+  **QUADRO COMPLETO (n=20 per braccio, tutti su L7, `@da21184`/`@4467073` — stesso codice):**
+
+  | Braccio | Verde | IC 95% | vs `card-min` | vs `card-full` |
+  |---|---|---|---|---|
+  | `card-min` (ancora) | 1/20 = 5% | 1-24% | — | p = 0,0002 |
+  | **`card-bisA`** (azione/strumenti) | **4/20 = 20%** | 8-42% | p = 0,342 | **p = 0,0225** |
+  | **`card-bisB`** (perimetro/focus/stile) | **9/20 = 45%** | 26-66% | **p = 0,0084** | p = 0,527 |
+  | `card-full` (ancora) | 12/20 = 60% | 39-78% | p = 0,0002 | — |
+
+  **Conclusioni:**
+  1. **Il gruppo B porta il grosso dell'effetto della card**, il gruppo A no. Le regole che
+     spingono a *cercare invece di leggere* sono quelle di **perimetro e focus** (thought ≤300 ·
+     scope · solo il TUO obiettivo · fuori confine → done · stile stringhe), NON quelle di
+     disciplina d'azione/strumenti (one action · leggi l'errore · solo le tool call cambiano il
+     mondo · nomi esatti).
+  2. **La bisezione NON è pulita: i due gruppi non si sommano.** bisA 20% + bisB 45% contro
+     card intera 60%, e bisA da solo non batte la card ridotta. Il gruppo B basta, il gruppo A
+     non aggiunge in modo rilevabile a questa potenza. ⚠️ Ma **non è dimostrato che A sia
+     inutile**: 4/20 contro 1/20 è un effetto da ~15 punti, e 20 run per braccio sono cieche
+     sotto i ~30 punti (§ disciplina di misura, regola 1). "Non rilevabile" ≠ "assente".
+  3. **LA PREVISIONE REGISTRATA ERA SBAGLIATA** (terza su quattro): avevo previsto A ≥4/10 e
+     B ≤1/10; è uscito l'opposto quasi esatto.
+  4. **Conseguenza operativa (candidata, NON ancora adottata):** con la sola card `bisect-b` si
+     ottiene il 45% contro il 60% della card intera, a **prompt più corto**. Se il costo in
+     token vale i 3/20 di differenza è una scelta di progetto, ma va misurata con la
+     **potenza adeguata** prima di potare la card — su un effetto da 15 punti servono ~100+ run
+     per braccio, non 20.
+
+  **Prossimo passo suggerito (non lanciato):** bisezione di 2° livello DENTRO il gruppo B per
+  isolare la singola regola — candidata principale la 10 (*"il TASK è sfondo, fai SOLO il tuo
+  obiettivo"*), che plausibilmente impedisce al modello di vagare leggendo il corpus; seconda
+  la 2 (*thought ≤300*), che sopprimerebbe il "pianifico di leggere tutto". **Ipotesi a
+  posteriori, mai misurate** — vanno trattate come tali.
 
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 

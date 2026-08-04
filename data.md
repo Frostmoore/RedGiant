@@ -36,7 +36,7 @@ comparabili e numerosità adeguata; tutto ciò che è stato *osservato* ma non *
 | 12 | **Errori azionabili** (`bad_args` LAD.10, `refusal_state` LAD.6) | spirali fino a **6 passi consecutivi**, **7 sequenze fatali** | **max 1 passo**, **0 fatali**, recupero **100%** | non riducono gli sbagli (18% di chiamate ancora malformate): **tolgono le spirali che gli sbagli causavano**. Agiscono sul *costo* del fallire, non sulla frequenza | §7.9.2 |
 | 13 | **Flag di runtime** (`--swa-full --cache-reuse`) | **2.748** token per rimuovere un blocco dal mezzo | **1** | Gemma è sliding-window: con la cache SWA parziale il runtime non riusa nulla dopo una divergenza. Costa memoria → adottato solo su GPU | §7.11 |
 | 14 | **Compattazione della catena volatile** (F5.0-bis) | L7 **12/40 = 30%**, tentativi morti a **7,7 passi**, **731** token riprocessati per chiamata | **22/40 = 55%**, **13,2 passi**, **550** per chiamata | **p = 0,0411**, campione dimensionato *prima* di guardare. Il +53% di tempo è il costo di **non morire** — e il riuso della KV **migliora** (89,3% contro 85,8%): l'ondata lascia un prompt più corto | §7.13.4, §7.13.5 |
-| 15 | **La card del Worker** (scoperto ablandola) | card ridotta: L7 **1/20**, e il modello **legge** invece di cercare (440 `read_file` contro 169 `search_code`) | card intera: **15/20**, 294 ricerche contro 146 letture | **p = 1,0×10⁻⁵**. Non serviva a dire regole: **orienta la scelta dello strumento**, e solo dove il recupero selettivo è indispensabile (su L5 nessuna differenza) | §7.16.1 |
+| 15 | **La card del Worker** (scoperto ablandola) | card ridotta: L7 **1/20**, e il modello **legge** invece di cercare (440 `read_file` contro 169 `search_code`) | card intera: **15/20**, 294 ricerche contro 146 letture | **p = 1,0×10⁻⁵**. Non serviva a dire regole: **orienta la scelta dello strumento**, e solo dove il recupero selettivo è indispensabile (su L5 nessuna differenza). **Bisezionata (§7.16.2):** l'effetto sta nelle regole di **perimetro/focus** (9/20, p = 0,0084 contro la ridotta), non in quelle di disciplina d'azione (4/20, indistinguibile dalla ridotta) | §7.16.1, §7.16.2 |
 | 16 | **Il pensiero sui task a recupero largo** | L7 **12/20**, 15,7 passi/tentativo, 59 ondate di compattazione | L7 **20/20**, 12,4 passi, **13 ondate** | **p = 0,0033**. Non aggiunge contesto: **riduce il bisogno di contesto** — 168 ricerche contro 5 letture. Ribalta la tesi dei "sostituti": complementari dove il collo di bottiglia è la *strategia di recupero* | §7.17 |
 
 **Il filo comune delle 10 righe:** nessuna insegna qualcosa al modello. Otto rendono
@@ -1374,6 +1374,61 @@ successivo. `RG_WORKER_CARD` resta su `full`.
 alla volta e si guarda quando L7 risale — così sapremo *quale* pezzo orienta la ricerca, invece
 di indovinarlo. I 414 token restano sul tavolo: ora sappiamo che non sono gratis, non che siano
 intoccabili.
+
+### 7.16.2 F5.0-quater — la bisezione: è il PERIMETRO che orienta, non la disciplina d'azione
+
+*(2026-08-05, notte, dev-fast, **20 run per braccio** su L7, `@4467073`/`@da21184` — stesso
+codice; ogni braccio girato in due blocchi da 10, sommati. Log timestampati, prima applicazione
+della regola dell'utente sui log.)*
+
+Le 9 regole che `minimal` toglie, divise in due gruppi disgiunti, un braccio ciascuno:
+
+- **A** (`worker.bisect-a.md`) — *disciplina d'azione e strumenti*: one action per step · leggi
+  l'errore e non ripetere identico · solo le tool call cambiano il mondo · nomi ESATTI dei tool.
+- **B** (`worker.bisect-b.md`) — *perimetro, focus, stile*: thought ≤300 · non uscire dallo
+  scope · fai SOLO il tuo obiettivo (il TASK è sfondo) · fuori confine → finish done · stile
+  delle stringhe.
+
+| Braccio | Verde | IC 95% | vs `card-min` | vs `card-full` |
+|---|---|---|---|---|
+| `card-min` (ancora) | 1/20 = 5% | 1-24% | — | p = 0,0002 |
+| **`card-bisA`** | **4/20 = 20%** | 8-42% | p = 0,342 | **p = 0,0225** |
+| **`card-bisB`** | **9/20 = 45%** | 26-66% | **p = 0,0084** | p = 0,527 |
+| `card-full` (ancora) | 12/20 = 60% | 39-78% | p = 0,0002 | — |
+
+**Il gruppo B porta il grosso dell'effetto; il gruppo A non è distinguibile dalla card ridotta.**
+Le regole che spingono a *cercare invece di leggere* sono quelle che **delimitano il perimetro
+del compito**, non quelle che disciplinano l'uso degli strumenti. Interpretazione (non misurata):
+dire al modello *"il TASK è sfondo, fai SOLO il tuo obiettivo"* gli impedisce di trattare il
+corpus come materiale da studiare; le regole sui tool gli dicono *come* agire, non *su cosa*.
+
+**Tre riserve dichiarate, perché il risultato non è più forte di quanto i dati permettano:**
+
+1. **La bisezione non è pulita: i gruppi non si sommano.** 20% + 45% contro il 60% della card
+   intera. B basta quasi da solo, A da solo non basta.
+2. **"A non rilevabile" ≠ "A inutile".** 4/20 contro 1/20 è un effetto da ~15 punti e 20 run per
+   braccio sono cieche sotto i ~30 (§ regola 1 della disciplina di misura). Per condannare A
+   servirebbero ~100+ run per braccio. **Non lo condanniamo.**
+3. **La previsione registrata era sbagliata** — la terza su quattro. Avevo scritto *prima* di
+   misurare: *"le regole che orientano stanno nel gruppo A, candidata principale la regola
+   'one action per step'"*. È uscito l'opposto quasi esatto. È anche la ragione per cui la
+   previsione si registra: senza, avrei spiegato il gruppo B con la stessa disinvoltura con cui
+   avevo previsto il gruppo A.
+
+**Errore di lettura commesso e corretto in diretta:** guardando il parziale del secondo blocco di
+bisA (cinque sconfitte di fila) avevo commentato *"è l'oscillazione a blocchi in diretta"*. I due
+blocchi, 3/10 e 1/10, sono **compatibili con rumore binomiale** (p = 0,582), come lo sono quelli
+di bisB (6/10 vs 3/10, p = 0,370). Vedere un fenomeno in un campione ancora aperto è esattamente
+ciò che il divieto di *optional stopping* previene: la regola è stata rispettata nei fatti (il
+giudizio è arrivato solo a campione pieno) e violata a voce.
+
+**Conseguenza operativa — candidata, NON adottata:** la sola `bisect-b` dà 45% contro 60% a
+prompt più corto. Se i token risparmiati valgano 3/20 è una decisione di progetto che **richiede
+potenza adeguata**: `RG_WORKER_CARD` resta su `full`.
+
+**Prossimo passo possibile:** bisezione di 2° livello dentro B, per isolare la singola regola.
+Candidate a posteriori (mai misurate, da trattare come tali): la regola 10 (*"il TASK è
+sfondo"*) e la 2 (*thought ≤300*).
 
 ## 7.17 F5.6a — il pensiero fa 20/20 su L7, e tre scoperte diventano una sola
 
