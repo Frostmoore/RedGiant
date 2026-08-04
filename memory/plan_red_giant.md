@@ -2375,12 +2375,28 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   Comando: `python bench/ladder/run_agentic.py dev-fast T057 "card-min+think" 20`
 
 - [ ] **F5.0-quater** 🔎 **Bisezione della card: QUALE pezzo orienta la ricerca?**
-  Si rimettono i gruppi di regole **uno alla volta** e si guarda quando L7 risale. Ordine
-  suggerito dalla diagnosi (dal più sospetto): (1) la regola *"one action per step / never
-  describe a multi-step plan"* — senza, il modello sembra pianificare "leggo tutto";
-  (2) *"se una chiamata fallisce, leggi l'errore e non ripeterla identica"*; (3) i due blocchi
-  sulle altre sottofasi. **20 run per braccio su L7**, che è l'unico gradino dove l'effetto si
-  manifesta. Esito atteso: sapere *quale* riga vale i suoi token, invece di indovinarlo.
+  **Disegno definitivo (2026-08-05), lanciato:** le 9 regole che `minimal` toglie sono divise
+  in due gruppi disgiunti, un braccio per gruppo, solo su **L7** (unico gradino dove l'effetto
+  esiste — su L5 la card non fa differenza):
+  - `card-bisA` = `worker.bisect-a.md` — **disciplina d'azione/strumenti**: regole 1 (one
+    action per step), 5 (leggi l'errore, mai ripetere identico), 8 (solo le tool call cambiano
+    il mondo), 13 (nomi ESATTI dei tool) della card intera.
+  - `card-bisB` = `worker.bisect-b.md` — **perimetro/focus/stile**: regole 2 (thought ≤300),
+    6 (scope), 10 (solo il TUO obiettivo), 11 (fuori confine → done), 12 (stile stringhe).
+  **Screening a n=10 per braccio contro le ANCORE già misurate a n=20** (min 1/20, full
+  12/20), invece del confronto diretto fra bracci (che a n=10 è sottodimensionato: 6/10 vs
+  1/10 dà p=0,057). Regole di decisione scritte PRIMA: **≥4/10** = il gruppo contiene le
+  regole che orientano (p=0,031 vs ancora min) · **≤1/10** = non le contiene (p=0,017 vs
+  ancora full) · **2–3/10** = ambiguo → estensione a 20 e giudizio SOLO sul campione completo.
+  Caveat dichiarato: blocchi comportamentali ~5 run → n=10 = 2 blocchi; per questo l'ambiguo
+  estende invece di decidere, e l'esito è uno **screening** (nel white paper: etichetta
+  esplorativa, o estensione a 20).
+  **PREVISIONE REGISTRATA (prima di misurare):** le regole che orientano stanno nel **gruppo A**
+  (azione/strumenti) — mi aspetto `card-bisA` ≥4/10 e `card-bisB` ≤1/10. Candidata principale:
+  la regola 1 (*one action per step*), perché senza di essa il modello sembra pianificare
+  "leggo tutto"; seconda candidata la 13 (nomi esatti → meno passi sprecati).
+  **Log:** timestampati (regola utente 2026-08-05, implementata nel runner), con percorso del
+  report per run.
 
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 

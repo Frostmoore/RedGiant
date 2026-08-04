@@ -12,11 +12,21 @@ full-vs-nudo dice quanto sale il pavimento.
 Uso: python bench/ladder/run_agentic.py <profilo> <T05x,T05y> [bracci]
 """
 
+import datetime as _dt
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+def log(msg: str) -> None:
+    """Regola di progetto (utente 2026-08-05): OGNI test emette log
+    timestampati, cosi' i run restano diagnosticabili anche a distanza di
+    settimane — i difetti di misura si trovano leggendo artefatti, non
+    punteggi, e un artefatto senza tempo non si incrocia con niente."""
+    print(f"[{_dt.datetime.now().isoformat(timespec='seconds')}] {msg}",
+          flush=True)
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -43,6 +53,14 @@ ARMS = {
     # il crollo della card ridotta (L7: 1/20 -> ?)
     "card-min+think": {"RG_WORKER_CARD": "minimal",
                        "RG_THINKING_ROLES": "worker"},
+    # F5.0-quater — bisezione della card: minimal + un gruppo di regole per
+    # braccio. A = disciplina d'azione/strumenti (regole 1,5,8,13 della card
+    # intera), B = perimetro/focus/stile (regole 2,6,10,11,12). Screening a
+    # n=10 contro le ANCORE a n=20 (min 1/20, full 12/20), regole decise
+    # prima: >=4/10 = il gruppo orienta; <=1/10 = non orienta; 2-3/10 =
+    # estensione a 20.
+    "card-bisA": {"RG_WORKER_CARD": "bisect-a"},
+    "card-bisB": {"RG_WORKER_CARD": "bisect-b"},
     "+calc": {"RG_CALCULATOR": "1"},                 # LAD.13: spenta di default
     "+finishgate": {"RG_FINISH_GATE": "1"},          # LAD.9: spento di default
     "think": {"RG_THINKING_ROLES": "worker"},        # B4: percorso diretto = Giano
@@ -74,7 +92,7 @@ def main(profile: str, task_ids: list[str], arms: list[str],
         return 3
     sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                          capture_output=True, text=True).stdout.strip()
-    print(f"LADDER AGENTICA @ {sha} — {task_ids} × {arms}\n", flush=True)
+    log(f"LADDER AGENTICA @ {sha} — {task_ids} × {arms}")
     out = ROOT / "bench" / "results"
     for arm in arms:
         env = ARMS[arm]
@@ -82,6 +100,8 @@ def main(profile: str, task_ids: list[str], arms: list[str],
             os.environ.pop(var, None)
         for var, val in env.items():
             os.environ[var] = val
+        log(f"[{arm}] env: " + (" ".join(f"{k}={v}" for k, v in env.items())
+                                or "(default)"))
         greens = {t: 0 for t in task_ids}
         t0 = time.time()
         for n in range(runs):
@@ -93,17 +113,17 @@ def main(profile: str, task_ids: list[str], arms: list[str],
                         cells = [c.strip() for c in line.split("|")]
                         if len(cells) > 3 and cells[3] == "True":
                             greens[cells[1]] += 1
-                print(f"[{arm}] run {n+1}/{runs}: "
-                      + " ".join(f"{k}={v}" for k, v in greens.items()),
-                      flush=True)
+                log(f"[{arm}] run {n+1}/{runs}: "
+                    + " ".join(f"{k}={v}" for k, v in greens.items())
+                    + f" — report: {report}")
             except Exception as e:
-                print(f"[{arm}] run {n+1} ERRORE: {e}", flush=True)
-        print(f"[{arm}] TOTALE "
-              + " ".join(f"{k}={v}/{runs}" for k, v in greens.items())
-              + f" in {time.time()-t0:.0f}s", flush=True)
+                log(f"[{arm}] run {n+1} ERRORE: {e}")
+        log(f"[{arm}] TOTALE "
+            + " ".join(f"{k}={v}/{runs}" for k, v in greens.items())
+            + f" in {time.time()-t0:.0f}s")
     for var in _ENV_VARS:
         os.environ.pop(var, None)
-    print("\nLADDER AGENTICA COMPLETA")
+    log("LADDER AGENTICA COMPLETA")
     return 0
 
 
