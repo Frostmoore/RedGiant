@@ -2398,9 +2398,16 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   **Log:** timestampati (regola utente 2026-08-05, implementata nel runner), con percorso del
   report per run.
   **ESITO (2026-08-05, notte, `@4467073`):**
-  - `card-bisA` (azione/strumenti) = **3/10 in 894 s** → **zona ambigua** (vs ancora min:
-    p = 0,095, non significativo) → **estensione a +10 run in corso** (accodata in automatico),
-    giudizio SOLO sul campione completo n=20.
+  - `card-bisA` (azione/strumenti) = **4/20** (3/10 + 1/10, campione completo, 894 s + 981 s),
+    IC 95% **8–42%**. Contro l'ancora `card-min` (1/20): **p = 0,342 — indistinguibile dalla
+    card ridotta**. Contro l'ancora `card-full` (12/20): **p = 0,0225 — significativamente
+    peggiore della card intera**. → **VERDETTO: il gruppo A NON contiene le regole che
+    orientano.**
+    *Nota di onestà:* i due blocchi (3/10 poi 1/10) sembravano l'oscillazione a blocchi già
+    osservata, ma **non lo sono in senso statistico**: p = 0,582, perfettamente compatibili con
+    rumore binomiale. Avevo commentato "oscillazione a blocchi in diretta" guardando il
+    parziale — era una lettura affrettata di un campione in corso, esattamente l'errore che il
+    divieto di optional stopping esiste per prevenire.
   - `card-bisB` (perimetro/focus/stile) = **6/10 in 461 s** → **≥4/10: il gruppo B CONTIENE
     le regole che orientano** (vs ancora min 1/20: p = 0,0021). E non solo: 6/10 = 60% è lo
     STESSO tasso della card intera (12/20) — **il gruppo B da solo recupera tutto** (vs full:
