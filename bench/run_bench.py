@@ -42,6 +42,21 @@ def _mk_prompt(client: httpx.Client, url: str, target_tokens: int) -> str:
     return _SENTENCE * (target_tokens // n_per + 1)
 
 
+def _mk_blocks(client: httpx.Client, url: str, target_tokens: int) -> list[str]:
+    """Materiale ETEROGENEO a blocchi numerati (F5.0-ante).
+
+    Serve a misurare la rimozione di un blocco dal mezzo: con un testo omogeneo
+    (la stessa frase ripetuta) togliere il centro produrrebbe un testo identico
+    a un PREFISSO del base, e misureremmo un troncamento invece di uno shift.
+    Ogni blocco finisce con newline: il taglio cade su un confine e il suffisso
+    resta token-identico, che e' la precondizione del riuso via KV shifting.
+    """
+    probe = f"Block 0001: {_SENTENCE}\n"
+    n_per = len(_tokenize(client, url, probe))
+    return [f"Block {i:04d}: {_SENTENCE}\n"
+            for i in range(target_tokens // n_per + 1)]
+
+
 def _tokenize(client: httpx.Client, url: str, text: str) -> list[int]:
     r = client.post(f"{url}/tokenize", json={"content": text}, timeout=120.0)
     r.raise_for_status()
@@ -107,7 +122,7 @@ def run(profile: str, url: str, ctx_sizes: list[int], repeats: int, out_dir: Pat
     ctx_mid = ctx_sizes[len(ctx_sizes) // 2]
     base = _mk_prompt(client, url, ctx_mid)
     tail = _SENTENCE * 2
-    ta = tb = tc = None
+    ta = tb = tc = td = te = None
     if "reuse" in steps:
         ta = _completion(client, url, base, n_predict=1, cache_prompt=True)
         rec("reuse_A_cold", ctx_mid, 0, ta)
@@ -116,6 +131,38 @@ def run(profile: str, url: str, ctx_sizes: list[int], repeats: int, out_dir: Pat
         mutated = base[: len(base) // 2] + "X" + base[len(base) // 2 + 1:]
         tc = _completion(client, url, mutated, n_predict=1, cache_prompt=True)
         rec("reuse_C_mutated_mid", ctx_mid, 0, tc)
+
+        # F5.0-ante (2026-08-04): gli scenari D ed E sono il NOSTRO caso reale,
+        # che C non copre. C cambia un byte *in place* — era la prova di D9.
+        # La compattazione invece RIMUOVE un blocco dal mezzo (lo sfratto di un
+        # risultato vecchio): tutto cio' che segue trasla all'indietro, ed e'
+        # esattamente la situazione per cui esiste `--cache-reuse` (riuso via
+        # KV shifting).
+        #
+        # DUE TRAPPOLE DI DISEGNO, entrambe scoperte misurando:
+        #  1. tagliare a un offset di CARATTERE arbitrario spezza la
+        #     tokenizzazione alla sutura: il suffisso non e' piu' token-identico
+        #     e nessun riuso e' possibile, flag o non flag. Si taglia su
+        #     confini di blocco.
+        #  2. il prompt base e' la STESSA frase ripetuta: rimuoverne un pezzo
+        #     centrale darebbe un testo identico a un suo PREFISSO, e il riuso
+        #     sarebbe banale (misureremmo un troncamento, non uno shift).
+        #     Serve materiale ETEROGENEO -> blocchi numerati.
+        blocks = _mk_blocks(client, url, ctx_mid)
+        hetero = "".join(blocks)
+        n_b = len(blocks)
+        removed = "".join(blocks[:n_b // 3] + blocks[n_b // 3 * 2:])
+
+        _completion(client, url, hetero, n_predict=1, cache_prompt=True)
+        td = _completion(client, url, removed, n_predict=1, cache_prompt=True)
+        rec("reuse_D_removed_span", ctx_mid, 0, td)
+
+        # E: stessa rimozione + coda NUOVA — il caso vero del loop, dove si
+        # compatta e insieme si aggiunge lo step nuovo.
+        _completion(client, url, hetero, n_predict=1, cache_prompt=True)
+        te = _completion(client, url, removed + tail, n_predict=1,
+                         cache_prompt=True)
+        rec("reuse_E_removed_plus_new", ctx_mid, 0, te)
 
     # 4) slot save/restore (senza riavvio: v. docstring)
     # LEZIONE (prima run): il prompt di sfratto era il testo invertito ([::-1]), che
@@ -177,9 +224,18 @@ def run(profile: str, url: str, ctx_sizes: list[int], repeats: int, out_dir: Pat
             f"| A freddo | {ta['prompt_n']} | ~{ctx_mid} (tutto) |",
             f"| B = A+coda | {tb['prompt_n']} | ~|coda| (pochi) |",
             f"| C = byte cambiato a meta' | {tc['prompt_n']} | ~meta' di A |",
+            f"| **D = blocco RIMOSSO dal mezzo** | **{td['prompt_n'] if td else '-'}** | dipende da `--cache-reuse` |",
+            f"| **E = D + coda nuova** | **{te['prompt_n'] if te else '-'}** | il caso reale del loop |",
             "",
             f"**Prova di D9:** un byte a meta' prompt costa {tc['prompt_n']} token riprocessati "
             f"contro i {tb['prompt_n']} dell'append puro.",
+            "",
+            "**F5.0-ante — il caso della COMPATTAZIONE (D/E).** C cambia un byte *in place*;"
+            " la compattazione invece **rimuove un blocco** e fa traslare all'indietro tutto"
+            " cio' che segue. E' la situazione per cui esiste `--cache-reuse N` (riuso via KV"
+            " shifting, default **0** = spento). Questi due numeri, confrontati fra"
+            " configurazioni diverse del flag, dicono se il compromesso su cui e' costruita F5"
+            " sia reale o un artefatto della nostra configurazione.",
         ]
     md += [
         "",

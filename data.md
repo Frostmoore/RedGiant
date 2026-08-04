@@ -992,6 +992,65 @@ collo di bottiglia — la capienza — **non è coperto da nessuno dei due**. Se
 confronto B2/B4 su L7 va rifatto: potrebbe essere l'unico posto dove i due smettono di essere
 sostituti.
 
+## 7.11 F5.0-ante — il vincolo che struttura F5 era un artefatto della nostra configurazione
+
+*(2026-08-04, dev-fast, ctx 4096, server riavviato pulito prima di ogni cella.)*
+
+Prima di scrivere una riga di F5 abbiamo fatto due cose: una **ricerca sullo stato dell'arte**
+(su richiesta dell'utente) e la **rimisura del numero che struttura l'intera fase**. La ricerca
+ha rivelato che `llama-server` ha un flag, `--cache-reuse`, che riusa la KV **via shifting**
+quando il prefisso cambia a metà — e che **non lo stavamo usando** (default 0). Il numero di
+F0.5 che rende "proibitiva" la compattazione (**65 token contro 7.971**) era quindi misurato col
+meccanismo di mitigazione **spento**.
+
+### 7.11.1 La sonda che mancava
+
+Lo scenario storico **C** cambia **un byte *in place***: era la prova di D9 (stabilità del
+prefisso), non il nostro caso. La compattazione **rimuove un blocco** e fa traslare all'indietro
+tutto ciò che segue. Aggiunti a `bench/run_bench.py`: **D** (blocco rimosso dal mezzo) ed **E**
+(D più una coda nuova — il caso vero del loop).
+
+**Due trappole di disegno, entrambe scoperte misurando e ora documentate nel codice:**
+1. tagliare a un offset di **carattere** arbitrario spezza la tokenizzazione alla sutura: il
+   suffisso non è più token-identico e **nessun riuso è possibile, flag o non flag**;
+2. il prompt base era **la stessa frase ripetuta** → rimuoverne il centro produce un testo
+   identico a un suo **prefisso**, e misureremmo un troncamento invece di uno shift. Da qui
+   `_mk_blocks`, che genera blocchi numerati eterogenei.
+
+### 7.11.2 La matrice 2×2 dei flag
+
+| Configurazione | C (byte cambiato) | **D (blocco RIMOSSO)** | E |
+|---|---|---|---|
+| `--cache-reuse 0`, SWA parziale ← **la nostra** | 4003 | **2748** | 65 |
+| `--cache-reuse 256`, SWA parziale | 4003 | **2748** | 70 |
+| `--cache-reuse 0` + `--swa-full` | **2001** | **1390** | 65 |
+| **`--cache-reuse 256` + `--swa-full`** | **2001** | **1** | 65 |
+
+**Rimuovere un blocco dal mezzo passa da 2.748 token riprocessati a UNO.**
+
+**Perché, e la spiegazione regge in tutte e quattro le celle:**
+- **`--swa-full` è il prerequisito.** Gemma è un modello a *sliding-window attention*: con la
+  cache SWA parziale llama.cpp non riusa nulla dopo una divergenza. Con la cache piena il
+  prefisso comune torna riusabile — e infatti C si **dimezza** (4003 → 2001), che è esattamente
+  ciò che la teoria prevede quando il riuso parziale funziona.
+- **`--cache-reuse` aggiunge lo shifting del suffisso.** Con `--swa-full` da solo, D riusa solo
+  il primo terzo (1390 riprocessati ≈ i due terzi restanti); con entrambi, il suffisso viene
+  **traslato invece che ricalcolato**.
+
+### 7.11.3 Conseguenze
+
+1. **La leva dello sfratto torna in gioco alla pari.** Era esclusa da un numero misurato con
+   entrambi i flag spenti.
+2. **`--swa-full` costa memoria** (cache SWA piena). Su `dev-fast` irrilevante e **adottato**;
+   su `severino-sim` (10 GB, CPU, ctx 16384) **non ancora**: prima vanno misurati RAM e prefill.
+3. **L'avvertimento della letteratura resta corretto in generale** ("la compattazione invalida
+   la cache") **ma dipende dal runtime**: questo runtime sa fare shifting, se glielo si chiede.
+
+**Lezione di metodo, la quinta della campagna:** *un vincolo che struttura un'intera fase va
+rimisurato prima di progettarci intorno* — specialmente se il numero che lo sostiene è vecchio e
+nato per rispondere a un'altra domanda. Il 65-contro-7.971 era corretto per D9 e **non
+trasferibile** al caso della rimozione.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
@@ -1002,6 +1061,9 @@ sostituti.
 - [ ] Rimisurare la calcolatrice nei domini di F7 (matematica/everyday), dove la guardia di coerenza non si applica
 - [ ] Retest di LAD.9 sui task coding larghi T040–T042 (dove un tentativo sprecato costa 100K+ token)
 - [ ] **F5**: L7 muore per contesto pieno (§7.7.2) — la ladder ha motivato la fase dal basso
+- [ ] `--swa-full` su `severino-sim`: misurare RAM e prefill prima di adottarlo (§7.11.3)
+- [ ] **Rifare TUTTA la ladder** (B1-B4, ablazioni, thinking on/off) dopo F5 — decisione utente
+      2026-08-04: i test attuali non sono invalidi ma vanno rifatti per sicurezza dopo i fix
 - [x] ~~Ladder B4 post-fix~~ — **fatto** (§7.10): B2 43/60 contro B4 47/60, p = 0,528, +55% tempo
 - [ ] B4 **con le ablazioni** (simmetria della matrice): finora solo il braccio `think` completo
 - [ ] **Ladder ufficiale su severino-sim**: B2 + B4 col codice fixato, run multiple → i numeri che andranno nel README

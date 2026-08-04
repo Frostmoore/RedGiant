@@ -9,7 +9,22 @@
 param(
     [Parameter(Mandatory)][ValidateSet("dev-fast","severino-sim","severino")] [string]$Profile,
     [int]$Ctx = 8192,
-    [int]$Port = 8080
+    [int]$Port = 8080,
+    # F5.0-ante (MISURATO 2026-08-04) — questi due flag vanno INSIEME.
+    #
+    #   rimozione di un blocco dal mezzo del prompt, token riprocessati:
+    #     entrambi spenti ............ 2748   (= riprocessa tutto)
+    #     solo --cache-reuse ......... 2748   (inutile da solo: Gemma e' SWA)
+    #     solo --swa-full ............ 1390   (torna il riuso del PREFISSO)
+    #     entrambi ...................    1   (il suffisso viene TRASLATO)
+    #
+    # --swa-full e' il prerequisito: con la cache SWA parziale llama.cpp non
+    # riusa nulla dopo una divergenza. --cache-reuse aggiunge lo shifting.
+    # COSTO: --swa-full alloca la cache SWA piena => piu' memoria. Su dev-fast
+    # e' irrilevante; su severino-sim (10 GB, CPU, ctx 16384) va MISURATO prima
+    # di adottarlo, e infatti li' non e' ancora attivo.
+    [int]$CacheReuse = 256,
+    [switch]$NoSwaFull
 )
 $ErrorActionPreference = "Stop"
 $Root  = Split-Path -Parent $PSScriptRoot
@@ -37,8 +52,11 @@ switch ($Profile) {
         # --parallel 1 (D7: una inferenza alla volta) · --slot-save-path (predisposto per F0.5/F5)
         # --chat-template gemma: i token BOS/EOS di Gemma differiscono dai default (output
         # corrotto senza template corretto).
+        $extra = @()
+        if ($CacheReuse -gt 0) { $extra += @("--cache-reuse", "$CacheReuse") }
+        if (-not $NoSwaFull)   { $extra += "--swa-full" }
         & $exe --model $Model --ctx-size $Ctx --parallel 1 --threads 24 `
                --slot-save-path $Slots --chat-template gemma `
-               --host 127.0.0.1 --port $Port
+               --host 127.0.0.1 --port $Port @extra
     }
 }

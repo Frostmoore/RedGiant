@@ -2009,7 +2009,58 @@ hardware di `data.md` §1.3. La regola vale per la ladder e per ogni A/B futuro 
 > [Agent Context Compaction: Techniques and Tradeoffs](https://zylos.ai/research/2026-04-21-agent-context-compaction-long-running-sessions/) ·
 > [llama.cpp discussion #20574 (host-memory prompt caching — ⚠️ contestata nei commenti, usata solo come pista)](https://github.com/ggml-org/llama.cpp/discussions/20574)
 
-#### F5.0-ante — Rimisurare il costo del cambio di prefisso, con `--cache-reuse`
+#### F5.0-ante — ✅ **FATTA (2026-08-04) — IL COMPROMESSO ERA UN ARTEFATTO DELLA NOSTRA CONFIG**
+
+**Esito: la premessa su cui è costruita tutta F5 è FALSA in una configurazione che possiamo
+semplicemente attivare.**
+
+Sonda del riuso estesa con due scenari che mancavano (`bench/run_bench.py`): **D** = un blocco
+**rimosso dal mezzo** (il nostro caso: sfratto di un risultato vecchio) ed **E** = D più una
+coda nuova (il caso vero del loop, dove si compatta e si aggiunge insieme). Lo scenario C
+preesistente cambia un byte *in place*: era la prova di D9, **non** il nostro caso.
+
+| Configurazione | C (byte cambiato a metà) | **D (blocco RIMOSSO)** | E |
+|---|---|---|---|
+| `--cache-reuse 0`, SWA parziale *(la nostra, di default)* | 4003 | **2748** | 65 |
+| `--cache-reuse 256`, SWA parziale | 4003 | **2748** | 70 |
+| `--cache-reuse 0` + **`--swa-full`** | **2001** | **1390** | 65 |
+| **`--cache-reuse 256` + `--swa-full`** | **2001** | **1** | 65 |
+
+*(dev-fast, ctx 4096, server riavviato pulito prima di ogni cella.)*
+
+**Lettura meccanicistica, coerente in tutte e quattro le celle:**
+- **`--swa-full` è il PREREQUISITO.** Gemma è un modello a *sliding-window attention*: con la
+  cache SWA parziale llama.cpp non sa riusare nulla dopo una divergenza, e qualunque modifica a
+  metà prompt costa il riprocessamento completo. Con la cache piena, il prefisso comune torna
+  riusabile (C si dimezza: 4003 → 2001, esattamente ciò che la teoria prevede).
+- **`--cache-reuse` aggiunge lo SHIFTING del suffisso.** Con `--swa-full` da solo, D riusa solo
+  il primo terzo (1390 riprocessati ≈ i due terzi restanti). Con entrambi, **il suffisso viene
+  traslato invece che ricalcolato: 1 token.**
+
+**Due trappole di disegno della sonda, entrambe scoperte misurando** (documentate nel codice
+perché chiunque le rifarebbe): tagliare a un offset di *carattere* spezza la tokenizzazione alla
+sutura e nessun riuso è possibile, flag o non flag; e il prompt base era **la stessa frase
+ripetuta**, quindi rimuoverne il centro dava un testo identico a un suo *prefisso* — avremmo
+misurato un troncamento invece di uno shift. Da qui `_mk_blocks`, che genera blocchi numerati.
+
+**CONSEGUENZE — F5 cambia forma:**
+1. **La leva 2 di F5.0-bis (sfratto) NON è più proibitiva**: era esclusa da un numero
+   (65 contro 7.971) misurato con entrambi i flag spenti. Va rimessa in gioco alla pari.
+2. **`--swa-full` costa MEMORIA** (cache SWA piena invece che a finestra). Su `dev-fast` è
+   irrilevante; su `severino-sim` (10 GB, CPU, ctx 16384) **no**: prima di adottarlo là vanno
+   misurati consumo di RAM e prefill. **Adottato su dev-fast, in sospeso sull'ufficiale.**
+3. **Vale anche per la letteratura**: l'avvertimento "la compattazione invalida la cache" è
+   corretto *in generale* ma dipende dal runtime — qui il runtime sa fare shifting, se glielo
+   si chiede.
+
+**Lezione di metodo, la quinta della campagna:** un vincolo che struttura un'intera fase va
+**rimisurato prima di progettarci intorno**, specialmente se il numero che lo sostiene è vecchio
+e nato per rispondere a un'altra domanda. Il 65-contro-7.971 era corretto per D9 (la stabilità
+del prefisso) e **non trasferibile** al caso della rimozione.
+
+---
+
+##### Specifica originale di F5.0-ante (conservata)
 
 - [ ] 🤖 **Obiettivo:** stabilire se il compromesso che struttura tutta F5 è reale o un artefatto
   della nostra configurazione.
