@@ -1561,6 +1561,52 @@ Modifiche sostanziali, non solo aggiunta di riferimenti:
 paper affermava ancora *"sostituti, non complementi"*, tesi che **F5.6a ha falsificato** su L7.
 Era un'affermazione sbagliata rimasta nel documento pubblico.
 
+### 7.19.2 Revisione da peer review esterna (2026-08-05)
+
+Il white paper è stato sottoposto a una review esterna (GPT 5.6) e revisionato sui punti accolti:
+
+1. **Provenienza CPU/GPU esplicitata ovunque** — box di provenienza in testa al documento,
+   caveat in §0, §8 corretta (diceva *"every number in §5 and §6 was obtained on the GPU"*, ed
+   era **falso per eccesso**: §5.1–5.7 sono severino-sim CPU; solo la ladder è dev-fast GPU).
+2. **"Single-commit attribution table" ritirata come claim** — è una sintesi storica di
+   ablazioni una-alla-volta a commit diversi; la tabella simultanea è il *prodotto atteso*
+   della campagna fattoriale, e ora il paper lo dice.
+3. **Unità sperimentale dichiarata** — nuova §4.5: n=20 = 20 esecuzioni della **stessa istanza**
+   deterministica sotto non-determinismo del server, non 20 problemi indipendenti; inferenza
+   limitata all'istanza; multi-istanza rimandata alla campagna fattoriale.
+4. **Confermativo/esplorativo separati** (§4.5): solo la compattazione ha protocollo pienamente
+   confermativo (pilota per dimensionare + campione nuovo); il resto è pre-specificato
+   mono-campione o esplorativo. **"pre-registered" → "pre-specified"** ovunque (regole in git
+   con timestamp verificabili, ma nessun registro esterno).
+5. **Interazione card × pensiero formalizzata per quanto possibile**: test stratificati
+   calcolati — effetto card **p = 4,3×10⁻⁴ senza pensiero, p = 1,0 con** (e simmetrici
+   5,8×10⁻⁹ / 0,0033); modello logistico con termine d'interazione rimandato ai dati
+   multi-istanza. Corretta anche la terminologia: è un'interazione **a due fattori**, non
+   "higher-order".
+6. **"La variabile unica che predice il successo" declassata a ipotesi di mediazione** con i
+   confondenti dichiarati (i conteggi aggregati sono in parte conseguenza del successo).
+7. **Denominatori dell'onestà separati**: 8 claim su 5 run (livello claim) vs 1 run su 550+
+   (livello run) — presentati come bound, non come rapporto; "lie" → "false completion claim"
+   nei punti assertivi.
+8. **Ladder ridescritta come matrice a 3 assi** (ampiezza, fatti, aggregazione) campionata su
+   una diagonale, non scala monodimensionale.
+9. **Pass di coerenza sulle conclusioni stratificate**: l'abstract e §9 usavano ancora il
+   finish gate (p=0,66, sottodimensionato) come controesempio — sostituito col **calcolatore**
+   (p=1,000, assorbito dalla guardia di coerenza, meccanismo verificato); corretta anche la
+   frase in §8 sul trade-off compattazione/cache (già smentito da §7.11/§7.13) e la riga step
+   budget in §0.1 (sequenza: budget vincolante a 20, capienza vincolante a 60).
+10. **§7 Threats**: aggiunte unità/indipendenza e molteplicità. **Bibliografia**: una fonte
+    per voce (sotto-lettere), anni e date d'accesso. **Appendice A**: dove stanno commit hash,
+    SHA del modello, pin di llama.cpp; dichiarato ciò che ancora manca (DOI, raw archives,
+    script statistici).
+
+**Punti della review NON accolti (con motivo):** la ristrutturazione completa in 11 sezioni e
+il taglio del 30-40% sono rimandati a **dopo la campagna CPU** — la review stessa dice di
+riscrivere l'abstract *"dopo aver congelato i risultati"*, e i risultati non sono congelati:
+ristrutturare ora significherebbe farlo due volte. La cronaca delle correzioni resta nel testo
+principale **di proposito** (nota in testa a §6): in un working paper è contenuto di metodo;
+migrerà in appendice nella versione da submission.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)

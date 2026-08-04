@@ -2,9 +2,20 @@
 
 ### A verification-first agentic architecture, and the measurements that judge it
 
-**Red Giant Project** · Working paper, revision of 2026-08-04
+**Red Giant Project** · Working paper, revision of 2026-08-05
 Model under test: Gemma 4 E2B (≈2B effective parameters), Q4 QAT GGUF, CPU-only inference
 Reference hardware: 4 CPU cores, 15 W, no usable GPU
+
+> **Measurement provenance — read this first.** Two execution profiles appear in this paper
+> and they are not interchangeable. `severino-sim` (Docker, CPU-only, capped to approximate
+> the 15 W target) is the reference profile: the campaigns of **§5.1–§5.7** — planner, plan
+> compiler, reasoning on coding, the multi-domain batteries — were run on it. The **ladder
+> campaigns of §5.8–§5.9 and every result in §6.4 through §6.4-septies** were run on the
+> development GPU profile (`dev-fast`, RTX 4080S), which is faster but non-deterministic in a
+> different way (CUDA batching) and hides every token-economy cost the target imposes. GPU
+> results are **directionally informative and quantitatively unconfirmed**: the confirmatory
+> CPU campaign is scheduled as the first item of §8, and until it runs, no ladder number in
+> this paper is a verdict about the reference hardware. Each results table states its profile.
 
 ---
 
@@ -22,9 +33,15 @@ We report results from **over 700 instrumented end-to-end runs** across seven me
 campaigns. Our central methodological contribution is a **four-block measurement matrix**
 (naked model / full workflow, each with and without explicit reasoning, with mandatory
 component ablations in both workflow blocks) applied to a **difficulty ladder** — a
-deterministically generated task family that scales breadth while holding per-step cognition
-constant. This design makes the customary claim "our framework improves results" decomposable
-into attributable components.
+deterministically generated task family that scales corpus breadth while holding per-step
+cognition constant. This design makes the customary claim "our framework improves results"
+decomposable into attributable components. Two scope statements apply throughout. First,
+provenance: the coding-domain campaigns ran on the CPU reference profile; the ladder campaigns
+ran on a development GPU profile and await CPU confirmation (see the provenance note above).
+Second, the experimental unit: each ladder rung is **one deterministic task instance executed
+repeatedly** under server-side nondeterminism, so an n = 20 result estimates how often a
+configuration solves *that instance*, not the task family — generalization across instances is
+future work (§4.5).
 
 The findings are mixed, and we report them as such. At the **step level** the scaffolding
 demonstrably converts an unusable model into a reliable executor: semantically usable
@@ -36,27 +53,35 @@ at ~100× the token cost. On tasks beyond the naked model's ceiling (measured at
 of material and 5 facts, without aggregation), the workflow converts, and ablations attribute
 the conversion to **selective retrieval** specifically. On genuinely multi-session software
 engineering tasks, neither our plan compiler nor explicit reasoning produced any conversion at
-all, and both were rejected by their own pre-registered decision rules.
+all, and both were rejected by their own pre-specified decision rules.
 
 We also isolate a component whose value is not throughput but *epistemic*: removing
-deterministic verification does not merely reduce success — it makes the system **lie**, at a
-rate of 8 false completion claims in 5 runs, against 1 in more than 550 runs with verification
-active.
+deterministic verification does not merely reduce success — it produces **false completion
+claims**: 8 such claims across 5 unverified runs (claim-level count; a run can produce several),
+against 1 run affected among more than 550 with verification active (run-level count). The two
+figures use different denominators and we present them as bounds on the same phenomenon, not as
+a single ratio; the qualitative conclusion — without verification the system's statements about
+its own state cannot be trusted — does not depend on the denominator.
 
-A recurring result cuts across all campaigns and we state it as the paper's principal
-practical claim: **in this regime, instruction is not a control surface.** Three independent
-lines of evidence — an escalating textual mandate to use an available tool (16% → 40%
-compliance, no change in outcome), a role-card prohibition violated in 40% of attempts, and a
-failure message read and then repeated verbatim — indicate that any property the system
-actually requires must be enforced structurally rather than requested. Applying that principle
-to *content*, a write-time coherence gate that makes an internally inconsistent artifact
-unrepresentable raises the aggregation rung from **9/20 to 18/20 (Fisher exact p = 0.0057)**
-while running **37% faster**, and does so on runs in which the model typically never performs
-the arithmetic at all. We also report the counterexample that bounds the principle: an
-analogous gate targeting an equally frequent pathology produced **no effect whatsoever**
-(p = 0.66 and p = 1.00), because an existing component was already absorbing it.
+A recurring result cuts across all campaigns, and we state it precisely: **within this model,
+runtime and task family, textual instruction was not a sufficiently reliable means of imposing
+behaviour the system requires; structural constraints were.** (We use "instruction is not a
+control surface" as the short name for this bounded claim, not as a general law.) Three
+independent lines of evidence — an escalating textual mandate to use an available tool
+(16% → 40% compliance, no change in outcome), a role-card prohibition violated in 40% of
+attempts, and a failure message read and then repeated verbatim — point the same way. Applying
+the principle to *content*, a write-time coherence gate that makes an internally inconsistent
+artifact unrepresentable raises the aggregation rung from **9/20 to 18/20 (Fisher exact
+p = 0.0057)** while running **37% faster**, and does so on runs in which the model typically
+never performs the arithmetic at all. The bounding counterexample is the deterministic
+calculator: an equally motivated component whose ablation changed nothing (**16/20 vs 17/20,
+p = 1.000**, despite 27 successful calls in the full arm), because the coherence gate had
+already absorbed the failure mode it targeted — before building a defence, measure who is
+already paying for the problem. A second null (the finish gate, p = 0.66) we initially read
+the same way and now report as what it is: an **underpowered test**, not a negative result
+(§5.9.4).
 
-Finally, we state our position with respect to prior art without flattery to ourselves. We
+Finally, we state our position with respect to prior art plainly. We
 audited seven mechanisms this project believed it had discovered against the published
 literature, searching for each one individually and specifically. **All seven are already
 documented** [13–37], several of them measured more precisely than we measured them, and one
@@ -64,13 +89,16 @@ under the very name we had independently coined. What this paper contributes is 
 the mechanisms but the **regime**: a single ~2B model performing every role, on 15 W of
 consumer CPU, with no frontier model anywhere in the pipeline — a configuration the nearest
 comparable work [13] does not target and explicitly does not report inference cost for. Within
-that regime we contribute the numbers (0/20 → 20/20 on a 400-document corpus), a
-**single-commit attribution table** across mutually ablatable levers, a catalogue of **negative
-results governed by pre-registered decision rules**, and evidence of **substitution between
-levers** — a role card and explicit reasoning each recovering what the other's absence costs.
-The last of these bears directly on the gap the literature names for itself: that scaffolding
-studies use "one-at-a-time ablation at best, never full factorial designs that reveal
-higher-order interactions" [16].
+that regime we contribute the numbers (0/20 → 20/20 on a 400-document corpus, development
+profile), a **per-lever attribution record** — every component born with its own ablation
+lever, measured one lever at a time across the system's evolution; the single-commit
+full-factorial campaign that would make all rows simultaneously true is scheduled, not claimed
+(§8) — a catalogue of **negative results governed by pre-specified, version-controlled decision
+rules**, and evidence of a strong **two-factor cross-component interaction**: a role card and
+explicit reasoning each recovering what the other's absence costs. The last of these bears
+directly on the gap the literature names for itself: that scaffolding studies use
+"one-at-a-time ablation at best, never full factorial designs that reveal higher-order
+interactions" [16].
 
 ---
 
@@ -82,6 +110,14 @@ full data. **Placement criterion:** a row appears in §0.1 or §0.2 only if it h
 comparable arms and adequate power; anything observed but not isolated appears in §0.3. A
 plausible-but-unmeasured improvement is not an improvement.*
 
+*Three caveats govern every row at once. **Provenance:** rows 1–5 and the rejections of §0.2
+come from the CPU reference profile; rows 6–16 (the ladder campaigns) from the development GPU
+profile, unconfirmed on CPU (see the provenance note, p. 1). **Unit:** ladder rows repeat one
+deterministic task instance per rung; n = 20 licenses inference about that instance, not the
+task family (§4.5). **Simultaneity:** rows were measured one lever at a time at different
+commits during development — this table is a historical synthesis, and the single-commit
+factorial campaign that would make its rows simultaneously true is scheduled, not done (§8).*
+
 ### 0.1 Established: interventions that measurably raise the floor
 
 | # | Intervention | Without | With | Mechanism | §|
@@ -92,10 +128,10 @@ plausible-but-unmeasured improvement is not an improvement.*
 | 4 | Discriminated unions over steps | 60-call loops after a derail | **8/8 recoveries** | after an unescaped quote there is no longer an incoherent syntactic exit | 5.2 |
 | 5 | Identity owned by the control plane | 6/20 invented files · 11/20 name mismatches · 5/20 wrong phase ids | **0 · 0 · 0** | the model creates meaning; the control plane creates identity | 5.4 |
 | 6 | **Selective retrieval** | **0/5 on every rung**, replicated **3×** across two corpora, at **+35%** token cost | 18/20 | the only component whose removal loses the won rung: it buys **capability** | 5.8 |
-| 7 | **Deterministic verification** | **8 false completion claims in 5 runs** | 1 in **550+** verified runs | buys **honesty**, not throughput: the trust boundary | 5.8 |
+| 7 | **Deterministic verification** | **8 false completion claims across 5 runs** (claim-level) | **1 affected run in 550+** (run-level) | buys **honesty**, not throughput: the trust boundary. Denominators differ (claims vs runs); read as bounds, not a ratio | 5.8 |
 | 8 | Retry (2 attempts) | 0/3, dies **fast and cheap** (−59% tokens) | — | absorbs transient failures, including the phantom finish (§5.9.4) | 5.8 |
 | 9 | **Write-time arithmetic coherence gate** | **9/20 (45%)** · 797 s | **18/20 (90%)** · 500 s | **Fisher exact two-sided p = 0.0057**, and **37% faster**: refusing early costs less than failing late | 5.9 |
-| 10 | Step budget proportional to task size | L7 died without ever writing the file | L7 **11/20** | 20 steps cannot collect 8 facts from 400 documents: not incapacity, budget | 5.9.5 |
+| 10 | Step budget proportional to task size | L7 died without ever writing the file | L7 **11/20** | 20 steps cannot collect 8 facts from 400 documents. Sequencing matters: at budget 20 the budget was binding; once raised to 60, **no attempt ever exhausted it again** (max 18 used) and the binding constraint became context capacity — row 14 | 5.9.5 |
 | 11 | **Full reasoning budget with untruncated material** | **0/20** | **20/20** | **p = 1.45 × 10⁻¹¹** — but only where material and reasoning fit together within 8,192 tokens; on the full rung the material would be truncated and the gain disappears. A verdict about **hardware** | 6.4 |
 | 12 | **Actionable errors** (refusals that state disk state; argument errors that name the missing field) | spirals up to **6 consecutive steps**, **7 fatal sequences** | **max 1 step**, **0 fatal**, recovery **100%** | they do not reduce mistakes (18% of calls still malformed): they remove the **spirals** mistakes used to cause. They act on the *cost* of failing, not its frequency | 6.4-ter |
 | 13 | **Runtime cache flags** (full sliding-window cache + suffix shifting) | **2,748** tokens reprocessed to remove a block mid-prompt | **1** | the model family uses sliding-window attention; with a partial cache the runtime cannot reuse anything past a divergence. Costs memory, so adopted on the development profile only | 6.4-quinquies |
@@ -140,7 +176,7 @@ one. Before building a defence, measure who is already paying for the problem.
 | 2 | The calculator's place in the catalogue | **switched on without proof** — the only such case: invoked ~40% of the time, often never in winning runs; ablation showed no difference **but at n=5** | an n=20 A/B, and only *after* the argument-error fix: 40% of its calls fail at the interface, so judging it now would condemn the implementation | medium: it consumes prompt tokens every step for a service the coherence gate may already provide |
 | 3 | All ladder numbers | GPU profile, not the capped reference CPU profile | the official CPU campaign | medium: direction solid, magnitude not (95% CI on 18/20 is **70–97%**) |
 | 4 | L7 = 11/20 | measured at n=20 | attribution: it is the sum of five fixes, none isolated | low on the number, high on its interpretation |
-| ~~5~~ | ~~The reasoning verdict on arithmetic~~ | ✅ **RESOLVED 2026-08-04, and it was wrong** (§6.4): 20/20 against 0/20 at full budget and full material. The risk we had labelled "high" materialized exactly as pre-registered | confirmation on the reference CPU profile | — |
+| ~~5~~ | ~~The reasoning verdict on arithmetic~~ | ✅ **RESOLVED 2026-08-04, and it was wrong** (§6.4): 20/20 against 0/20 at full budget and full material. The risk we had labelled "high" materialized exactly as pre-specified | confirmation on the reference CPU profile | — |
 | ~~6~~ | ~~Reasoning × workflow (block B4)~~ | ✅ **CLOSED 2026-08-04** (§6.4-quater): both blocks re-measured on the **same commit**, 20 runs per rung. The ladder's 2×2 matrix is complete | the ablated arms of B4 | — |
 | 6 | Reasoning × workflow (block B4) | the pre-fix block was **discarded** as non-comparable | re-measurement | medium: half the 2×2 matrix on the ladder is empty |
 | 7 | Syntax gate, no-op-edit guard, near-name tool hints | validated by pilots (13 of 43 runs squandered steps on invented tool names; 15 consecutive no-op edits observed) | never passed through the ladder with ablated arms | low: documented pathologies, zero cost |
@@ -194,28 +230,35 @@ behaviour in a regime the literature does not cover, measured in a way it largel
    report inference on constrained hardware; the closest small-model agent system [18] reports
    capability but not hardware. We report both, and the conversion they permit: **0/20 → 20/20**
    on a rung requiring eight facts to be located across 400 documents (§5.8, §6.4).
-2. **A single-commit attribution table.** Every component is built with its own ablation lever
-   from the outset, so its contribution is measurable in isolation on *the same binary* as every
-   other (§0.1, §4.2). Published decompositions are typically assembled across systems,
-   benchmarks or model families; ours are fourteen levers on one commit.
+2. **A per-lever attribution record, with the design that completes it.** Every component is
+   built with its own ablation lever from the outset, so its contribution is measurable in
+   isolation on the same codebase (§0.1, §4.2). We are explicit about what this record is and
+   is not: the campaigns to date ablated **one lever at a time, at different commits during the
+   system's evolution** — a historical synthesis, not a simultaneous attribution. The
+   single-commit full-factorial campaign that would make every row of §0.1 true at once is
+   specified and scheduled (§8); we claim the levers and the record, not the completed table.
 3. **A difficulty ladder with an admissibility rule.** A deterministic generator that scales
    *breadth* at constant per-step cognition, plus the rule that governs its use: **if the naked
    model passes a rung, that rung measures nothing about the harness** (§4.4). The principle
    that baselines must precede architecture is established [15]; operationalizing it as a
    generator with a pass/exclude criterion is our formulation.
-4. **Negative results with pre-registered decision rules.** Five rejections — an in-loop
+4. **Negative results with pre-specified decision rules.** Five rejections — an in-loop
    planner, a plan compiler, in-workflow reasoning, a deterministic calculator, a finish gate —
-   each condemned by a rule written before the data existed, and one of them (§5.9.4) *corrected
-   in public* when we discovered the test that produced it was underpowered (§6.5).
-5. **Evidence of substitution between levers**, not merely of their individual effect: on the
-   widest rung, a full role card without reasoning (12/20) and a stripped card with reasoning
-   (19/20) both recover what their counterpart's absence costs (1/20). This is the class of
-   higher-order interaction that the scaffolding literature identifies as systematically
-   unmeasured [16], and the reason our next campaign is full-factorial rather than
-   one-lever-at-a-time (§6.4-quater, §8).
+   each judged by a rule written before the data existed, and one of them (§5.9.4) *corrected
+   in public* when we discovered the test that produced it was underpowered (§6.5). We say
+   *pre-specified*, not pre-registered: the rules are version-controlled in the repository with
+   verifiable commit timestamps, but were not deposited with any external registry.
+5. **Evidence of a strong cross-component interaction**, not merely of individual effects: on
+   the widest rung, a full role card without reasoning (12/20) and a stripped card with
+   reasoning (19/20) both recover what their counterpart's absence costs (1/20). Stratified
+   tests: the card's effect is p = 4.3 × 10⁻⁴ without reasoning and p = 1.0 with it. This is a
+   two-factor interaction — precisely the kind of cross-component effect the scaffolding
+   literature identifies as systematically unmeasured [16], and the reason our next campaign is
+   full-factorial rather than one-lever-at-a-time (§6.4-quater, §8).
 6. **An empirical demonstration that deterministic verification purchases honesty**, separable
    from and independent of throughput (§5.7) — a property known qualitatively [25–27] which we
-   quantify in this regime: 8 false completion claims in 5 unverified runs, 1 in 550+ verified.
+   quantify in this regime: 8 false completion claims across 5 unverified runs (claim-level),
+   1 affected run in 550+ verified (run-level; the denominators differ and are stated as such).
 
 ---
 
@@ -308,7 +351,7 @@ top of them:
   intelligence produced Δ = 0.
 - **Attribution on a single commit.** Fourteen levers, each ablatable independently, measured
   against the same binary — as opposed to a decomposition assembled across systems or papers.
-- **A catalogue of negative results with pre-registered rules**, including a public correction
+- **A catalogue of negative results with pre-specified rules**, including a public correction
   of one of our own verdicts (§5.9.4, §6.5). The field publishes few of these; [16] and [15]
   both argue that this is precisely what is missing.
 
@@ -320,13 +363,16 @@ campaign is aimed:
 > previous work uses one-at-a-time ablation at best, **never full factorial designs that
 > reveal higher-order interactions**.
 
-Our own results already contain such an interaction and were nearly misread because of it: a
-stripped role card is catastrophic alone (1/20) and nearly harmless under reasoning (19/20),
-so a one-lever-at-a-time protocol would have assigned each lever a value that does not exist
-independently of the other. The full-factorial campaign described in §8 — every arm, coding and
-non-coding, with every ablation and every switch in both positions, on one commit and on the
-reference CPU profile — is therefore not thoroughness for its own sake. It is the design the
-literature says is missing, run in the regime the literature does not cover.
+Our own results already contain a two-factor instance of the problem and were nearly misread
+because of it: a stripped role card is catastrophic alone (1/20) and nearly harmless under
+reasoning (19/20), so a one-lever-at-a-time protocol would have assigned each lever a value
+that does not exist independently of the other. (Strictly, "higher-order" in the quotation
+refers to interactions among three or more components — which only a factorial design can
+surface at all; our 2×2 is the two-factor case that already sufficed to break per-lever
+attribution.) The full-factorial campaign described in §8 — every arm, coding and non-coding,
+with every ablation and every switch in both positions, on one commit and on the reference CPU
+profile — is therefore not thoroughness for its own sake. It is the design the literature says
+is missing, run in the regime the literature does not cover.
 
 ---
 
@@ -455,16 +501,27 @@ because the model cannot infer the missing half of a contract.
 ### 4.4 The difficulty ladder
 
 To locate the naked model's ceiling and evaluate the system only beyond it, we generate a
-family of tasks along a single axis — **breadth** — holding per-fact cognition constant. Every
-rung asks the same trivial question ("service X's `listen_port` is N"); only the haystack
-grows, with distractors of identical surface form.
+family of tasks of increasing demand, holding per-fact cognition constant. Every rung asks the
+same trivial question ("service X's `listen_port` is N"); only the demand around it grows,
+with distractors of identical surface form.
 
-| Rung | Documents | Material | Facts | Additional demand |
+We initially described the ladder as varying "a single axis, breadth". That description was
+too generous to ourselves, and we correct it: the ladder varies **three axes** — corpus
+breadth, number of facts, and the presence of an aggregation step — and not monotonically
+(L5 adds aggregation at constant corpus; L6 removes it while widening; L7 widens further and
+reintroduces it). It is a small difficulty *matrix* sampled along a diagonal, not a
+one-dimensional scale. Consequently, statements like "the naked ceiling is ≈5.8K tokens and
+five facts" locate a point on that diagonal, not a boundary in any single dimension —
+disentangling the axes would require rungs that vary one at a time, which the generator
+supports but the campaigns so far have not exercised (the L5c/T058 rung, breadth at constant
+cognition, is the first step of that programme).
+
+| Rung | Documents | Material | Facts | Aggregation |
 |---|---|---|---|---|
-| L1–L4 | 5 → 90 | 0.3K → 5.8K tokens | 2 → 5 | — |
-| L5 | 90 (= L4) | 5.7K tokens | 5 | **aggregation** (a sum) |
-| L6 | 200 | 12.7K tokens | 6 | — |
-| L7 | 400 | 25.3K tokens | 8 | aggregation |
+| L1–L4 | 5 → 90 | 0.3K → 5.8K tokens | 2 → 5 | no |
+| L5 | 90 (= L4) | 5.7K tokens | 5 | **yes** (a sum) |
+| L6 | 200 | 12.7K tokens | 6 | no |
+| L7 | 400 | 25.3K tokens | 8 | yes |
 
 The corpus is generated from a fixed seed and is byte-reproducible. In the naked arm,
 materials exceeding the context window are truncated and the truncation is declared: this is
@@ -478,6 +535,46 @@ inline, was unaffected. The corpus was regenerated with uniform formatting and a
 test now asserts the absence of such markers. We report this because a benchmark that
 disadvantages the treatment arm through a typographic accident is a failure mode likely to
 recur elsewhere in the field.
+
+### 4.5 Experimental units, inference scope, and the status of each test
+
+This section states plainly what our samples are and what they can and cannot support.
+
+**The unit is a repeated execution, not an independent problem.** Each ladder rung is one
+deterministic task instance (fixed corpus seed, fixed target facts, fixed sampling seed);
+"n = 20" means twenty executions of that instance, with variation supplied by server-side
+nondeterminism — CUDA batching on the development profile [10], cache state on the CPU profile
+[11]. A Fisher test on such a sample answers *"how often does this configuration solve this
+instance under this noise source?"*, which is the question our A/Bs pose. It does **not**
+license the inference *"this component improves wide-retrieval tasks in general"* — that
+requires multiple independently generated instances (varying corpus seed, target positions,
+names and values), with runs analysed as nested within instances. Every generalizing sentence
+in this paper should be read with that limit attached; the multi-instance design is part of
+the factorial campaign (§8). We note also that executions sharing a server process are not
+perfectly independent (observed block-wise oscillation on identical code, §4.3), which the
+Fisher test does not model; this is a further reason the near-threshold results below are
+labelled as they are.
+
+**Confirmatory versus exploratory.** The campaigns produced many comparisons, and treating
+every p-value as a confirmed discovery would be multiplicity-blind. We classify them; no
+formal family-wise correction is applied, which is a limitation, and the classification below
+is the honest substitute for one:
+
+- **Confirmatory** (pre-specified endpoint, sample size fixed before looking, fresh sample):
+  the wave-compaction A/B — pilot used only for sizing, verdict from a new fixed-n sample
+  (p = 0.0411). This is the protocol the factorial campaign will apply to everything.
+- **Pre-specified but single-sample**: the coherence gate (p = 0.0057), the reasoning-vs-naked
+  comparison (p = 1.45 × 10⁻¹¹), the card ablation (p = 1.0 × 10⁻⁵), reasoning on the widest
+  rung (p = 0.0033). Decision rules were written before the data; the same sample generated
+  and judged the hypothesis. Their p-values are individually far enough from threshold that
+  multiplicity is unlikely to overturn them, with the exception of none.
+- **Exploratory**: every mechanism analysis (tool-call distributions, search-vs-read counts,
+  failure taxonomies, per-step reuse), all of which generate hypotheses rather than test them.
+
+**Pre-specified, not pre-registered.** Decision rules and registered predictions are written
+into version-controlled planning documents whose commit timestamps are verifiable in the
+repository history. Nothing was deposited with an external registry; we therefore avoid the
+word "pre-registered" throughout.
 
 ---
 
@@ -592,7 +689,7 @@ A seven-arm × 20-run grid produced the campaign's most generalizable finding:
 > conversion ceiling.
 
 The official CPU A/B (two batteries per arm) yielded **Δverified = 0** at 1.4× tokens against a
-pre-registered rule requiring ≥ +2. Full-time reasoning does not ship. One battery did resolve
+pre-specified rule requiring ≥ +2. Full-time reasoning does not ship. One battery did resolve
 a reasoning-trap task that had never passed in the project's history; it **did not reproduce**
 in the second battery. We record it as noise, and as a reminder that a result which does not
 reproduce is not a result.
@@ -772,6 +869,13 @@ full rather than counting them.)*
 
 ## 6. Discussion
 
+*A note on this section's structure. §6.4 and its sequels (-bis through -septies) preserve the
+order in which findings corrected earlier findings, including two claims we published
+internally and then falsified. In a working paper we keep that record in the main text
+deliberately — the corrections carry method content (which controls fail and how) that a
+cleaned-up narrative would lose. In any submission version, this section will be rewritten as
+a stable statement of the final results, with the discovery record moved to an appendix.*
+
 ### 6.1 Two kinds of contribution, and why conflating them is the field's error
 
 Our results separate cleanly into two categories that are routinely reported as one.
@@ -910,7 +1014,7 @@ the model still sends empty arguments roughly one time in five — but eliminate
 those mistakes used to cause: the longest run of consecutive failures fell from **six to one**,
 and **seven fatal sequences became zero**, with the following call succeeding in every case.
 
-This distinction matters practically, because it dictates *what to measure*. We pre-registered
+This distinction matters practically, because it dictates *what to measure*. We pre-specified
 the wrong metric for the argument-error work — predicting the error *rate* would fall to zero —
 and would have recorded a real improvement as a failure had we not read the sequences. An
 intervention that acts on the cost of failing is invisible to a frequency metric.
@@ -961,34 +1065,58 @@ spends fewer steps, closes in half the attempts, and never approaches the window
 | Stripping the role card (§5.9) | 440 reads against 169 searches | **1/20** |
 | Adding reasoning (here) | 168 searches against 5 reads | **20/20** |
 
-> **On wide corpora the single variable predicting success is whether the model searches or
-> reads.** A tool, a piece of prose, and a reasoning channel all push that one lever, and their
-> outcomes order exactly as the force with which they push it.
+> **Working hypothesis: on wide corpora, whether the model searches or reads is the variable
+> that mediates success.** Three interventions — a tool, a piece of prose, a reasoning
+> channel — all move that one behaviour, and their outcomes order exactly as the force with
+> which they move it.
+
+We state this as a hypothesis, not a demonstrated mediator, because the evidence is aggregate
+tool-call counts, and aggregates of this kind are confounded: successful runs are longer-lived
+and accumulate calls differently, the interventions themselves alter run length, and a
+search-heavy profile may partly be a *consequence* of a run going well rather than its cause.
+The test that would settle it — per-run records relating early-step strategy (before the
+outcome is determined) to eventual success, across independently generated instances — is
+specified for the factorial campaign. What the current data does establish is narrower and
+still useful: three independent interventions each shift the search/read ratio in the
+direction of their outcome, and no intervention that improved outcomes shifted it the other
+way.
 
 This is the same variable the retrieval literature has been converging on independently —
 grep-style direct corpus interaction outperforming embedding retrieval for agents [21, 22, 24].
-Our addition is the observation that the *prompt*, not only the harness, determines which
-strategy the model adopts.
+Our addition is the observation that the *prompt*, not only the harness, appears to determine
+which strategy the model adopts.
 
 **The 2×2 that closes the argument.** If the three interventions push one lever, two of them
-should be interchangeable. Measured, twenty runs per cell, on the widest rung:
+should be interchangeable. Measured, twenty runs per cell, on the widest rung (development
+profile; one task instance — §4.5):
 
 | L7 | full role card | stripped role card |
 |---|---|---|
 | **without reasoning** | 12/20 | **1/20** |
 | **with reasoning** | **20/20** | **19/20** |
 
-The card is worth twelve points against one when reasoning is off, and one point against twenty
-when it is on. **The levers are largely interchangeable**, which has a direct design consequence:
-with reasoning active the card's 414 prompt tokens per call can be released for the price of
-1/20. One may pay in reasoning instead of in prompt tokens — a choice, not a constraint.
+Stratified tests make the interaction explicit: the card's effect is **p = 4.3 × 10⁻⁴ without
+reasoning and p = 1.0 with it**; symmetrically, reasoning's effect is p = 5.8 × 10⁻⁹ under the
+stripped card and p = 0.0033 under the full one. We have not fitted a formal interaction model —
+a logistic regression with a `reasoning × card` term, ideally with task instance as a random
+effect, is the correct analysis and requires the multi-instance data of the factorial campaign
+(with 20/20 cells it would also need bias-reduced estimation); the stratified contrasts are what
+the current design supports. On the risk-difference scale the card's effect moves from ~55
+points to ~5 across strata — an interaction so large that no plausible dependence structure in
+the repeated runs seems likely to explain it away, which is precisely why it deserves the
+formal test rather than being spared it.
+
+**On this task instance, the levers were largely interchangeable.** The design consequence —
+with reasoning active, the card's 414 prompt tokens per call could be released at a measured
+cost of one success in twenty — is stated as what it is: one instance, twenty runs per cell,
+on the development profile. It is a candidate architectural rule, not an established one.
 
 This is an instance of the **compensation hypothesis** [28] — reasoning structure substituting
 for capability gaps — and of the cross-component interference [16] that scaffolding studies are
 criticized for not measuring. It is also why per-lever value is not a well-defined quantity here:
 each of these two levers is worth almost everything or almost nothing depending on the other's
-position, which is exactly the higher-order interaction a one-at-a-time protocol cannot see, and
-the reason our next campaign is full-factorial (§8).
+position — a two-factor interaction that one-at-a-time protocols cannot see, and the reason our
+next campaign is full-factorial (§8).
 
 **A second registered prediction, also wrong, with an architectural payoff.** We predicted that
 on the widest rung reasoning would make matters *worse* by consuming 1,536 tokens of an already
@@ -1169,7 +1297,7 @@ matter is not evidence that it does not.
 ### 6.5 On negative results
 
 This project has now rejected two planning architectures, one reasoning configuration, and one
-of its own structural defences by pre-registered rules. We consider these the most valuable
+of its own structural defences by pre-specified rules. We consider these the most valuable
 outputs to date, for two reasons. First, they are the rarest artifact in the field: published,
 quantified, architecture-level negative results on small-model agents. Second, they redirected
 effort precisely — the failure of in-loop planning identified missing gates rather than a weak
@@ -1197,6 +1325,17 @@ resolve a forty-point difference and are blind to a ten-point one. Verdicts here
 twenty runs per arm with an exact test, which is adequate for the large effects reported and
 explicitly inadequate for the small ones — those are now labelled as unresolved rather than
 negative.
+
+**Experimental unit and independence.** Ladder samples are repeated executions of a single
+deterministic task instance, not independent problems (§4.5); the observed block-wise
+oscillation further undermines the independence the exact test assumes. Effects large enough
+to survive this (55-point swings) almost certainly do; near-threshold results (p ≈ 0.04)
+should be read with both caveats attached.
+
+**Multiplicity.** The campaigns produced many comparisons and only one followed a fully
+confirmatory protocol (§4.5). No family-wise correction is applied; the
+confirmatory/exploratory labelling is the substitute, and the factorial campaign will replace
+it with pre-specified endpoints.
 
 **Synthetic tasks.** All batteries to date are synthetic and small — 2 to 15 file repositories
 and generated document corpora. The behaviour of the system on a real codebase with genuine
@@ -1249,9 +1388,12 @@ compiler, with or without reasoning. This is the project's principal open failur
 results converge on it. The hardest rung dies from context exhaustion rather than step budget or
 discipline (§5.9.5), and full-budget reasoning solves the aggregation rung outright but cannot
 coexist with untruncated material inside 8,192 tokens (§6.4). Context and cache work therefore
-acquires a second objective it did not previously have — making room for *reasoning* — and its
-central trade-off is measurable rather than assumable: any compaction of older step results buys
-window at the cost of the append-only prefix reuse worth 65 tokens against 7,971 (§5.1).
+acquires a second objective it did not previously have — making room for *reasoning*. The
+trade-off we originally feared here — compaction destroying the append-only prefix reuse of
+§5.1 — was re-measured before building and found to be a property of our runtime configuration,
+not of compaction (§6.4-quinquies); with the correct flags, wave compaction *improved* cache
+reuse (§6.4-sexies). What remains open on the reference profile is the memory cost of those
+flags, unmeasured on the 10 GB CPU target.
 
 **The principal planned campaign is full-factorial, and the reason is in our own data.** The
 2×2 of §6.4-quater shows a lever worth twelve points in one configuration and one point in
@@ -1265,8 +1407,12 @@ positions, on a single commit and on the reference CPU profile. It is expensive 
 whose rows are simultaneously true.
 
 Planned work, in order: (i) the official campaign on the reference CPU profile, since every
-number in §5 and §6 was obtained on the development GPU and is directionally but not
-quantitatively transferable; (ii) the full-factorial campaign described above; (iii) bisection of
+**ladder** number (§5.8–§5.9, §6.4-*) was obtained on the development GPU and is directionally
+but not quantitatively transferable — the coding-domain campaigns of §5.1–§5.7 already ran on
+CPU; (ii) the full-factorial campaign described above, which also supplies what §4.5 identifies
+as missing — multiple independently generated task instances per rung, per-run strategy records
+for the search-versus-read mediation test, and the data for a formal `reasoning × card`
+interaction model; (iii) bisection of
 the role card, to identify *which* rule group steers tool choice — 414 tokens per call are
 provably not free and provably not all necessary; (iv) a properly powered re-judgement of the
 calculator and of the finish gate, the latter because its rejection is now known to have been
@@ -1281,8 +1427,9 @@ runs, to place the system on scales others can read; and (ix) the real-codebase 
 
 ## 9. Conclusions
 
-Within the tested regime, the answer to the question posed in §1.1 is neither the optimistic
-nor the dismissive one.
+Within the tested regime — this model, this runtime, these task families, and with the ladder
+numbers still awaiting confirmation on the reference CPU profile — the answer to the question
+posed in §1.1 is neither the optimistic nor the dismissive one.
 
 **At the step level, the scaffolding works, decisively.** Structured output goes from
 unusable to universally usable; interface adaptations convert 20-call failures into 5-call
@@ -1302,12 +1449,15 @@ preceding attempt. What converts is removing the possibility of the error: a wri
 coherence gate takes the aggregation rung from 9/20 to 18/20 (p = 0.0057) while running 37%
 faster, on runs where the model typically never performs the arithmetic at all. The model
 creates meaning; the control plane creates identity — and a total, being derived, is identity.
-The same principle, applied without checking what already absorbed the failure, produced
-nothing at all (p = 0.66); we regard that bound as the more transferable half of the result.
+The same principle, applied to a pathology another component had already absorbed, produced
+nothing at all — the calculator, p = 1.000 with 27 successful calls in the treated arm — and we
+regard that bound as the more transferable half of the result: before building a defence,
+measure who is already paying for the problem.
 
 **And one contribution is categorically different from the others.** Deterministic
 verification does not raise the success rate; it makes the system's statements about itself
-true. Measured: 8 false claims in 5 unverified runs, against 1 in over 550 verified ones.
+true. Measured: 8 false completion claims across 5 unverified runs, against 1 affected run in
+over 550 verified ones (claim-level versus run-level counts — §5.7).
 For a system intended to work unattended on hardware its owner already possesses, that is
 plausibly the property that matters most — and it is the one an aggregate success metric is
 structurally incapable of seeing. It is also the reason we regard the published finding that
@@ -1332,22 +1482,39 @@ itself.
 
 ## References
 
+*Formatting note. arXiv identifiers encode year and month (2607.x = July 2026); the version
+consulted is the one online at the access date. Where an entry lacks an author list, the work
+was consulted via its arXiv page and the author list was not recorded at reading time —
+completing these entries is part of the pre-submission pass. Web resources carry access dates.
+Grouped entries have been split so that every source has its own designator; sub-letters
+preserve the in-text citation numbers.*
+
 [1] NVIDIA, *Improving Bash Generation in Small Language Models with Grammar-Constrained
-Decoding*. developer.nvidia.com
+Decoding*. developer.nvidia.com, accessed 2026-08-02
 [2] *Tool-integrated self-verification for test-time scaling in small language models*,
-arXiv:2504.04718
-[3] *Structured output reliability in small language models*, arXiv:2605.02363
-[4] *When Small Models Are Right for Wrong Reasons*, arXiv:2601.00513
-[5] *Agent scaffolding and benchmark variance at fixed model size*, arXiv:2606.08529
-[6] Salesforce AI Research, *xLAM: Large Action Models*, arXiv:2409.03215
-[7] METR, *Measuring AI Ability to Complete Long Tasks*. metr.org/time-horizons
-[8] *Self-AMPLIFY: rationale enhancement limits in small models*, arXiv:2402.12038
-[9] *SLMQuant: quantization sensitivity of small language models*, arXiv:2511.13023
-[10] llama.cpp issue #7052, non-deterministic output with multiple slots; and Thinking
-Machines Lab, *Defeating Nondeterminism in LLM Inference* (batch-invariance)
-[11] llama.cpp issue #2838, cold versus cached prompt evaluation
-[12] NVIDIA, *Small Language Models are the Future of Agentic AI*, arXiv:2506.02153
-(position paper)
+arXiv:2504.04718 (2025), accessed 2026-08-02
+[3] *Structured output reliability in small language models*, arXiv:2605.02363 (2026),
+accessed 2026-08-02
+[4] *When Small Models Are Right for Wrong Reasons*, arXiv:2601.00513 (2026), accessed
+2026-08-04
+[5] *Agent scaffolding and benchmark variance at fixed model size*, arXiv:2606.08529 (2026),
+accessed 2026-08-02
+[6] Salesforce AI Research, *xLAM: Large Action Models*, arXiv:2409.03215 (2024), accessed
+2026-08-02
+[7] METR, *Measuring AI Ability to Complete Long Tasks*. metr.org/time-horizons, accessed
+2026-08-02
+[8] *Self-AMPLIFY: rationale enhancement limits in small models*, arXiv:2402.12038 (2024),
+accessed 2026-08-02
+[9] *SLMQuant: quantization sensitivity of small language models*, arXiv:2511.13023 (2025),
+accessed 2026-08-02
+[10a] llama.cpp issue #7052, non-deterministic output with multiple slots. github.com,
+accessed 2026-08-02
+[10b] Thinking Machines Lab, *Defeating Nondeterminism in LLM Inference* (batch-invariance),
+accessed 2026-08-02
+[11] llama.cpp issue #2838, cold versus cached prompt evaluation. github.com, accessed
+2026-08-02
+[12] NVIDIA, *Small Language Models are the Future of Agentic AI*, arXiv:2506.02153 (2025;
+position paper), accessed 2026-08-02
 
 **Decomposition of agent performance: harness, verification, model**
 
@@ -1401,28 +1568,40 @@ Qwen3-30B from 18% to 64% and costs GPT-5 fifteen points
 [35] *Addressable Recall Compaction*, arXiv:2607.25066
 [36] *Beyond Compaction: Structured Context Eviction*, arXiv:2606.11213
 [37] *Code as Agent Harness*, arXiv:2605.18747
-[38] Engineering practice on the same problem: Anthropic, *Context engineering* (tool-use
-cookbook); LangChain, *Context management for Deep Agents*; Databricks, *Memex: a programmable
-scratchpad for LLM agents*; AgentScope context documentation; Arize, *Context management in
-agent harnesses*; *Context Offloading* (Agentic Coding Patterns)
+[38a] Anthropic, *Context engineering* (tool-use cookbook). platform.claude.com, accessed
+2026-08-04
+[38b] LangChain, *Context management for Deep Agents*. langchain.com blog, accessed 2026-08-04
+[38c] Databricks, *Memex: a programmable scratchpad for LLM agents*. databricks.com, accessed
+2026-08-04
+[38d] AgentScope, context-management documentation. accessed 2026-08-04
+[38e] Arize, *Context management in agent harnesses*. arize.com, accessed 2026-08-04
+[38f] *Context Offloading*, Agentic Coding Patterns. aipatternbook.com, accessed 2026-08-04
 
 **KV cache behaviour and runtime**
 
-[39] *Practical Online KV Cache Compaction*, arXiv:2608.00902; *IntentKV*, arXiv:2606.09916;
-*When KV Cache Reuse Fails in Multi-Agent Systems*, arXiv:2601.08343; *KVCOMM*, arXiv:2510.12872
+[39a] *Practical Online KV Cache Compaction*, arXiv:2608.00902 (2026), accessed 2026-08-04
+[39b] *IntentKV*, arXiv:2606.09916 (2026), accessed 2026-08-04
+[39c] *When KV Cache Reuse Fails in Multi-Agent Systems*, arXiv:2601.08343 (2026), accessed
+2026-08-04
+[39d] *KVCOMM*, arXiv:2510.12872 (2025), accessed 2026-08-04
 [40] llama.cpp discussion #20574, sliding-window attention and full-cache reuse (`--swa-full`),
-with cache-reuse shifting — the mechanism of §6.4-quinquies
+with cache-reuse shifting — the mechanism of §6.4-quinquies. github.com, accessed 2026-08-04
 
 **Critics, orchestration, specification**
 
-[41] *Steer, Don't Solve: Training Small Critic Models*, arXiv:2606.21811
-[42] *Self-Healing Agentic Orchestrators*, arXiv:2606.01416
-[43] *A survey of small language models for agentic systems*, arXiv:2510.03847
+[41] *Steer, Don't Solve: Training Small Critic Models*, arXiv:2606.21811 (2026), accessed
+2026-08-04
+[42] *Self-Healing Agentic Orchestrators*, arXiv:2606.01416 (2026), accessed 2026-08-04
+[43] *A survey of small language models for agentic systems*, arXiv:2510.03847 (2025), accessed
+2026-08-02
 [44] *MetaGPT: Meta Programming for Multi-Agent Collaborative Frameworks*, arXiv:2308.00352
-(ICLR)
-[45] *Test-driven governance in multi-agent code generation*, arXiv:2604.26615; and
-*Test-driven agentic development with mutation probes*, arXiv:2603.08806
-[46] Spec-driven development toolkits: GitHub *Spec Kit*; AWS *Kiro*
+(2023; ICLR 2024), accessed 2026-08-02
+[45a] *Test-driven governance in multi-agent code generation*, arXiv:2604.26615 (2026),
+accessed 2026-08-02
+[45b] *Test-driven agentic development with mutation probes*, arXiv:2603.08806 (2026), accessed
+2026-08-02
+[46a] GitHub, *Spec Kit* (spec-driven development toolkit). github.blog, accessed 2026-08-02
+[46b] AWS, *Kiro* (spec-driven IDE). accessed 2026-08-02
 
 ---
 
@@ -1439,7 +1618,20 @@ Measurement tooling is part of the repository, not of the analysis: the ladder g
 levers (`bench/ladder/run_agentic.py`). Ablations are environment-variable levers used
 exclusively in A/B contexts and never in production paths.
 
-Model: `gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf`, SHA-256 verified. Runtime: llama.cpp, pinned
-build. Sampling: fixed seed 42, context 8192. The 114-test suite runs against every commit and
-asserts, among other things, judge satisfiability, ladder monotonicity, and the absence of the
-formatting artifact described in §4.4.
+**Where each reproducibility ingredient lives, concretely.** Repository:
+`github.com/Frostmoore/RedGiant`. Every campaign in `data.md` records the **commit hash it ran
+at** (e.g. `@611d894` for the planner A/B, `@64843a1` for the card × reasoning 2×2); official
+runs execute only from committed code (§4.3). Model:
+`gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf`, with its expected SHA-256 pinned and verified by
+`scripts/download-model.ps1`. Runtime: llama.cpp pinned in `config/default.toml` (reference
+profile: ghcr image `b10200` with its full image digest recorded there; changing the pin
+mandates re-running the F0 baselines, and the file says so). Sampling: fixed seed 42, context
+8192, full parameters in `config/default.toml`. Execution profiles (hardware, cores, memory
+caps) are defined in `docker/severino-sim/`. The test suite (187 tests at this revision) runs
+against every commit and asserts, among other things, judge satisfiability, ladder
+monotonicity, and the absence of the formatting artifact described in §4.4.
+
+What is *not* yet offered: a DOI or archived snapshot, raw per-run result archives outside the
+repository, and the statistical analysis as executable scripts (the Fisher and Wilson
+computations are currently reproduced from the counts in `data.md`). These belong to the
+pre-submission pass, after the CPU campaign freezes the numbers.
