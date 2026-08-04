@@ -1106,6 +1106,59 @@ rimisurato prima di progettarci intorno* — specialmente se il numero che lo so
 nato per rispondere a un'altra domanda. Il 65-contro-7.971 era corretto per D9 e **non
 trasferibile** al caso della rimozione.
 
+## 7.12 F5.0 — di cosa si riempiono gli 8192 token
+
+*(2026-08-04, dev-fast, 140 chiamate su 5 run di L7, `@3b6ab12`.)*
+
+La composizione del prompt è ora rilevata **a ogni chiamata** e persistita in
+`llm_calls.sections` (prima il calcolo esisteva ma finiva solo dentro il messaggio d'errore).
+Costo misurato prima di decidere: **0,5–6,3 ms per sezione** contro step da 1–3 s, cioè ~0,5% —
+quindi nessun flag.
+
+### 7.12.1 La tabella
+
+| Step | CONTEXT | OUTPUT | PREAMBLE | ROLE | STATE | TASK | TOOLS | **Totale** |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 284 | 18 | 314 | 1521 | 88 | 272 | 317 | **2.871** |
+| 5 | 3.352 | 18 | 314 | 1521 | 88 | 272 | 317 | **5.939** |
+| 10 | 3.225 | 18 | 314 | 1521 | 88 | 272 | 317 | **5.812** |
+| 15 | 4.077 | 18 | 314 | 1521 | 88 | 272 | 317 | **6.664** |
+| **al tetto** | **4.600** | 18 | 314 | 1521 | 88 | 272 | 317 | **7.186** |
+
+### 7.12.2 Le due cose che dice
+
+**1. La leva di F5.0-bis è puntata bene.** `CONTEXT` — la catena append-only dei risultati dei
+tool — è l'unica sezione che cresce, e al tetto vale **4.600 token, il 65% del prompt**. Tutto
+il resto è **costante**.
+
+**2. Ma c'è un secondo bersaglio che nessuno aveva in lista: il costo FISSO.** Le sei sezioni
+costanti sommano **2.530 token = il 31% della finestra**, pagati a *ogni* chiamata prima che il
+sistema faccia qualunque cosa. Dentro, la voce più grossa è `ROLE` con **1.521 token**, che si
+scompone così:
+
+| Voce | Token | Natura |
+|---|---|---|
+| Schema di output (`WorkerStep`) | ~684 | **portante** — è la leva meglio misurata del progetto (0/60 → 60/60) |
+| Card `worker.md` | **837** | **discrezionale** — 55 righe di regole numerate |
+
+### 7.12.3 Il bug che è saltato fuori
+
+La regola 13 della card imponeva: *"NEVER compute arithmetic yourself: any sum … goes through
+the calculator tool, ALWAYS"*. Ma **LAD.13 aveva tolto `calculator` dal catalogo**. Il modello
+riceveva l'ordine di usare uno strumento che non poteva vedere, **a ogni passo, per ~59 token a
+chiamata** — e questo spiega le **8 chiamate a `calculator` inesistente** che avevo registrato
+in §7.9.4 come curiosità.
+
+Regola rimossa; e siccome è una classe di errore che si ripresenterà a **ogni** componente che
+spegniamo, ora un test permanente (`test_card_consistency.py`) verifica che nessuna card citi
+strumenti fuori dal catalogo di default. Verificato che il test **cattura** il bug rimettendo il
+codice vecchio.
+
+**Costo delle regole che abbiamo misurato come inefficaci:** ~59 token (calcolatrice, rimossa),
+~68 (nomi esatti), ~70 (dire ≠ fare). Non sono cifre enormi da sole, ma sono pagate **su ogni
+chiamata di ogni run**, e la campagna ha dimostrato che quelle regole non producono obbedienza.
+**Da qui F5.0-ter nel piano**: misurare la card, invece di continuare ad aggiungerci righe.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)

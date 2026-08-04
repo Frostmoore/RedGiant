@@ -2091,6 +2091,40 @@ del prefisso) e **non trasferibile** al caso della rimozione.
   agli step 1 / 5 / 10 e **al punto di sfondamento**. È questa tabella che decide quale leva
   di F5.0-bis vale la pena costruire — nessuna leva si costruisce prima di averla letta.
 
+**✅ F5.0 FATTA (2026-08-04).** Rilevazione persistita in `llm_calls.sections`, strumento
+`bench/context_breakdown.py`, tabella prodotta su 140 chiamate di L7 (`data.md` §7.12).
+**Esito:** `CONTEXT` (la catena dei risultati) è l'unica sezione che cresce e vale **4.600
+token, il 65% del prompt** al tetto → **F5.0-bis è puntata bene**. Ma il **costo fisso** è
+**2.530 token = il 31% della finestra**, e dentro c'è la card del Worker (837 token) che
+nessuno aveva contato. **Bug trovato e corretto:** la regola 13 imponeva di usare `calculator`,
+strumento che LAD.13 aveva tolto dal catalogo — ordine impossibile da eseguire, ~59 token a
+chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanente aggiunto
+(`test_card_consistency.py`), verificato che cattura il bug.
+
+#### F5.0-ter — La card del Worker: misurarla, invece di aggiungerci righe
+
+- [ ] 🤖 **Obiettivo:** scoprire quanto della card serve davvero.
+- **Motivazione misurata (F5.0):** `worker.md` costa **837 token a ogni chiamata di ogni run** —
+  il 10% della finestra — e la campagna ladder ha dimostrato che **almeno tre delle sue regole
+  non producono obbedienza**: la regola sulla calcolatrice (16% → 40% di invocazione, punteggio
+  fermo), la regola 8 *"dire non è fare"* (violata nel 40% dei tentativi), i nomi esatti dei
+  tool (13 run su 43 sprecavano passi su segnaposto). Abbiamo passato la campagna ad
+  **aggiungere** righe a un documento che paghiamo su ogni passo, misurando ogni volta che non
+  servivano.
+- ⚠️ **Non è "tagliare la card": è misurarla.** Togliere regole senza misura sarebbe lo stesso
+  errore che abbiamo appena rettificato con LAD.9. Alcune potrebbero fare qualcosa che non
+  abbiamo isolato.
+- **Implementazione:** leva `RG_WORKER_CARD=minimal|full` che seleziona una card ridotta alle
+  sole regole con evidenza (una azione per passo, il contratto di `edit_file`, i confini di
+  scope) contro quella attuale. La card ridotta va scritta **a partire dalle misure**, non a
+  gusto: ogni regola tolta cita il numero che la condanna.
+- **Accettazione:** A/B su L5+L6+L7, 20 run per braccio con test esatto, **dichiarando quale
+  ampiezza d'effetto il campione può vedere**. Due esiti utili: se la card ridotta pareggia,
+  si liberano ~400 token per chiamata a rischio zero (e si riduce anche il *context rot*); se
+  peggiora, abbiamo finalmente la prova che qualcosa nella card serve — e sapremo cosa.
+- **Nota:** lo **schema di output** (~684 token della sezione ROLE) **non si tocca**: è la leva
+  meglio misurata del progetto (0/60 → 60/60 utilizzabili).
+
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 
 - [ ] 🤖 **Obiettivo:** tenere la catena append-only dei risultati dentro un budget dichiarato,
