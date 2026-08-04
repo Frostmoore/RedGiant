@@ -18,7 +18,7 @@ design and, more importantly, the *measurement* of an alternative: a determinist
 verification-first orchestration layer built on the assumption that the model is an
 unreliable proposer and never an authority.
 
-We report results from **over 600 instrumented end-to-end runs** across seven measurement
+We report results from **over 700 instrumented end-to-end runs** across seven measurement
 campaigns. Our central methodological contribution is a **four-block measurement matrix**
 (naked model / full workflow, each with and without explicit reasoning, with mandatory
 component ablations in both workflow blocks) applied to a **difficulty ladder** — a
@@ -42,6 +42,78 @@ We also isolate a component whose value is not throughput but *epistemic*: remov
 deterministic verification does not merely reduce success — it makes the system **lie**, at a
 rate of 8 false completion claims in 5 runs, against 1 in more than 550 runs with verification
 active.
+
+A recurring result cuts across all campaigns and we state it as the paper's principal
+practical claim: **in this regime, instruction is not a control surface.** Three independent
+lines of evidence — an escalating textual mandate to use an available tool (16% → 40%
+compliance, no change in outcome), a role-card prohibition violated in 40% of attempts, and a
+failure message read and then repeated verbatim — indicate that any property the system
+actually requires must be enforced structurally rather than requested. Applying that principle
+to *content*, a write-time coherence gate that makes an internally inconsistent artifact
+unrepresentable raises the aggregation rung from **9/20 to 18/20 (Fisher exact p = 0.0057)**
+while running **37% faster**, and does so on runs in which the model typically never performs
+the arithmetic at all. We also report the counterexample that bounds the principle: an
+analogous gate targeting an equally frequent pathology produced **no effect whatsoever**
+(p = 0.66 and p = 1.00), because an existing component was already absorbing it.
+
+---
+
+## 0. Summary of findings
+
+*This section exists so that a reader can obtain the entire result set in one page and then
+descend into whichever campaign they wish to audit. Every row cites the section holding its
+full data. **Placement criterion:** a row appears in §0.1 or §0.2 only if it has an A/B with
+comparable arms and adequate power; anything observed but not isolated appears in §0.3. A
+plausible-but-unmeasured improvement is not an improvement.*
+
+### 0.1 Established: interventions that measurably raise the floor
+
+| # | Intervention | Without | With | Mechanism | §|
+|---|---|---|---|---|---|
+| 1 | Grammar + schema in the prompt | 0/60 usable outputs | **60/60** | the malformed branch is not *generable*, rather than corrected afterwards | 5.1 |
+| 2 | Stable prefix (append-only loop) | 7,971 tokens reprocessed | **65** (**122×**) | KV reuse survives only if the prefix never changes | 5.1 |
+| 3 | Exact-string edit interface | 20+ failed calls per fix | **5–6 clean** | unified diffs are hostile to a 2B; uniqueness-guaranteed replacement is not | 5.2 |
+| 4 | Discriminated unions over steps | 60-call loops after a derail | **8/8 recoveries** | after an unescaped quote there is no longer an incoherent syntactic exit | 5.2 |
+| 5 | Identity owned by the control plane | 6/20 invented files · 11/20 name mismatches · 5/20 wrong phase ids | **0 · 0 · 0** | the model creates meaning; the control plane creates identity | 5.4 |
+| 6 | **Selective retrieval** | **0/5 on every rung**, replicated **3×** across two corpora, at **+35%** token cost | 18/20 | the only component whose removal loses the won rung: it buys **capability** | 5.8 |
+| 7 | **Deterministic verification** | **8 false completion claims in 5 runs** | 1 in **550+** verified runs | buys **honesty**, not throughput: the trust boundary | 5.8 |
+| 8 | Retry (2 attempts) | 0/3, dies **fast and cheap** (−59% tokens) | — | absorbs transient failures, including the phantom finish (§5.9.4) | 5.8 |
+| 9 | **Write-time arithmetic coherence gate** | **9/20 (45%)** · 797 s | **18/20 (90%)** · 500 s | **Fisher exact two-sided p = 0.0057**, and **37% faster**: refusing early costs less than failing late | 5.9 |
+| 10 | Step budget proportional to task size | L7 died without ever writing the file | L7 **11/20** | 20 steps cannot collect 8 facts from 400 documents: not incapacity, budget | 5.9.5 |
+
+**The common thread across all ten: none of them teaches the model anything.** Eight make an
+error *impossible to emit*; two grant more room or more attempts for the same work.
+
+### 0.2 Rejected: interventions that do not raise the floor
+
+*"Rejected" means **falsified within the measured regime**. Three of the four carry a written
+reopening condition, because the regime will change (routing, non-coding domains, larger
+tasks). None was closed by opinion.*
+
+| # | Intervention | Numbers | Why it fails | Reopens when |
+|---|---|---|---|---|
+| 1 | In-loop planner | **2/10 vs 9/10** static baseline · 815K vs 710K tokens · ~10× LLM calls | on small tasks, planning costs more than it returns: the plan becomes one more thing that can be wrong | routing active |
+| 2 | Plan compiler | **2/13 vs 6/13**, and **2/13 vs 8/13** on re-measurement · −44% tokens, +9.4 points of useful tokens, no additional greens | the gates move deaths *deeper* (from 0 tool calls to 20–38 at 80–93% useful tokens) without converting them | multi-session tasks |
+| 3 | Explicit reasoning | **Δ verified = 0** (1.5/13 vs 1.5/13) over four official batteries · ~787K vs ~652K tokens · **1.9× wall** · **0/3 on L5 in three configurations** | reasoning does not buy arithmetic; and placement dominates quantity (worker-only 4/20 vs everyone 1/20) | non-coding domains · and the never-measured cell (§8) |
+| 4 | In-loop finish gate | L5 **18/20 vs 16/20**, **p = 0.66** · L7 **11/20 vs 11/20**, **p = 1.00** · **+15% wall** | the pathology was real (40% of attempts) but **retry was already paying for it**: a defence redundant with an existing component | large coding tasks, where a wasted attempt costs 100K+ tokens instead of 25 s |
+
+**What unites the first three:** everything switched off is "intelligent" — planning, compiling
+plans, reasoning, self-supervision. Everything switched on in §0.1 is mechanical — searching,
+verifying, retrying, refusing the incoherent.
+**The fourth teaches something else:** a *frequent* pathology is not automatically a *costly*
+one. Before building a defence, measure who is already paying for the problem.
+
+### 0.3 Uncertain: decisions taken but not settled
+
+| # | Item | Evidence | Missing | Risk if wrong |
+|---|---|---|---|---|
+| 1 | Refusals that declare world state | mechanism **observed**: recoveries from **2 of 4** to **4 of 4**; cause certain (`edit_file` on a never-created file, twice in one run) | never isolated in its own A/B — row 9 of §0.1 was measured with both fixes together | low: costless, but part of the guard's credit may belong here |
+| 2 | The calculator's place in the catalogue | **switched on without proof** — the only such case: invoked ~40% of the time, often never in winning runs; ablation showed no difference **but at n=5** | an n=20 A/B, and only *after* the argument-error fix: 40% of its calls fail at the interface, so judging it now would condemn the implementation | medium: it consumes prompt tokens every step for a service the coherence gate may already provide |
+| 3 | All ladder numbers | GPU profile, not the capped reference CPU profile | the official CPU campaign | medium: direction solid, magnitude not (95% CI on 18/20 is **70–97%**) |
+| 4 | L7 = 11/20 | measured at n=20 | attribution: it is the sum of five fixes, none isolated | low on the number, high on its interpretation |
+| 5 | The reasoning verdict on L5 | 0/3 in three configurations | full reasoning budget **and** full material — never tested together (§8) | **high**: if it passed, the verdict becomes one about *hardware* ("reasoning pays and does not fit in 8192"), redirecting the context-optimization phase |
+| 6 | Reasoning × workflow (block B4) | the pre-fix block was **discarded** as non-comparable | re-measurement | medium: half the 2×2 matrix on the ladder is empty |
+| 7 | Syntax gate, no-op-edit guard, near-name tool hints | validated by pilots (13 of 43 runs squandered steps on invented tool names; 15 consecutive no-op edits observed) | never passed through the ladder with ablated arms | low: documented pathologies, zero cost |
 
 ---
 
@@ -429,13 +501,130 @@ Three conclusions, of differing strength:
    completion claims in 5 runs**. With verification active, the honesty gap has been non-zero
    exactly once in more than 550 instrumented runs, and that once was diagnosed and closed the
    same day.
-3. **The calculator's attribution is currently weak** (2/5 vs 1/5, within the noise band) — and
-   the artifact-level diagnosis explains why: across 43 analysed runs, **only 7 invoked the
+3. **The calculator's attribution is weak** (2/5 vs 1/5, within the noise band) — and the
+   artifact-level diagnosis explains why: across 43 analysed runs, **only 7 invoked the
    calculator at all**. Ablating a tool the model does not call cannot change outcomes. The
    same analysis found 13 of 43 runs squandering half their step budget calling non-existent
-   tools with placeholder names. Both defects are of the workflow, not the model: the tool was
-   available but its use was not mandated, and the unknown-tool error was not actionable. Both
-   have been corrected and are under re-measurement at the time of writing.
+   tools with placeholder names. Both defects are of the workflow, not the model. §5.9 follows
+   this thread to its conclusion.
+
+---
+
+### 5.9 Instruction is not a control surface
+
+This section reports the campaign that followed from the weakest attribution above, and which
+produced both the strongest single result in the project and its most instructive null result.
+
+#### 5.9.1 Three levels of textual persuasion, measured
+
+L5 asks for five facts plus their sum, over the same corpus as L4 — which the naked model
+solves 3/3. The delta between the two rungs is exactly one addition. The model retrieves 5 of
+5 facts and mis-sums them, with units and tens correct and hundreds wrong: dropped carry
+propagation. A deterministic calculator was available throughout. We escalated textual
+persuasion in three measured steps:
+
+| Persuasion level | Tool actually invoked | L5 verified |
+|---|---|---|
+| tool present, no rule | 7/43 runs (16%) | 2/5 |
+| + numbered rule in the role card, carrying the measured rationale | ~40% | 2/5 |
+| + full tool name + description marked **MANDATORY** | 40% | 2/5 |
+
+**Sixty per cent of runs continued to compute mentally, and the score never moved.** Ablating
+the tool changed nothing either — one cannot ablate what is never called.
+
+#### 5.9.2 Removing the operation from the model's hands
+
+If instruction does not produce compliance, the operation must be made *unrepresentable*. A
+total is not meaning: it is **identity derived** from values the model itself wrote, and
+identity belongs to the control plane (§3.3). We therefore extended the project's
+"make-it-impossible" principle — previously applied only to *syntax* — to **content**: before
+any text artifact reaches disk, a declared total is checked against the values declared
+alongside it; if incoherent, the write is **refused** and the correct figure is returned in the
+error.
+
+The gate is deliberately conservative — text files only, never code or configuration; the total
+must be the final numeric assignment; at least two addends; exactly one total — because a false
+positive blocks legitimate work, which is far worse than a missed catch. Critically, **it is not
+an oracle over the task**: it sums what the model wrote, not what is true, so wrong facts still
+yield a wrong total. Internal coherence, not correctness. **The prompt was not modified**, so
+the delta is attributable to the mechanism alone.
+
+| Arm (20 runs each) | L5 verified | Wall |
+|---|---|---|
+| coherence gate active | **18/20 (90%)** | 500 s |
+| gate ablated | **9/20 (45%)** | 797 s |
+
+**45 points, Fisher exact two-sided p = 0.0057**, and the gated arm is **37% faster** — refusing
+before the write costs one rewrite, whereas an incoherent artifact costs a failed verification
+plus a restart of retrieval. This is a rung the naked model does not pass in *any*
+configuration (0/3 with and without reasoning): the 90% is entirely the scaffolding's.
+
+The sharpest detail: in the passing runs the model frequently **never invokes the calculator at
+all**. The total is correct because the control plane refuses the incoherence and hands back the
+figure; transcription is all that remains to the model.
+
+#### 5.9.3 A methodological failure, reported
+
+The first blocks of this A/B were run at n=5 and produced, **on functionally identical code**,
+9/20-equivalent results of **1/5 and then 5/5**; the treated arm gave 2/5, 3/5, 5/5 across
+successive builds. An attribution was written on that basis and had to be retracted. The cause
+is that this model's behaviour swings in *whole blocks* — the calculator went unused across five
+consecutive runs and was then used continuously across the next five — so the effective variance
+is far wider than the hardware noise band of §4.3. The resulting standing rule: **no conclusion
+from this ladder below 20 runs per arm, reported with an exact test rather than an impression.**
+
+#### 5.9.4 The null result: an in-loop finish gate
+
+Reading complete step-level logs rather than scores exposed a second pathology: in **31 of 78
+attempts (40%)** the executor declared the subtask *done* having called no write tool at all.
+In one attempt it located all five facts, computed the sum correctly through the calculator
+step by step, and then finished — with no file on disk. The system already reports this: the
+judge's `answer file missing` is propagated into the next attempt's failure block. The model
+reads it and repeats. This is the **third independent confirmation** that instruction does not
+produce compliance; the role card has forbidden exactly this behaviour since the first phase.
+
+We therefore built the structurally analogous defence: before the executor loop may return
+*done*, the promised artifact is checked, and — where the attempt mutated nothing and the
+oracle is red — the finish is refused and becomes one more step, with the context still warm.
+
+| Rung (20 runs per arm) | gate active | gate off | Fisher exact |
+|---|---|---|---|
+| L5 | 18/20 · 725 s | 16/20 · 633 s | **p = 0.66** |
+| L7 | 11/20 · 629 s | 11/20 · 623 s | **p = 1.00** |
+
+**No effect on either rung, at a 15% wall-clock cost.** The explanation is the finding:
+**the retry loop was already paying for the phantom finish** — external verification catches it
+and the following attempt usually writes the file. We had found a real pathology that the
+architecture already tolerated, and built a defence redundant with an existing component. The
+gate ships switched off, under the same treatment as the two rejected planning architectures.
+
+The generalizable lesson is one we expect to need again: **a frequent pathology is not
+automatically a costly one. Before building a defence, measure which component is already
+paying for the problem.**
+
+#### 5.9.5 Where the hardest rung actually dies
+
+The same A/B answered a question open since the ladder was built. L7 — 400 documents, 25K
+tokens, three times the context window, eight facts plus a sum — was assumed to fail on step
+budget or on discipline. It fails on **neither**. Across 92 attempts the executor uses **8.5
+steps on average and at most 18** of 60 available; not one exhausts its step budget. Attempts
+die because the append-only chain of step results overflows the context window: a single search
+result over 400 documents can occupy ~1,500 tokens, and five or six saturate 8,192.
+
+L7 is therefore a **capacity** problem, not a cognition or compliance problem — which locates it
+precisely in the context-and-cache work programme, now motivated by a measurement rather than an
+intuition. The candidate levers (narrower results, compaction of older results, offloading found
+facts to a scratch artifact) are in tension with the append-only KV reuse of §5.1 — 65 tokens
+against 7,971 — and that trade-off must be measured, not assumed.
+
+A secondary but notable figure: with the current code L7 passes **11/20**, against red in every
+previously measured arm and 0/3 naked. The credit belongs to the accumulated fixes, not to the
+finish gate, which was identical in both arms.
+
+*(Method note, reported because it changed the conclusion: an initial automated classification
+read these deaths as "step budget exhausted" — the pattern matched the phrase "exceeds budget"
+in a context-overflow message. The correct diagnosis came from reading the failure reasons in
+full rather than counting them.)*
 
 ---
 
@@ -485,15 +674,44 @@ reasoning in this regime; this is consistent with the tool-verification literatu
 the finding that small models' self-directed reasoning does not reliably improve their own
 correctness [4].
 
+### 6.4-bis Errors must state the world, not only the fault
+
+A defect found while measuring the coherence gate generalizes beyond it. When a write was
+refused, half the runs failed to recover — not because they could not fix the number, but
+because **nothing told them the file did not exist**. One called an edit tool on a
+never-created file, twice; another proceeded to verify an artifact it had never written. The
+model treated a refusal as a success and reasoned about a world that did not exist.
+
+Making every refusal declare the resulting disk state took recoveries from 2 of 4 to 4 of 4.
+We propose the general form: **an error that reports what was wrong but not how the world was
+left leaves the model reasoning about a state that does not exist.** This holds for every gate
+that refuses an action, and we had shipped the same trap in the syntax gate since the first
+phase without noticing it.
+
+### 6.4-ter The bound on the make-it-impossible principle
+
+§5.9.4 is, to our knowledge, the more useful half of that section. Having twice converted a
+measured pathology into a structural defence with good results, we applied the same reasoning
+to a third — a pathology present in 40% of attempts — and obtained nothing at all, at a
+measurable cost.
+
+The principle therefore has a precondition we had not articulated: **a defence pays only where
+nothing is already absorbing the failure.** The phantom finish was frequent, real, and fully
+paid for by the retry loop; the arithmetic incoherence was equally frequent and paid for by
+nobody, because it produced a *plausible artifact* that only an oracle could reject. Frequency
+predicts neither cost nor opportunity. The operative question before building is not "how often
+does this happen" but "what currently happens when it does".
+
 ### 6.5 On negative results
 
-This project has now rejected two planning architectures and one reasoning configuration by
-its own pre-registered rules. We consider these the most valuable outputs to date, for two
-reasons. First, they are the rarest artifact in the field: published, quantified,
-architecture-level negative results on small-model agents. Second, they redirected effort
-precisely — the failure of in-loop planning identified missing gates rather than a weak
-proposer, and the failure of reasoning identified placement rather than quantity as the
-governing variable.
+This project has now rejected two planning architectures, one reasoning configuration, and one
+of its own structural defences by pre-registered rules. We consider these the most valuable
+outputs to date, for two reasons. First, they are the rarest artifact in the field: published,
+quantified, architecture-level negative results on small-model agents. Second, they redirected
+effort precisely — the failure of in-loop planning identified missing gates rather than a weak
+proposer, the failure of reasoning identified placement rather than quantity as the governing
+variable, and the failure of the finish gate identified the precondition of §6.4-ter, which we
+expect to save more construction effort than the gate would ever have saved runs.
 
 ---
 
@@ -504,9 +722,13 @@ pinned inference build. Several calibrated tolerances (retry thresholds, step bu
 formatting heuristics) are plausibly overfitted to this configuration and require re-validation
 on any change of model or runtime.
 
-**Non-determinism.** Neither environment is fully reproducible (§4.3). Verdicts drawn from
-small numbers of runs are stated with their bands; several ladder attributions currently rest
-on 5 runs per arm and are explicitly labelled as family classification rather than rates.
+**Non-determinism, and a demonstrated failure to respect it.** Neither environment is fully
+reproducible (§4.3). Worse, the effective variance exceeds the hardware noise band: the model's
+behaviour swings in *whole blocks*, and we observed the same configuration produce 1/5 and then
+5/5 on functionally identical code (§5.9.3). One attribution was published internally on that
+basis and retracted. Verdicts here are therefore drawn at 20 runs per arm with an exact test;
+rows still resting on 5 runs are labelled as family classification rather than rates, and
+should be read as hypotheses.
 
 **Synthetic tasks.** All batteries to date are synthetic and small — 2 to 15 file repositories
 and generated document corpora. The behaviour of the system on a real codebase with genuine
@@ -518,10 +740,13 @@ invalidates them. We mitigate by asserting judge satisfiability against referenc
 implementations in the automated test suite, but the risk of subtly mis-specified tasks
 remains.
 
-**Benchmark artifacts.** The ladder's first generation contained a formatting artifact that
-selectively disadvantaged the treatment arm (§4.4). It was detected only through
-artifact-level failure analysis. We assume, on the base rate demonstrated by this single
-discovery, that further such artifacts may exist.
+**Benchmark artifacts — two found, both by reading artifacts rather than scores.** The ladder's
+first generation contained a formatting artifact that selectively disadvantaged the treatment
+arm (§4.4). Separately, its judge printed the expected value alongside the observed one, so any
+run that consulted the checker was handed the answer: for a period, that rung measured the
+reading of an error message rather than retrieval and aggregation. Neither defect was visible
+in any score. On the base rate demonstrated by these two discoveries, we assume that further
+such artifacts exist.
 
 **Absence of public benchmarks.** All numbers here are internally comparable but externally
 unanchored. Public benchmark runs are planned specifically to place the system on scales
@@ -535,12 +760,26 @@ The system does not yet convert multi-session software-engineering tasks: both a
 on the three tasks designed to exceed a single executor session, with or without the plan
 compiler, with or without reasoning. This is the project's principal open failure.
 
-Planned work, in order: (i) adaptive routing by task size, using the measured fact that
-micro-tasks must **not** be planned; (ii) re-measurement of both rejected verdicts with routing
-active and on non-coding domains, since both were measured on synthetic coding only;
-(iii) selective reasoning, invoked only after a proof has already failed, where the grid
-indicates the benefit concentrates and the cost collapses; (iv) public benchmark runs; and
-(v) the real-codebase examination.
+**One experimental cell has never been measured, and it determines the nature of a verdict.**
+The reasoning arm has been tested with a full budget but reduced material, and with full
+material but a *crippled* 256-token budget. Neither answers the question, and the second cannot:
+a null result at 256 tokens does not distinguish "reasoning does not help" from "256 tokens are
+not enough to reason". Full budget with full material requires a context window beyond the
+platform's measured ceiling. We will run it on the development profile, where the cost is
+affordable, using a controlled rung whose material fits comfortably in both arms. The two
+outcomes differ in kind: continued failure makes the reasoning verdict final on this axis;
+success reclassifies it from *"reasoning does not pay"* to **"reasoning pays and does not fit in
+8,192 tokens"** — a verdict about hardware, not about the model, which would redirect the
+context-optimization programme.
+
+Planned work, in order: (i) the missing reasoning cell above; (ii) an actionable
+argument-error contract at the tool router, followed by a properly powered re-judgement of the
+calculator itself — currently the only component enabled without evidence in a system where
+everything else was decided by measurement; (iii) context and cache work, now motivated from
+below by §5.9.5 rather than by intuition; (iv) adaptive routing by task size, using the measured
+fact that micro-tasks must **not** be planned; (v) re-measurement of all rejected verdicts with
+routing active and on non-coding domains, since all were measured on synthetic coding only;
+(vi) public benchmark runs; and (vii) the real-codebase examination.
 
 ---
 
@@ -559,6 +798,16 @@ model already suffices, the system adds autonomy, safety and honesty at substant
 cost, and no capability. Where the naked model fails for reasons of breadth, selective
 retrieval converts — and the ablation isolates it as the responsible component. Where the task
 requires genuine multi-session decomposition, nothing we have built converts, yet.
+
+**The mechanism of conversion is not persuasion.** Across three independent lines of evidence,
+telling this model to do something did not make it do it — including when the instruction was
+mandatory, carried its own measured rationale, and was repeated in the failure message of the
+preceding attempt. What converts is removing the possibility of the error: a write-time
+coherence gate takes the aggregation rung from 9/20 to 18/20 (p = 0.0057) while running 37%
+faster, on runs where the model typically never performs the arithmetic at all. The model
+creates meaning; the control plane creates identity — and a total, being derived, is identity.
+The same principle, applied without checking what already absorbed the failure, produced
+nothing at all (p = 0.66); we regard that bound as the more transferable half of the result.
 
 **And one contribution is categorically different from the others.** Deterministic
 verification does not raise the success rate; it makes the system's statements about itself

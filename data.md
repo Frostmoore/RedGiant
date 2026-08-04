@@ -471,8 +471,9 @@ progetto**, ed entrambe sono spiegate:
 | PS6 + PS6-bis + dry-run (ufficiali e non) | ~100 | 13 task × più bracci |
 | Thinking (TH1 griglia + TH2) | ~192 | 7 bracci × 20 + 4 batterie da 13 |
 | F3-bis + probe nudo | 12 | |
-| Ladder (B1, B3, B2 pre/post fix) | ~90 | in crescita |
-| **Totale strumentato** | **oltre 550** | |
+| Ladder (B1, B3, B2 pre/post fix) | ~90 | |
+| Ladder — A/B a n=20 (coerenza L5, gate sul finish L5 e L7) + blocchi a n=5 | ~150 | §7.6, §7.7 |
+| **Totale strumentato** | **oltre 700** | |
 
 ---
 
