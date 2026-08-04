@@ -2239,6 +2239,31 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   recupero largo, **OFF** per il coding.* TH2 e LAD.11 non sono contraddetti — misuravano
   compiti diversi.
 
+- [ ] **F5.6b** 🔎 **Il test della SINTESI: `card-min` + pensiero.**
+
+  **Perché è il test più interessante che abbiamo.** Tre misure indipendenti hanno mostrato la
+  stessa variabile — *cercare invece di leggere*: ablare `search_code` (0/5 ovunque), ridurre la
+  card (L7 1/20, 440 letture contro 169 ricerche), aggiungere il pensiero (L7 20/20, 168
+  ricerche contro 5 letture). La sintesi dice che è **una sola variabile con più leve**.
+
+  **PREVISIONE REGISTRATA PRIMA DI MISURARE.** Se la sintesi regge, il pensiero deve
+  **recuperare** il crollo della card ridotta: L7 con `card-min` fa **1/20**, con
+  `card-min+think` deve **risalire nettamente**.
+  - **Risale** → le leve sono intercambiabili sulla stessa variabile. Diventa anche una scelta
+    di progetto: si può *pagare in ragionamento* invece che in token di prompt.
+  - **Resta a 1/20** → la card fa qualcosa che il pensiero non sa fare, e **la sintesi è troppo
+    semplice**: ci sono due variabili, non una.
+
+  **Sensibilità:** 20 run, base 1/20 contro un'ipotetica risalita — con una differenza così
+  grande il campione è ampiamente sufficiente; se l'esito fosse intermedio (es. 8/20) servirebbe
+  più potenza per distinguerlo sia da 1 sia da 20, e andrà detto.
+
+  ⚠️ **Nota di metodo:** è il terzo esperimento di fila con previsione registrata, e le prime due
+  sono andate **male** (LAD.11 e F5.6a). Il valore della registrazione non è indovinare: è
+  impedirsi di riscrivere l'ipotesi dopo aver visto i numeri.
+
+  Comando: `python bench/ladder/run_agentic.py dev-fast T057 "card-min+think" 20`
+
 - [ ] **F5.0-quater** 🔎 **Bisezione della card: QUALE pezzo orienta la ricerca?**
   Si rimettono i gruppi di regole **uno alla volta** e si guarda quando L7 risale. Ordine
   suggerito dalla diagnosi (dal più sospetto): (1) la regola *"one action per step / never

@@ -38,6 +38,11 @@ ARMS = {
     "-coherence": {"RG_WORKER_ABLATE": "coherence"},  # la guardia F4 sull'aritmetica
     "-compact": {"RG_WORKER_ABLATE": "compact"},     # F5.0-bis: catena volatile
     "card-min": {"RG_WORKER_CARD": "minimal"},       # F5.0-ter: card ridotta
+    # F5.6b — il braccio che mette alla prova la SINTESI: se "cercare invece di
+    # leggere" e' una sola variabile con piu' leve, il pensiero deve recuperare
+    # il crollo della card ridotta (L7: 1/20 -> ?)
+    "card-min+think": {"RG_WORKER_CARD": "minimal",
+                       "RG_THINKING_ROLES": "worker"},
     "+calc": {"RG_CALCULATOR": "1"},                 # LAD.13: spenta di default
     "+finishgate": {"RG_FINISH_GATE": "1"},          # LAD.9: spento di default
     "think": {"RG_THINKING_ROLES": "worker"},        # B4: percorso diretto = Giano
