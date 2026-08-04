@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
   gen_ms        REAL NOT NULL,
   outcome       TEXT NOT NULL CHECK (outcome IN ('ok','timeout','error','invalid')),
   thinking_tokens INTEGER NOT NULL DEFAULT 0,
-  thinking_ms     REAL NOT NULL DEFAULT 0
+  thinking_ms     REAL NOT NULL DEFAULT 0,
+  sections        TEXT            -- F5.0: {sezione: token} JSON, NULL = non rilevato
 );
 CREATE TABLE IF NOT EXISTS tool_calls (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -207,7 +208,9 @@ class StateStore:
             for ddl in ("ALTER TABLE llm_calls ADD COLUMN thinking_tokens"
                         " INTEGER NOT NULL DEFAULT 0",
                         "ALTER TABLE llm_calls ADD COLUMN thinking_ms"
-                        " REAL NOT NULL DEFAULT 0"):
+                        " REAL NOT NULL DEFAULT 0",
+                        # F5.0 — stessa migrazione additiva idempotente
+                        "ALTER TABLE llm_calls ADD COLUMN sections TEXT"):
                 try:
                     conn.execute(ddl)
                 except sqlite3.OperationalError:
@@ -448,12 +451,13 @@ class StateStore:
             c.execute(
                 "INSERT INTO llm_calls (task_id, subtask_id, role, schema_name, t_start,"
                 " prompt_tokens, cached_tokens, gen_tokens, prefill_ms, gen_ms, outcome,"
-                " thinking_tokens, thinking_ms)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " thinking_tokens, thinking_ms, sections)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (task_id, row.subtask_id, row.role, row.schema_name, row.t_start,
                  row.prompt_tokens, row.cached_tokens, row.gen_tokens,
                  row.prefill_ms, row.gen_ms, row.outcome,
-                 row.thinking_tokens, row.thinking_ms))
+                 row.thinking_tokens, row.thinking_ms,
+                 json.dumps(row.sections, sort_keys=True) if row.sections else None))
 
     def log_tool_call(self, task_id: str, row: ToolCallRow) -> None:
         with self._conn() as c:

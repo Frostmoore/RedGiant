@@ -88,6 +88,13 @@ class LlamaClient:
         chiamata strutturata di sempre. `parts` non viene MAI mutato (TH-D2):
         i prompt arricchiti nascono e muoiono qui dentro."""
         prompt = parts.render()
+        # F5.0 — la composizione del prompt si rileva SEMPRE, non solo quando
+        # esplode. LAD.8 aveva mostrato CHE la finestra si riempie; per sapere
+        # quale leva costruire serve sapere DI COSA. Costo misurato sul nostro
+        # server: 0,5-6,3 ms per sezione contro step da 1-3 s (~0,5%), quindi
+        # niente flag: un dato che serve solo se c'e' sempre non si mette
+        # dietro un interruttore che qualcuno dimentichera' di accendere.
+        sections = parts.section_tokens(self.count_tokens)
         think_text, think_tok, think_ms = "", 0, 0.0
         if think:
             if not self.cfg.think_close:
@@ -100,7 +107,7 @@ class LlamaClient:
             room = self.cfg.ctx_size - n_base - max_tokens - 64
             if room <= 0:
                 raise ContextOverflow(n_base + max_tokens, self.cfg.ctx_size,
-                                      parts.section_tokens(self.count_tokens))
+                                      sections)   # gia' rilevate sopra
             think = min(think, room)
             p1 = {"prompt": prompt + self.cfg.think_open, "n_predict": think,
                   "temperature": (self.cfg.temperature if temperature is None
@@ -112,11 +119,11 @@ class LlamaClient:
                 r1 = self._post_with_transport_retry("/completion", p1)
             except httpx.TimeoutException as e:
                 self._log(task_id, role, subtask_id, schema, t1_start, 0,
-                          "timeout")
+                          "timeout", sections=sections)
                 raise LlmTimeout(str(e)) from e
             except httpx.HTTPError as e:
                 self._log(task_id, role, subtask_id, schema, t1_start, 0,
-                          "error")
+                          "error", sections=sections)
                 raise LlmError(str(e)) from e
             think_text = r1.get("content", "")
             t1 = r1.get("timings", {})
@@ -126,8 +133,7 @@ class LlamaClient:
                       + self.cfg.think_close + "\n")
         n_prompt = self.count_tokens(prompt)
         if n_prompt + max_tokens > self.cfg.ctx_size:
-            raise ContextOverflow(n_prompt, self.cfg.ctx_size,
-                                  parts.section_tokens(self.count_tokens))
+            raise ContextOverflow(n_prompt, self.cfg.ctx_size, sections)
 
         payload: dict = {
             "prompt": prompt,
@@ -147,10 +153,10 @@ class LlamaClient:
         try:
             res = self._post_with_transport_retry("/completion", payload)
         except httpx.TimeoutException as e:
-            self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "timeout")
+            self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "timeout", sections=sections)
             raise LlmTimeout(str(e)) from e
         except httpx.HTTPError as e:
-            self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "error")
+            self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "error", sections=sections)
             raise LlmError(str(e)) from e
 
         timings = res.get("timings", {})
@@ -166,7 +172,7 @@ class LlamaClient:
             thinking_text=think_text)
 
         if res.get("stop_type") == "limit" or res.get("stopped_limit"):
-            self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "error", result)
+            self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "error", result, sections)
             raise LlmTruncated(
                 f"generation hit n_predict={max_tokens} (role={role}); "
                 f"raise the role budget or shrink the ask")
@@ -176,12 +182,12 @@ class LlamaClient:
                 result.parsed = schema.model_validate_json(result.text)
             except ValidationError as e:
                 # Con D3 attivo non deve succedere MAI: bug di piattaforma, non si riprova.
-                self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "invalid", result)
+                self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "invalid", result, sections)
                 raise LlmInvalidOutput(
                     f"guided decoding produced schema-invalid output for {schema.__name__}: "
                     f"{e.errors()[:3]!r}") from e
 
-        self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "ok", result)
+        self._log(task_id, role, subtask_id, schema, t_start, n_prompt, "ok", result, sections)
         return result
 
     def count_tokens(self, text: str) -> int:
@@ -217,10 +223,12 @@ class LlamaClient:
 
     def _log(self, task_id: str | None, role: str, subtask_id: str | None,
              schema: type[BaseModel] | None, t_start: str, n_prompt: int,
-             outcome: str, result: LlmResult | None = None) -> None:
+             outcome: str, result: LlmResult | None = None,
+             sections: dict[str, int] | None = None) -> None:
         if self.store is None or task_id is None:
             return
         self.store.log_llm_call(task_id, LlmCallRow(
+            sections=sections,
             role=role, subtask_id=subtask_id,
             schema_name=schema.__name__ if schema else None,
             t_start=t_start, prompt_tokens=n_prompt,

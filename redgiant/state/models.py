@@ -87,6 +87,11 @@ class LlmCallRow(_Strict):
     # TH0: token/ms del canale di pensiero (0 per le chiamate senza thinking)
     thinking_tokens: int = 0
     thinking_ms: float = 0.0
+    # F5.0: composizione del prompt sezione per sezione (S1-S7), token.
+    # Sapere CHE la finestra si riempie non basta: serve sapere DI COSA, e su
+    # ogni chiamata — non solo quando esplode. Costo misurato: 0,5-6,3 ms per
+    # sezione contro step da 1-3 s (~0,5%).
+    sections: dict[str, int] | None = None
 
 
 class ToolCallRow(_Strict):
