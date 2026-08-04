@@ -96,7 +96,7 @@ tasks). None was closed by opinion.*
 |---|---|---|---|---|
 | 1 | In-loop planner | **2/10 vs 9/10** static baseline · 815K vs 710K tokens · ~10× LLM calls | on small tasks, planning costs more than it returns: the plan becomes one more thing that can be wrong | routing active |
 | 2 | Plan compiler | **2/13 vs 6/13**, and **2/13 vs 8/13** on re-measurement · −44% tokens, +9.4 points of useful tokens, no additional greens | the gates move deaths *deeper* (from 0 tool calls to 20–38 at 80–93% useful tokens) without converting them | multi-session tasks |
-| 3 | Explicit reasoning **on synthetic coding** | **Δ verified = 0** (1.5/13 vs 1.5/13) over four official batteries · ~787K vs ~652K tokens · **1.9× wall** | no conversion in that domain; and placement dominates quantity (worker-only 4/20 vs everyone 1/20) | non-coding domains, with routing active |
+| 3 | Explicit reasoning **inside the workflow** | Δ = 0 over four coding batteries · and on the ladder **43/60 vs 47/60**, **p = 0.528**, at **+55% wall** | **the workflow and reasoning resolve the same bottleneck — whichever arrives first takes all.** Alone, reasoning does the arithmetic (row 11); above a coherence gate that has already closed it, it adds nothing. Substitutes, not complements | on the hardest rung, if the context phase lifts the capacity ceiling — the one place neither covers the bottleneck |
 | ~~4~~ | ~~Explicit reasoning on arithmetic~~ | ⛔ **RETRACTED 2026-08-04** — see §0.1 row 11 and §6.4: all three prior measurements were confounded | — | — |
 | 4 | In-loop finish gate | L5 **18/20 vs 16/20**, **p = 0.66** · L7 **11/20 vs 11/20**, **p = 1.00** · **+15% wall** | ⚠️ **not shown useless — underpowered** (corrected 2026-08-04): ten points require ~200 runs/arm. The original explanation ("retry already pays") was falsified: all seven failing runs of a later campaign failed by phantom finish in all three attempts | an A/B sized for the effect · and large coding tasks |
 
@@ -115,6 +115,7 @@ one. Before building a defence, measure who is already paying for the problem.
 | 3 | All ladder numbers | GPU profile, not the capped reference CPU profile | the official CPU campaign | medium: direction solid, magnitude not (95% CI on 18/20 is **70–97%**) |
 | 4 | L7 = 11/20 | measured at n=20 | attribution: it is the sum of five fixes, none isolated | low on the number, high on its interpretation |
 | ~~5~~ | ~~The reasoning verdict on arithmetic~~ | ✅ **RESOLVED 2026-08-04, and it was wrong** (§6.4): 20/20 against 0/20 at full budget and full material. The risk we had labelled "high" materialized exactly as pre-registered | confirmation on the reference CPU profile | — |
+| ~~6~~ | ~~Reasoning × workflow (block B4)~~ | ✅ **CLOSED 2026-08-04** (§6.4-quater): both blocks re-measured on the **same commit**, 20 runs per rung. The ladder's 2×2 matrix is complete | the ablated arms of B4 | — |
 | 6 | Reasoning × workflow (block B4) | the pre-fix block was **discarded** as non-comparable | re-measurement | medium: half the 2×2 matrix on the ladder is empty |
 | 7 | Syntax gate, no-op-edit guard, near-name tool hints | validated by pilots (13 of 43 runs squandered steps on invented tool names; 15 consecutive no-op edits observed) | never passed through the ladder with ablated arms | low: documented pathologies, zero cost |
 | 8 | **Is the finish gate actually useless?** | ⚠️ its A/B was **underpowered** (§5.9.4): 18/20 against 16/20, and ten points need ~200 runs/arm. Mechanistic evidence now *favours* it — it targets 100% of residual failures on the rung the system wins | an A/B sized for the effect | **medium**: a component worth perhaps ten points on the won rung is currently switched off |
@@ -776,6 +777,43 @@ intervention that acts on the cost of failing is invisible to a frequency metric
 The operative question before building a defence therefore remains worth asking — *what
 currently happens when this occurs?* — but its answer must come from logs, not from the
 assumption that some other component is coping.
+
+### 6.4-quater Reasoning and scaffolding are substitutes, not complements
+
+The four-block matrix exists to answer one question no single arm can pose: *does reasoning
+substitute for a missing component?* With both workflow blocks now measured on the same commit,
+twenty runs per rung, it has an answer with two faces.
+
+| Comparison | Effect of reasoning |
+|---|---|
+| **B3 − B1** — naked model, controlled rung | **0/20 → 20/20**, p = 1.45 × 10⁻¹¹ |
+| **B4 − B2** — inside the workflow | 43/60 vs 47/60, **p = 0.528**, at **+55% wall** |
+
+Per rung the signs alternate (−3, +3, +4) with p-values identical to three decimals: noise about
+zero. **Reasoning inside the workflow does not pay.**
+
+Read together, the two rows say something more useful than either alone: **the scaffolding and
+the reasoning resolve the same bottleneck, and whichever arrives first takes all.** Unaided,
+reasoning performs the arithmetic the naked model cannot. Above a coherence gate that has
+already made incoherent arithmetic unrepresentable — zero incorrect artifacts in forty runs —
+it has nothing left to contribute. This turns the earlier reasoning verdict from a bare number
+into an explanation: reasoning is not useless in general, it is useless *on top of scaffolding
+that already covers its contribution*.
+
+**A prediction we registered before measuring, and got wrong.** We predicted that on the
+hardest rung — which dies of context exhaustion — reasoning would make matters *worse* by
+consuming 1,536 tokens of an already-saturated window. It scored 12/20 against 8/20, nominally
+the reverse. The prediction rested on a wrong model of where the reasoning budget is spent: the
+two-call protocol discards the reasoning trace and never appends it to the durable chain, so its
+cost is **per call, not cumulative** — the context that overflows is composed of tool results,
+identical with or without it. Measurements confirm the trace closes naturally well below its
+fuse and does not compress as the prompt grows. An architectural decision taken for chain purity
+turns out to protect against a failure mode identified months later.
+
+The one caveat worth stating: on that hardest rung both arms remain far from ceiling (95% CIs
+22–61% and 39–78%, heavily overlapping), and it is the only rung whose bottleneck — capacity —
+is covered by *neither*. If the context phase lifts that ceiling, this comparison must be
+repeated there; it is the one place where the two might stop being substitutes.
 
 ### 6.5 On negative results
 

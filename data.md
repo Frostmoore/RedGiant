@@ -48,7 +48,7 @@ domini non-coding, task larghi). Nessuna è stata chiusa per opinione.*
 |---|---|---|---|---|
 | 1 | **Planner in-loop** (D11) | **2/10 contro 9/10** (baseline statica) · 815K contro 710K token · ~10× chiamate LLM | su task piccoli pianificare **costa più di quanto renda**: il piano diventa un'altra cosa che può sbagliare | col router attivo, F6 |
 | 2 | **Plan compiler** (PS-D9) | **2/13 contro 6/13**, e **2/13 contro 8/13** nella ri-misura · −44% token e +9,4 punti di token utili, ma i verdi non salgono | i gate spostano le morti **in profondità** (da 0 tool call a 20–38 con 80–93% di token utili) senza convertirle in verdi | task larghi multi-sessione, F6 |
-| 3 | **Thinking mode sul coding** (TH2) | **Δ verificati = 0** (1,5/13 contro 1,5/13) su 4 batterie ufficiali · **~787K contro ~652K token**, **1,9× tempo** | sul coding sintetico non converte; e la sua collocazione conta più della quantità (TH1: solo-Giano 4/20, tutti 1/20) | domini everyday/matematica post-F6/F7 |
+| 3 | **Thinking DENTRO il workflow** (TH2 + LAD.11) | Δ = 0 su 4 batterie coding · e sulla ladder **43/60 contro 47/60**, **p = 0,528**, con **+55% di tempo** | **il workflow e il ragionamento risolvono lo stesso collo di bottiglia: chi arriva primo prende tutto.** Da solo il pensiero fa l'aritmetica (§0.1 riga 11); sopra la guardia di coerenza, che l'ha già chiusa, non aggiunge nulla | su L7, se F5 rimuove il tetto di capienza — è l'unico gradino dove il collo di bottiglia non è coperto da nessuno dei due |
 | ~~4~~ | ~~**Thinking sull'aritmetica**~~ | ⛔ **VERDETTO RIBALTATO il 2026-08-04** — v. §0.1 riga 11 e §7.8 | le tre prove precedenti erano confondute | — |
 | 5 | **Calcolatrice deterministica** (LAD.13) | `full` **16/20** contro `−calc` **17/20**, **Fisher p = 1,000** — e non per mancato uso: **27 chiamate riuscite** nel braccio completo | **la guardia di coerenza l'ha resa superflua**: due percorsi allo stesso esito, e quello deterministico non dipende da una scelta del modello | domini di F7 (matematica, everyday), dove la guardia non si applica |
 | ~~6~~ | ~~`bad_args` che insegna~~ | ✅ **SPOSTATA fra le dimostrate** — v. §0.1 riga 12: la metrica pre-registrata era quella sbagliata, l'effetto c'è ed è sulle **spirali** | — | — |
@@ -70,7 +70,7 @@ prima di costruire una difesa, misurare **chi sta già pagando** per il problema
 | 3 | **Tutti i numeri della ladder** | GPU `dev-fast`, non `severino-sim` | **LAD.7**: run ufficiale su CPU, 20 run per braccio | media: la direzione è solida, l'ampiezza no (IC 95% del 18/20: **70–97%**) |
 | 4 | **L7 = 11/20** | misurato a n=20 su GPU | attribuzione: è il cumulo di 5 fix, nessuno isolato | bassa sul numero, alta sull'interpretazione |
 | ~~5~~ | ~~Il verdetto TH3 su L5~~ | ✅ **RISOLTA il 2026-08-04, ed era sbagliata** (§7.8): il pensiero pieno con materiale intero fa **20/20 contro 0/20**. Il rischio che avevo dichiarato "alto" si è materializzato: è un verdetto sull'**hardware**, e F5 cambia obiettivo | resta da confermare su `severino-sim` | — |
-| 6 | **Buco nella matrice: B4** | il blocco pre-fix è stato **buttato** (codice non comparabile) | **LAD.11** | media: metà della matrice 2×2 sulla ladder è vuota |
+| ~~6~~ | ~~Buco nella matrice: B4~~ | ✅ **CHIUSO il 2026-08-04** (§7.10): B2 e B4 rimisurati sullo **stesso commit**, 20 run per gradino. La matrice 2×2 della ladder è completa | — | — |
 | 7 | **Syntax gate, `no_op_edit`, hint su `unknown_tool`** | validati da piloti e collaudi (es. 13 task su 43 sprecavano passi su nomi inventati; 15 edit no-op consecutivi osservati) | mai passati dalla ladder con bracci ablati | bassa: patologie documentate e costo nullo |
 
 ---
@@ -929,6 +929,69 @@ modello le spreca tutte allo stesso modo.
 calcolatrice **8 volte** su 20 run, ricevendo `unknown_tool`. Toglierla dalla card non lo
 dissuade del tutto — costa ~0,4 passi per run, e non cambia l'esito.
 
+## 7.10 LAD.11 — il blocco B4: il pensiero DENTRO il workflow
+
+*(2026-08-04, dev-fast, 20 run per gradino per braccio, **stesso commit per i due bracci**
+`@42ba6cc` — il B2 è stato rifatto apposta invece di riusare quello di LAD.9, che girava su
+codice precedente alla rimozione della calcolatrice e al fix di `bad_args`.)*
+
+### 7.10.1 La misura
+
+| Gradino | **B2** workflow | **B4** workflow + pensiero | Fisher bilaterale | Δ |
+|---|---|---|---|---|
+| L5 (5 fatti + somma) | **19/20** | 16/20 | p = 0,342 | **−3** |
+| L6 (200 documenti) | 16/20 | **19/20** | p = 0,342 | **+3** |
+| L7 (400 documenti) | 8/20 | **12/20** | p = 0,343 | **+4** |
+| **aggregato** | **43/60** | **47/60** | **p = 0,528** | +4 |
+| tempo totale | **1.794 s** | 2.772 s | — | **+55%** |
+
+**I segni si alternano e i p-value sono identici a tre cifre: è rumore attorno allo zero.**
+Il ragionamento dentro il workflow **non paga**, e costa il 55% di tempo in più.
+
+### 7.10.2 La previsione registrata era sbagliata — e il perché è interessante
+
+Avevo scritto nel piano, **prima di misurare**: *"su L7, che muore per capienza, il pensiero
+dovrebbe PEGGIORARE l'esito, perché sottrae 1536 token a un contesto già saturo"*. Risultato:
+**12/20 contro 8/20**, nominalmente il contrario.
+
+La previsione poggiava su un modello mentale sbagliato — che il budget di pensiero fosse
+sottratto al **contesto durevole**. Due misure lo smentiscono:
+
+1. **Il pensiero non si comprime al crescere del prompt** (137 → 452 token medi per fascia da
+   1K di prompt): si chiude naturalmente ben sotto il fusibile da 1536, coerente con TH0.
+2. **Il ragionamento non entra MAI nella catena append-only** — è il protocollo **TH-D2**,
+   adottato per tenere pulita la catena durevole. Viene generato e **scartato a ogni chiamata**.
+
+Quindi il costo del pensiero è **per chiamata, non cumulativo**: il contesto che sfonda su L7 è
+fatto di *risultati dei tool*, identici con o senza pensiero. **Una decisione architetturale
+presa per un motivo (purezza della catena) protegge da un fallimento identificato molto dopo.**
+
+### 7.10.3 Cosa risponde davvero questo blocco
+
+È la domanda per cui la matrice 2×2 esiste — *il ragionamento sostituisce un componente
+mancante?* — e ora ha una risposta a due facce:
+
+| Confronto | Effetto del pensiero |
+|---|---|
+| **B3 − B1** (modello nudo, gradino controllato) | **0/20 → 20/20**, p = 1,45×10⁻¹¹ (§7.8) |
+| **B4 − B2** (dentro il workflow) | **zero**, p = 0,528 |
+
+**Il workflow e il ragionamento risolvono lo stesso collo di bottiglia: chi arriva primo prende
+tutto.** Da solo, il pensiero fa l'aritmetica che il modello nudo non sa fare. Dentro il
+workflow non aggiunge nulla, perché la guardia di coerenza quell'aritmetica l'ha già chiusa
+(§7.9.4: zero artefatti sbagliati su 40 run). **Sono sostituti, non complementi.**
+
+Il che rafforza il verdetto TH2 dandogli una spiegazione: il thinking non è inutile in assoluto
+— è inutile *sopra un'impalcatura che copre già il suo contributo*.
+
+### 7.10.4 Riserva dichiarata
+
+L7 resta l'unico gradino dove entrambi i bracci sono lontani dal soffitto (8/20 e 12/20, IC 95%
+rispettivamente 22-61% e 39-78%: si sovrappongono ampiamente). È anche l'unico dove il
+collo di bottiglia — la capienza — **non è coperto da nessuno dei due**. Se F5 lo rimuove, il
+confronto B2/B4 su L7 va rifatto: potrebbe essere l'unico posto dove i due smettono di essere
+sostituti.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
@@ -939,7 +1002,8 @@ dissuade del tutto — costa ~0,4 passi per run, e non cambia l'esito.
 - [ ] Rimisurare la calcolatrice nei domini di F7 (matematica/everyday), dove la guardia di coerenza non si applica
 - [ ] Retest di LAD.9 sui task coding larghi T040–T042 (dove un tentativo sprecato costa 100K+ token)
 - [ ] **F5**: L7 muore per contesto pieno (§7.7.2) — la ladder ha motivato la fase dal basso
-- [ ] Ladder B4 post-fix (workflow + thinking, con le stesse ablazioni) — il blocco pre-fix è da buttare
+- [x] ~~Ladder B4 post-fix~~ — **fatto** (§7.10): B2 43/60 contro B4 47/60, p = 0,528, +55% tempo
+- [ ] B4 **con le ablazioni** (simmetria della matrice): finora solo il braccio `think` completo
 - [ ] **Ladder ufficiale su severino-sim**: B2 + B4 col codice fixato, run multiple → i numeri che andranno nel README
 - [ ] Diagnosi di L7 (perché 60 passi non bastano)
 - [x] ~~Disambiguazione del confondimento B3/L5 (budget di pensiero 256)~~ — fatta, §6.2 nota 1

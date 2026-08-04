@@ -1561,12 +1561,46 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   gonfia i *nostri* risultati va tolto di mezzo, non spiegato.
   Comandi: `python bench/ladder/run_naked.py dev-fast 20 T05` e lo stesso con `--think`.
   **Bloccante per LAD.7:** il run ufficiale non parte finché queste fondamenta non sono pulite.
-- [ ] **LAD.11** 🔎 **Rimisura di L6 e del blocco B4 (thinking) post-fix, su GPU.**
-  **Priorità salita dopo LAD.14** (se il pensiero paga da solo, cosa fa dentro il workflow?), e
-  con una **previsione falsificabile da registrare prima di misurare**: su **L7**, che muore per
-  capienza (LAD.8), il pensiero dovrebbe **PEGGIORARE** l'esito, perché sottrae 1536 token a un
-  contesto già saturo. Se si conferma, è la dimostrazione diretta della tesi della capacità e
-  un argomento in più per l'ordine F5→F4.
+- [x] **LAD.11** ✅ **FATTA — il pensiero dentro il workflow NON paga, e la previsione era
+  sbagliata.** (dev-fast, 20 run per gradino per braccio, **stesso commit per i due bracci**;
+  il B2 è stato rifatto apposta invece di riusare quello di LAD.9 — `data.md` §7.10)
+
+  | Gradino | B2 workflow | B4 + pensiero | Fisher | Δ |
+  |---|---|---|---|---|
+  | L5 | **19/20** | 16/20 | p = 0,342 | −3 |
+  | L6 | 16/20 | **19/20** | p = 0,342 | +3 |
+  | L7 | 8/20 | **12/20** | p = 0,343 | +4 |
+  | aggregato | **43/60** | 47/60 | **p = 0,528** | +4 |
+  | tempo | **1.794 s** | 2.772 s | | **+55%** |
+
+  Segni alternati, p identici a tre cifre: rumore attorno allo zero, a +55% di costo.
+
+  **LA PREVISIONE REGISTRATA ERA SBAGLIATA.** Avevo scritto che su L7 il pensiero avrebbe
+  **peggiorato** l'esito rubando contesto: è uscito **12/20 contro 8/20**, nominalmente il
+  contrario. Il modello mentale era errato — credevo che il budget di pensiero fosse sottratto
+  al **contesto durevole**. Due misure lo smentiscono: (a) il pensiero **non si comprime** al
+  crescere del prompt (137 → 452 token medi) e si chiude naturalmente sotto il fusibile;
+  (b) **TH-D2** fa sì che il ragionamento **non entri mai nella catena append-only** — generato
+  e scartato a ogni chiamata. Il costo è **per chiamata, non cumulativo**.
+  **Una decisione architetturale presa per la purezza della catena protegge da un fallimento
+  identificato mesi dopo.**
+
+  **La risposta alla domanda per cui la matrice esiste** (*il ragionamento sostituisce un
+  componente mancante?*): **B3−B1 = 0/20 → 20/20** (§7.8) contro **B4−B2 = zero**. Il workflow e
+  il ragionamento **risolvono lo stesso collo di bottiglia: chi arriva primo prende tutto**.
+  Sono **sostituti, non complementi** — e questo dà a TH2 una spiegazione invece di un solo
+  numero: il thinking non è inutile in assoluto, è inutile *sopra un'impalcatura che copre già
+  il suo contributo*.
+
+  **Riserva:** su L7 entrambi i bracci sono lontani dal soffitto (IC 95% 22-61% e 39-78%,
+  ampiamente sovrapposti) ed è l'unico gradino dove il collo di bottiglia — la capienza — **non
+  è coperto da nessuno dei due**. Se F5 lo rimuove, il confronto va rifatto lì: potrebbe essere
+  l'unico posto dove i due smettono di essere sostituti.
+
+- [ ] **LAD.11-bis** 🔎 **B4 con le ablazioni** (simmetria obbligatoria della matrice): finora è
+  stato misurato solo il braccio `think` completo. Servono `think-search`, `think-verify`,
+  `think-retry`, `think-coherence`, `think+calc`, `think+finishgate` — è la metà della matrice
+  che risponde a *"il ragionamento compensa il pezzo mancante?"* per **ciascun** pezzo.
   ⚠️ **Il blocco B4 pre-fix è stato BUTTATO** (girava su codice precedente ai fix del corpus e
   del giudice, quindi non comparabile): nella matrice c'è un **buco dichiarato**, non un dato
   mancante per dimenticanza. Nessuno vada a cercarlo in `bench/results/`.
