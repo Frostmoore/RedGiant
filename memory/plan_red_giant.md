@@ -1936,13 +1936,93 @@ hardware di `data.md` §1.3. La regola vale per la ladder e per ogni A/B futuro 
 > PRESTAZIONI. Restano valide, ma nessuna di esse tocca ciò che uccide L7.** Due sottofasi
 > nuove vengono prima, e il criterio di uscita cambia.
 >
-> **Ordine:** F5.0 → F5.0-bis → F5.2 → F5.3 → F5.1 → F5.5 → F5.4 → F5.6.
+> **Ordine:** **F5.0-ante** → F5.0 → F5.0-bis → F5.2 → F5.3 → F5.1 → F5.5 → F5.4 → F5.6.
+> *(F5.0-ante è stata aggiunta dopo la ricerca sullo stato dell'arte: verifica se il
+> compromesso che struttura tutta la fase sia reale o un artefatto della nostra config.)*
 > *(F5.2 e F5.3 salgono perché sono la spina dorsale della misura: senza, tutto il resto è
 > ottimizzazione a sentimento. F5.4 SlotManager scende: è prestazioni pure, non capacità.)*
 >
 > **Regola non negoziabile per ogni sottofase:** nasce con la sua **leva di ablazione** e si
 > chiude con un A/B a **20 run per braccio minimo**, dichiarando *quale ampiezza d'effetto il
 > campione era in grado di vedere* (lezione di LAD.9).
+
+> ### 🌐 STATO DELL'ARTE — cosa hanno già risolto gli altri (ricerca del 2026-08-04)
+>
+> Fatta **prima** di scrivere codice, su richiesta dell'utente. Cambia due premesse della
+> checklist.
+>
+> **1. ⚠️ `--cache-reuse` ESISTE NEL NOSTRO BINARIO E NON LO USIAMO.** Verificato su
+> `bin/llama-b10217/cpu/llama-server.exe --help`:
+> ```
+> --cache-reuse N   min chunk size to attempt reusing from the cache via KV shifting,
+>                   requires prompt caching to be enabled (default: 0)
+> ```
+> **Il compromesso centrale di F5.0-bis potrebbe essere in parte auto-inflitto.** Il numero
+> F0.5 che lo motiva — *65 token riprocessati contro 7.971 cambiando un byte a metà* — è stato
+> misurato con `--cache-reuse 0`. Con il KV shifting attivo, togliere roba dal mezzo **non
+> invalida necessariamente tutto ciò che segue**. Né `start-llama.ps1` (dev-fast) né
+> `docker/severino-sim/compose.yml` lo passano.
+> **→ Prima sottofase concreta di F5: rimisurare F0.5 con e senza `--cache-reuse`.** Se il
+> divario crolla, la leva 2 (sfratto) smette di essere proibitiva e la fase cambia forma.
+> *(Nota: `--context-shift` è pure disattivato, e va lasciato così: scarterebbe i token più
+> vecchi, cioè la descrizione del task. Ma la scelta va documentata come deliberata.)*
+>
+> **2. L'offload su filesystem è lo standard industriale, non un'idea nostra.** I framework
+> agentici lo fanno già: risultato di tool oltre soglia → scritto su file, in contesto restano
+> **path + anteprima**. Numeri pubblicati: soglia a 20.000 token (LangChain Deep Agents);
+> un'altra implementazione riferisce soglia 8.000 caratteri e anteprime da 2 KB, con la
+> lunghezza di sessione che passa da **15-20 a 30-40 turni senza compattazione**. Il nostro
+> `_RESULT_MAX_CHARS = 6000` è nello stesso ordine di grandezza — ma il nostro problema non è
+> *un* risultato enorme, è **l'accumulo** di cinque o sei da 6000. **La leva 3 sale a
+> favorita**, non perché sia elegante ma perché è quella con più evidenza esterna.
+>
+> **3. Compattazione periodica > sfratto incrementale, sul piano della cache.** La letteratura
+> è concorde: uno sfratto che modifica il contesto *a ogni richiesta* invalida il prefisso ogni
+> volta e non ammortizza mai; una compattazione periodica produce **un solo prefisso nuovo e
+> stabile** dopo ogni passata, e il riuso riparte. Se sceglieremo di comprimere, va fatto **a
+> ondate**, non continuamente.
+>
+> **4. "Context rot": la qualità cala PRIMA del limite.** All'aumentare dei token la capacità
+> di richiamare informazioni dal contesto degrada, quindi tagliare può **migliorare** la
+> qualità, non solo far entrare le cose. Da tenere presente leggendo i risultati: un guadagno
+> potrebbe non venire dallo spazio ma dal rumore rimosso.
+>
+> **5. Previsione da registrare (dalla letteratura, prima di misurare):** la compattazione
+> **cambia il comportamento** dell'agente — i modelli emettono **più ricerche** per compensare
+> il contesto indebolito, con ripetizione delle query in aumento. Sulla ladder lo vedremmo come
+> **più passi per run**. Se compare, non è un bug: è l'effetto atteso, e va misurato invece che
+> corretto d'istinto.
+>
+> **6. Un filone che NON si applica, e va detto per non sprecarci tempo.** Buona parte della
+> ricerca 2026 su "KV cache compaction" agisce a livello di **tensori** (evict/approssima
+> coppie KV per ridurre la *memoria*), con risultati forti su modelli 4B+ (riduzione KV
+> dell'80%, throughput 1,7-4,2×). **Non risolve il nostro problema**, che è il *conteggio di
+> token del prompt* contro `ctx_size`: la memoria non è il nostro vincolo, la finestra sì. Da
+> non confondere in fase di lettura.
+>
+> **Fonti:** [Anthropic — context engineering: memory, compaction, tool clearing](https://platform.claude.com/cookbook/tool-use-context-engineering-context-engineering-tools) ·
+> [LangChain — Context Management for Deep Agents](https://www.langchain.com/blog/context-management-for-deepagents) ·
+> [Context Offloading — Encyclopedia of Agentic Coding Patterns](https://aipatternbook.com/context-offloading) ·
+> [Beyond Compaction: Structured Context Eviction for Long-Horizon Agents](https://arxiv.org/pdf/2606.11213) ·
+> [Practical Online KV Cache Compaction for LLM Agents](https://arxiv.org/html/2608.00902) ·
+> [Addressable Recall Compaction (ARC)](https://arxiv.org/html/2607.25066v1) ·
+> [Agent Context Compaction: Techniques and Tradeoffs](https://zylos.ai/research/2026-04-21-agent-context-compaction-long-running-sessions/) ·
+> [llama.cpp discussion #20574 (host-memory prompt caching — ⚠️ contestata nei commenti, usata solo come pista)](https://github.com/ggml-org/llama.cpp/discussions/20574)
+
+#### F5.0-ante — Rimisurare il costo del cambio di prefisso, con `--cache-reuse`
+
+- [ ] 🤖 **Obiettivo:** stabilire se il compromesso che struttura tutta F5 è reale o un artefatto
+  della nostra configurazione.
+- **Motivazione:** F0.5 ha misurato **65 token contro 7.971** cambiando un byte a metà prompt —
+  ma con `--cache-reuse 0`, cioè col KV shifting **spento**. È il numero che rende "proibitiva"
+  la compattazione. Va rimisurato con il flag attivo prima di progettare intorno a esso.
+- **Implementazione:** riesecuzione della sonda di riuso di `bench/run_bench.py` su
+  `severino-sim`, tre configurazioni: `--cache-reuse 0` (attuale), `256` (valore comune),
+  `64`. Aggiungere il flag a `scripts/start-llama.ps1` e a `docker/severino-sim/compose.yml`
+  **solo dopo** aver visto i numeri.
+- **Accettazione:** tabella dei token riprocessati per le tre configurazioni, su un cambio a
+  metà prompt e su un troncamento in testa. **Se il divario crolla, F5.0-bis va riscritta** —
+  e questo è il motivo per cui questa sottofase viene prima di tutte.
 
 #### F5.0 — 📌 Dove vanno gli 8192 token (strumentazione, PRIMA di ogni ottimizzazione)
 
