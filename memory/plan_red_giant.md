@@ -2397,18 +2397,27 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   "leggo tutto"; seconda candidata la 13 (nomi esatti → meno passi sprecati).
   **Log:** timestampati (regola utente 2026-08-05, implementata nel runner), con percorso del
   report per run.
-  **ESITO PARZIALE (2026-08-05, notte, `@4467073`):** `card-bisA` = **3/10 in 894 s** →
-  **zona ambigua (2–3/10)** per le regole pre-specificate → serve l'**estensione a 20** (altre
-  10 run) e il giudizio SOLO sul campione completo. `card-bisB` NON eseguito (PC spento prima
-  del secondo braccio). **Coda per la ripresa:** (1) `card-bisA` +10 run → giudizio a n=20
-  contro le ancore; (2) `card-bisB` 10 run con le stesse regole. Comando:
-  `python bench/ladder/run_agentic.py dev-fast T057 card-bisA,card-bisB 10` (per bisA
-  l'estensione va aggregata a mano con le prime 10: i report stanno in `bench/results/`
-  `eval_dev-fast_static_20260804-2305*..2320*`, log timestampato nella sessione).
-  Nota rispetto alla previsione registrata: bisA a 3/10 NON conferma (per ora) che il gruppo
-  A basti da solo a orientare — se l'estensione resta sotto 4/20-equivalente, la risposta
-  potrebbe essere "servono regole di ENTRAMBI i gruppi", che è un'interazione, non una
-  bisezione pulita.
+  **ESITO (2026-08-05, notte, `@4467073`):**
+  - `card-bisA` (azione/strumenti) = **3/10 in 894 s** → **zona ambigua** (vs ancora min:
+    p = 0,095, non significativo) → **estensione a +10 run in corso** (accodata in automatico),
+    giudizio SOLO sul campione completo n=20.
+  - `card-bisB` (perimetro/focus/stile) = **6/10 in 461 s** → **≥4/10: il gruppo B CONTIENE
+    le regole che orientano** (vs ancora min 1/20: p = 0,0021). E non solo: 6/10 = 60% è lo
+    STESSO tasso della card intera (12/20) — **il gruppo B da solo recupera tutto** (vs full:
+    p = 1,0).
+  - **LA PREVISIONE REGISTRATA ERA SBAGLIATA** (terza su quattro): avevo previsto A ≥4/10 e
+    B ≤1/10; è uscito quasi l'opposto. Le regole che orientano la ricerca NON sono quelle
+    sulla disciplina d'azione (one action, errori, nomi esatti) ma quelle su
+    **perimetro/focus/stile** (thought ≤300 · scope · solo il TUO obiettivo · fuori confine →
+    done · stile stringhe). Candidata principale a posteriori (da verificare, NON misurata):
+    la regola 10 ("il TASK è sfondo, tu fai SOLO il tuo obiettivo") — plausibilmente tiene il
+    modello sull'obiettivo di recupero invece di farlo vagare a leggere; anche la 2
+    (thought ≤300) può sopprimere il "pianifico di leggere tutto". Distinguere le due è
+    un'eventuale bisezione di secondo livello DENTRO il gruppo B.
+  - Nota di disciplina: bisB a n=10 è uno screening; il 60% ha IC 95% ~31–83%. La
+    classificazione "contiene le regole" regge (p = 0,0021 contro l'ancora); l'equivalenza
+    esatta con la card intera no (p = 1,0 su campioni piccoli non è una dimostrazione di
+    equivalenza).
 
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 
