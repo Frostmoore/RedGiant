@@ -2187,6 +2187,26 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   **Stato:** variante ridotta **nel repo ma spenta**, `RG_WORKER_CARD` resta `full`. I 414 token
   restano sul tavolo: sappiamo che non sono gratis, non che siano intoccabili.
 
+- [ ] **F5.6a** 🔎 **B2 contro B4 su L7, ORA che la capienza è coperta.**
+
+  **Perché è la misura più interessante rimasta.** LAD.11 ha concluso che impalcatura e
+  ragionamento sono **sostituti** — B4−B2 = 0 su L5 e L6 — ma con una riserva esplicita
+  (`data.md` §7.10.4): **L7 era l'unico gradino dove il collo di bottiglia, la capienza, non era
+  coperto da NESSUNO dei due**, ed è anche l'unico dove il pensiero era nominalmente meglio
+  (12/20 contro 8/20). Ora la compattazione quel collo di bottiglia lo copre. Quindi la domanda
+  è nuova: **il pensiero paga ancora, adesso che lo spazio c'è?**
+
+  **PREVISIONE REGISTRATA PRIMA DI MISURARE** — se la tesi dei sostituti regge, il +4 di LAD.11
+  era il ragionamento che tappava un buco di capienza, e ora che lo tappa la compattazione
+  **deve sparire**: B4 ≈ B2 anche su L7. Se invece il pensiero continua a pagare, i due **non
+  sono sostituti puri** e c'è un contributo residuo che LAD.11 non ha isolato.
+
+  **Sensibilità dichiarata:** 20 run per braccio, con una base attorno al 55%, distinguono
+  differenze di ~30 punti. **Un effetto piccolo resterà invisibile**, e in quel caso la
+  conclusione lecita è "nessun effetto grande", non "nessun effetto" (lezione di LAD.9).
+
+  Comando: `python bench/ladder/run_agentic.py dev-fast T057 "full,think" 20`
+
 - [ ] **F5.0-quater** 🔎 **Bisezione della card: QUALE pezzo orienta la ricerca?**
   Si rimettono i gruppi di regole **uno alla volta** e si guarda quando L7 risale. Ordine
   suggerito dalla diagnosi (dal più sospetto): (1) la regola *"one action per step / never
