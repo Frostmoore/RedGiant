@@ -2236,6 +2236,27 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
 - **Implementazione:** (1) test unitario permanente: per ogni ruolo, due `build` consecutivi → prefisso S1–S4 identico (`assertEqual` sui byte); (2) test cross-ruolo: S1 identico tra tutti i ruoli (il preambolo è unico); (3) strumento di diff: al primo `reuse_ratio` anomalo in eval, dump dei prompt di due chiamate consecutive e diff — la causa va trovata e fissata, non tollerata; (4) valutazione della gerarchia di prefissi: misurare se conviene ordinare le chiamate per ruolo (tutte le verify insieme, ecc.) — probabilmente no con `--parallel 1` e slot singolo (ogni cambio di prompt lungo invalida), la risposta la danno i numeri; (5) 📌 gli esiti nell'atlante.
 - **Accettazione:** `reuse_ratio` medio del Worker sopra la soglia F0.6; i test dei prefissi in `tests/unit` e verdi.
 
+  ### ✅ FATTA (2026-08-04) — nessuna violazione trovata
+
+  **`avg_reuse_ratio` del Worker: 89,3%**, contro la soglia di **0,6** fissata in F0.6. D9 regge
+  in produzione, non solo in teoria: la curva per posizione dello step parte bassa (prefisso
+  freddo) e sale a **90-95% dal terzo passo**.
+
+  **Audit eseguito, tre vie che restavano scoperte, tutte pulite:** card degli strumenti
+  deterministica; stabile al rimescolamento del catalogo (che viene costruito da liste filtrate
+  da ablazioni e interruttori, quindi l'ordine **non deve** dipendere dal dict); preambolo
+  condiviso e mai duplicato dalle card. Aggiunto anche un test che cerca **valori volatili**
+  (date, orari) dentro S1–S4: uno solo azzererebbe il riuso a ogni chiamata.
+
+  ⚠️ **Lo strumento di diff previsto dal punto (3) NON è stato costruito, di proposito.** Serviva
+  a inseguire un `reuse_ratio` anomalo: non ce n'è. Costruirlo ora sarebbe aggiungere un pezzo
+  che nessuna misura ha richiesto — esattamente ciò che questa campagna ha imparato a non fare.
+  Resta come debito **con la sua condizione di innesco**: si costruisce al primo riuso anomalo.
+
+  **Reperto per F5.0-ter:** la card del Worker è **la più grande di tutte** (3.114 caratteri
+  contro i 2.250 della seconda). Un test permanente ora scatta se cresce oltre 3.300 senza una
+  misura che lo giustifichi.
+
 #### F5.4 — SlotManager (KV su disco)
 
 - [ ] 🤖 **Obiettivo:** riprendere un task (o forkare una fase) **senza ripagare il prefill**: la KV cache sopravvive al riavvio del server.
