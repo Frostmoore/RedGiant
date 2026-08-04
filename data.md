@@ -37,6 +37,7 @@ comparabili e numerosità adeguata; tutto ciò che è stato *osservato* ma non *
 | 13 | **Flag di runtime** (`--swa-full --cache-reuse`) | **2.748** token per rimuovere un blocco dal mezzo | **1** | Gemma è sliding-window: con la cache SWA parziale il runtime non riusa nulla dopo una divergenza. Costa memoria → adottato solo su GPU | §7.11 |
 | 14 | **Compattazione della catena volatile** (F5.0-bis) | L7 **12/40 = 30%**, tentativi morti a **7,7 passi**, **731** token riprocessati per chiamata | **22/40 = 55%**, **13,2 passi**, **550** per chiamata | **p = 0,0411**, campione dimensionato *prima* di guardare. Il +53% di tempo è il costo di **non morire** — e il riuso della KV **migliora** (89,3% contro 85,8%): l'ondata lascia un prompt più corto | §7.13.4, §7.13.5 |
 | 15 | **La card del Worker** (scoperto ablandola) | card ridotta: L7 **1/20**, e il modello **legge** invece di cercare (440 `read_file` contro 169 `search_code`) | card intera: **15/20**, 294 ricerche contro 146 letture | **p = 1,0×10⁻⁵**. Non serviva a dire regole: **orienta la scelta dello strumento**, e solo dove il recupero selettivo è indispensabile (su L5 nessuna differenza) | §7.16.1 |
+| 16 | **Il pensiero sui task a recupero largo** | L7 **12/20**, 15,7 passi/tentativo, 59 ondate di compattazione | L7 **20/20**, 12,4 passi, **13 ondate** | **p = 0,0033**. Non aggiunge contesto: **riduce il bisogno di contesto** — 168 ricerche contro 5 letture. Ribalta la tesi dei "sostituti": complementari dove il collo di bottiglia è la *strategia di recupero* | §7.17 |
 
 **Il filo comune delle 10 righe:** nessuna insegna qualcosa al modello. Otto rendono
 *impossibile* un errore, due gli danno più spazio o più tentativi per lo stesso lavoro.
@@ -51,7 +52,7 @@ domini non-coding, task larghi). Nessuna è stata chiusa per opinione.*
 |---|---|---|---|---|
 | 1 | **Planner in-loop** (D11) | **2/10 contro 9/10** (baseline statica) · 815K contro 710K token · ~10× chiamate LLM | su task piccoli pianificare **costa più di quanto renda**: il piano diventa un'altra cosa che può sbagliare | col router attivo, F6 |
 | 2 | **Plan compiler** (PS-D9) | **2/13 contro 6/13**, e **2/13 contro 8/13** nella ri-misura · −44% token e +9,4 punti di token utili, ma i verdi non salgono | i gate spostano le morti **in profondità** (da 0 tool call a 20–38 con 80–93% di token utili) senza convertirle in verdi | task larghi multi-sessione, F6 |
-| 3 | **Thinking DENTRO il workflow** (TH2 + LAD.11) | Δ = 0 su 4 batterie coding · e sulla ladder **43/60 contro 47/60**, **p = 0,528**, con **+55% di tempo** | **il workflow e il ragionamento risolvono lo stesso collo di bottiglia: chi arriva primo prende tutto.** Da solo il pensiero fa l'aritmetica (§0.1 riga 11); sopra la guardia di coerenza, che l'ha già chiusa, non aggiunge nulla | su L7, se F5 rimuove il tetto di capienza — è l'unico gradino dove il collo di bottiglia non è coperto da nessuno dei due |
+| 3 | **Thinking DENTRO il workflow, sul CODING** (TH2 + LAD.11) | Δ = 0 su 4 batterie coding · su L5/L6 **43/60 contro 47/60**, p = 0,528, +55% tempo | dove il collo di bottiglia è l'**aritmetica**, la guardia di coerenza l'ha già chiuso e il pensiero non aggiunge nulla: lì sono **sostituti** | ⚠️ **NON estendere ai task a recupero largo**: su L7 il pensiero fa **20/20 contro 12/20** (§0.1 riga 16). La riapertura è già avvenuta |
 | ~~4~~ | ~~**Thinking sull'aritmetica**~~ | ⛔ **VERDETTO RIBALTATO il 2026-08-04** — v. §0.1 riga 11 e §7.8 | le tre prove precedenti erano confondute | — |
 | 5 | **Calcolatrice deterministica** (LAD.13) | `full` **16/20** contro `−calc` **17/20**, **Fisher p = 1,000** — e non per mancato uso: **27 chiamate riuscite** nel braccio completo | **la guardia di coerenza l'ha resa superflua**: due percorsi allo stesso esito, e quello deterministico non dipende da una scelta del modello | domini di F7 (matematica, everyday), dove la guardia non si applica |
 | ~~6~~ | ~~`bad_args` che insegna~~ | ✅ **SPOSTATA fra le dimostrate** — v. §0.1 riga 12: la metrica pre-registrata era quella sbagliata, l'effetto c'è ed è sulle **spirali** | — | — |
@@ -1373,6 +1374,88 @@ successivo. `RG_WORKER_CARD` resta su `full`.
 alla volta e si guarda quando L7 risale — così sapremo *quale* pezzo orienta la ricerca, invece
 di indovinarlo. I 414 token restano sul tavolo: ora sappiamo che non sono gratis, non che siano
 intoccabili.
+
+## 7.17 F5.6a — il pensiero fa 20/20 su L7, e tre scoperte diventano una sola
+
+*(2026-08-04, dev-fast, 20 run per braccio, `@018e5a7` — codice con le ondate riarmabili.)*
+
+### 7.17.1 Il difetto che ha invalidato la prima misura
+
+Il primo tentativo di F5.6a è stato buttato, e per una ragione trovata **leggendo i log durante
+l'attesa**: la compattazione scattava **una volta sola per tentativo**.
+
+```
+ondate per tentativo:  0 → 48 tentativi   ·   1 → 89   ·   2 o più → MAI
+dei 89 tentativi che avevano compattato, 44 (49%) morti per contesto pieno LO STESSO
+```
+
+Il flag disarmava il meccanismo dopo la prima ondata; la catena ricresceva e risaturava la
+finestra. **Errore di ragionamento, non di codice:** *"a ondate e non a ogni passo"* giustifica
+il non compattare a ogni passo, **non** il compattare una volta e basta. E la riscrittura costa
+~1 token (§7.11), quindi un'ondata in più è quasi gratis.
+
+Corretto con un contatore e una condizione di riarmo (*la catena risupera la soglia* **e** *c'è
+almeno un risultato nuovo da collassare* — il secondo vincolo è ciò che evita di ricadere nello
+sfratto continuo). Verifica meccanica dopo il fix: **0 su 12 tentativi compattati muore per
+contesto pieno**, contro il 49% di prima.
+
+**Conseguenza sulla misura:** la previsione registrata assumeva *"ora la capienza è coperta"*, e
+non lo era. L'esperimento non testava ciò che intendeva → rifatto da zero.
+
+### 7.17.2 Il risultato
+
+| Braccio su L7 | Verificati | IC 95% | Tentativi | Passi/tentativo | Ondate |
+|---|---|---|---|---|---|
+| `full` | 12/20 = 60% | 39-78% | 48 | 15,7 | 59 |
+| **`think`** | **20/20 = 100%** | **84-100%** | **27** | **12,4** | **13** |
+
+**Fisher esatto bilaterale p = 0,0033.** Il gradino più duro della ladder — 400 documenti, 25K
+token, tre volte la finestra — passa **venti volte su venti** col ragionamento attivo.
+
+### 7.17.3 La previsione registrata era sbagliata, e la tesi dei sostituti va ristretta
+
+Avevo scritto, **prima di misurare**: *"se la tesi dei sostituti regge, il vantaggio del
+pensiero deve sparire ora che la compattazione copre la capienza"*. È successo il contrario: il
+vantaggio è **cresciuto** (+4 in LAD.11 → **+8** adesso, con il braccio col pensiero al 100%).
+
+**Impalcatura e ragionamento non sono sostituti in generale.** Lo sono dove il collo di
+bottiglia è l'**aritmetica** (L5: la guardia di coerenza lo copre, e il pensiero non aggiunge
+nulla). Sono **complementari** dove il collo di bottiglia è la **strategia di recupero su larga
+scala** (L7).
+
+### 7.17.4 Il meccanismo — e qui tre scoperte separate diventano una
+
+Il pensiero **non aggiunge contesto: riduce il bisogno di contesto.**
+
+| | `full` | `think` |
+|---|---|---|
+| `search_code` | 109 | **168** |
+| `read_file` | 23 | **5** |
+
+Cerca invece di leggere. Quindi trova prima, spende meno passi, chiude in metà dei tentativi e
+**non si avvicina mai al tetto** — 13 ondate di compattazione contro 59.
+
+**E questa è la stessa variabile di altre due scoperte:**
+
+| Scoperta | Effetto sul comportamento | Esito |
+|---|---|---|
+| Ablare `search_code` (§6.5) | costretto a leggere | **0/5 su ogni gradino** |
+| Ridurre la card (§7.16.1) | 440 letture contro 169 ricerche | **L7 1/20** |
+| Aggiungere il pensiero (qui) | 168 ricerche contro 5 letture | **L7 20/20** |
+
+> **Su corpus larghi, la variabile che predice il successo è una sola: se il modello cerca o
+> legge.** Tre interventi indipendenti — un tool, un pezzo di prosa, un canale di ragionamento —
+> agiscono tutti su quella stessa leva, e i loro esiti si ordinano esattamente come l'intensità
+> con cui ce lo spingono.
+
+### 7.17.5 Conseguenza operativa: una regola di routing misurata
+
+TH2 aveva spento il thinking sul **coding**; LAD.11 non l'aveva visto pagare su L5/L6. Qui paga
+in modo schiacciante. **Non è una contraddizione: sono compiti diversi.** Il ragionamento paga
+dove serve una *strategia di recupero*, non dove serve ragionare in astratto.
+
+È la prima regola di routing del progetto che nasce da una misura invece che da un'intuizione, e
+va portata in **F6**: *thinking ON per i task a recupero largo, OFF per il coding.*
 
 ## 8. Cosa manca (aggiornamento previsto)
 

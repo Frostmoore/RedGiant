@@ -2207,6 +2207,38 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
 
   Comando: `python bench/ladder/run_agentic.py dev-fast T057 "full,think" 20`
 
+  ### ✅ FATTA — e la previsione registrata era SBAGLIATA (2026-08-04, `data.md` §7.17)
+
+  | Braccio su L7 | Verificati | Tentativi | Passi/tentativo | Ondate |
+  |---|---|---|---|---|
+  | `full` | 12/20 = 60% | 48 | 15,7 | 59 |
+  | **`think`** | **20/20 = 100%** | **27** | **12,4** | **13** |
+
+  **Fisher esatto bilaterale p = 0,0033.**
+
+  **La prima esecuzione è stata BUTTATA**, e il motivo è stato trovato leggendo i log durante
+  l'attesa: la compattazione scattava **una volta sola per tentativo** (0 o 1, mai 2), e **44
+  tentativi su 89 che avevano compattato morivano per contesto pieno lo stesso**. Quindi la
+  premessa della previsione — *"ora la capienza è coperta"* — era falsa. Corretto col riarmo
+  (§7.17.1); dopo il fix, **0 su 12 tentativi compattati muore per contesto**.
+
+  **Previsione falsificata:** avevo scritto che il vantaggio del pensiero doveva **sparire**. È
+  **cresciuto** (+4 → +8, col braccio al 100%). **Impalcatura e ragionamento non sono sostituti
+  in generale**: lo sono dove il collo di bottiglia è l'aritmetica (L5), sono **complementari**
+  dove è la strategia di recupero su larga scala (L7).
+
+  **Meccanismo — e qui tre scoperte diventano una.** Il pensiero non aggiunge contesto:
+  **riduce il bisogno di contesto**. Fa **168 ricerche contro 5 letture** (il braccio senza: 109
+  contro 23), quindi trova prima e non si avvicina mai al tetto. È la **stessa variabile** di
+  altre due misure: ablare `search_code` (0/5 ovunque) e ridurre la card (L7 1/20, 440 letture).
+  **Su corpus larghi la variabile che predice il successo è una sola: se il modello cerca o
+  legge** — e tre interventi indipendenti (un tool, un pezzo di prosa, un canale di
+  ragionamento) agiscono tutti su quella leva.
+
+  **→ PRIMA REGOLA DI ROUTING MISURATA, da portare in F6:** *thinking **ON** per i task a
+  recupero largo, **OFF** per il coding.* TH2 e LAD.11 non sono contraddetti — misuravano
+  compiti diversi.
+
 - [ ] **F5.0-quater** 🔎 **Bisezione della card: QUALE pezzo orienta la ricerca?**
   Si rimettono i gruppi di regole **uno alla volta** e si guarda quando L7 risale. Ordine
   suggerito dalla diagnosi (dal più sospetto): (1) la regola *"one action per step / never
@@ -2414,6 +2446,26 @@ scritto in numeri (quanto contesto, quanto prefill) e non nascosto dietro il ver
 📎 **Specsheet:** §6.1, §6.2, §5 · **Decisioni:** D11, D21
 🎯 **Scope:** la pipeline si riduce da sola: segnali deterministici → (solo se ambiguo) Classifier/Assessor → pipeline `direct`/`short`/`full`; budget dinamici; calibrazione misurata.
 🧭 **Perché questa fase, perché ora:** "la pipeline deve ridursi automaticamente per i task semplici" (specsheet §25.14) — ma solo ORA esistono sia le pipeline tra cui scegliere sia le metriche per giudicare le scelte. E c'è una ragione di sfiducia sana: i modelli piccoli stimano male la difficoltà, quindi il deterministico fa da prima linea e il modello decide solo i casi che i segnali non separano; la calibrazione si misura dal giorno uno perché un router mal calibrato è peggio di nessun router.
+
+> ### 🎯 REGOLA DI ROUTING GIÀ MISURATA (F5.6a, 2026-08-04) — la prima che non è un'intuizione
+>
+> **`thinking` ON per i task a recupero largo, OFF per il coding.**
+>
+> | Dominio | Con pensiero | Senza | Fonte |
+> |---|---|---|---|
+> | Recupero largo (L7: 400 documenti) | **20/20** | 12/20 | p = 0,0033 · `data.md` §7.17 |
+> | Coding sintetico (4 batterie ufficiali) | 1,5/13 | 1,5/13 | Δ = 0 · §4.3 |
+> | Aggregazione (L5/L6) | 43/60 | 47/60 | p = 0,528 · §7.10 |
+>
+> **Perché non è una contraddizione:** il ragionamento paga dove serve una **strategia di
+> recupero**, non dove serve ragionare in astratto. Il meccanismo è misurato: fa **cercare
+> invece di leggere** (168 ricerche contro 5 letture), quindi trova prima e consuma meno
+> contesto. Dove il collo di bottiglia è l'aritmetica, la guardia di coerenza l'ha già chiuso e
+> il pensiero non aggiunge nulla.
+>
+> **Segnale deterministico suggerito per `deterministic_signals`:** numero di file nello scope
+> e taglia del corpus — è la stessa dimensione lungo cui la ladder separa i gradini, e non
+> richiede il Classifier.
 
 #### F6.1 — Segnali deterministici e scelta
 
