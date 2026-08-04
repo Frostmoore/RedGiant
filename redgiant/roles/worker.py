@@ -49,6 +49,14 @@ _MAX_FINISH_REFUSALS: int = 2  # tetto: non si sostituisce un loop degenere con 
 # eviction incrementale.
 _COMPACT_TRIGGER = 0.55   # frazione di ctx_size occupata dalla catena volatile
 _COMPACT_KEEP_LAST = 3    # ultimi N risultati sempre per intero
+# F5.6a — RIARMO. La prima versione compattava UNA volta sola per tentativo, e
+# i log l'hanno smentita: su 89 tentativi che avevano compattato, **44 (49%)
+# sono morti per contesto pieno lo stesso** — la catena ricresce e risatura la
+# finestra. L'errore era di ragionamento: "a ondate e non a ogni passo"
+# giustifica il non compattare a ogni passo, NON il compattare una volta e
+# basta. E ora sappiamo che la riscrittura costa ~1 token con i flag di
+# F5.0-ante, quindi un'ondata in piu' e' praticamente gratis.
+_MAX_COMPACT_WAVES = 8    # tetto: la degenerazione resta impossibile
 
 
 def finish_gate_enabled() -> bool:
@@ -214,7 +222,8 @@ class Worker(Role):
         # sottofase, [PREVIOUS ATTEMPT FAILED], ripresa): non si tocca mai.
         base_volatile = parts.volatile_context
         blocks: list[tuple[int, str, str, str]] = []   # (k, tool, pieno, collassato)
-        compacted = False
+        waves = 0            # ondate di compattazione gia' fatte (tetto: _MAX_COMPACT_WAVES)
+        collapsed_upto = 0   # primo blocco ancora mostrato per intero
         # TH0.3 (braccio T-J): pensiero per-step di J — il canale e' usa-e-getta
         # dentro complete() (TH-D2): la catena append-only 'parts' non lo vede mai
         from redgiant.plansys import thinking_budget, thinking_roles
@@ -324,39 +333,48 @@ class Worker(Role):
                            + ("; ".join(result.evidence) if result.evidence
                               else (result.error or "ok"))))
             parts = parts.with_appended_context(blocks[-1][2])
-            parts, compacted = self._maybe_compact(parts, base_volatile, blocks,
-                                                   compacted, step_log)
+            parts, waves, collapsed_upto = self._maybe_compact(
+                parts, base_volatile, blocks, waves, collapsed_upto, step_log)
 
         return FinishReport(status="blocked", summary="step budget exhausted",
                             evidence=[], verification_requested=[])
 
     def _maybe_compact(self, parts, base_volatile: str, blocks: list,
-                       already: bool, step_log) -> tuple:
-        """F5.0-bis: un'ondata di compattazione quando la catena sfonda la soglia.
+                       waves: int, collapsed_upto: int, step_log) -> tuple:
+        """F5.0-bis + F5.6a: compattazione a ONDATE RIPETIBILI.
 
-        Ritorna (parts, compacted). Idempotente per ondata: `already` evita di
-        riscrivere il prefisso a ogni passo successivo — che e' esattamente la
-        differenza fra compattazione a ondate e sfratto continuo.
+        Ritorna `(parts, waves, collapsed_upto)`.
+
+        Riarmo (F5.6a): un'ondata scatta ogni volta che la catena risupera la
+        soglia **e** c'e' almeno un risultato nuovo da collassare. Il secondo
+        vincolo e' quello che evita la degenerazione: senza, una catena gia'
+        tutta collassata ma ancora sopra soglia verrebbe riscritta a ogni
+        passo, cioe' proprio lo sfratto continuo che volevamo evitare.
+
+        `collapsed_upto` e' l'indice del primo blocco ancora mostrato per
+        intero: e' cio' che distingue "c'e' roba nuova da comprimere" da "ho
+        gia' compresso tutto il comprimibile".
         """
         from redgiant.core.ablate import worker_ablated
-        if worker_ablated("compact") or already or len(blocks) <= _COMPACT_KEEP_LAST:
-            return parts, already
+        if worker_ablated("compact") or waves >= _MAX_COMPACT_WAVES:
+            return parts, waves, collapsed_upto
+        cut = len(blocks) - _COMPACT_KEEP_LAST
+        if cut <= collapsed_upto:          # niente di nuovo da collassare
+            return parts, waves, collapsed_upto
         limit = int(self.llm.cfg.ctx_size * _COMPACT_TRIGGER)
         if self.llm.count_tokens(parts.volatile_context) < limit:
-            return parts, already
+            return parts, waves, collapsed_upto
 
-        keep = blocks[-_COMPACT_KEEP_LAST:]
-        old = blocks[:-_COMPACT_KEEP_LAST]
-        collapsed = "".join(b[3] for b in old)
+        old, keep = blocks[:cut], blocks[cut:]
         note = (f"\n[{len(old)} EARLIER STEPS COLLAPSED to one line each: their "
                 f"full results are no longer shown. What you already found is "
                 f"summarised above — do NOT search for it again.]")
-        parts = parts.with_volatile(base_volatile + collapsed + note
-                                    + "".join(b[2] for b in keep))
+        parts = parts.with_volatile(base_volatile + "".join(b[3] for b in old)
+                                    + note + "".join(b[2] for b in keep))
         if step_log is not None:
-            step_log(f"compattazione: {len(old)} risultati collassati "
-                     f"sulla loro evidence")
-        return parts, True
+            step_log(f"compattazione (ondata {waves + 1}): {len(old)} risultati "
+                     f"collassati sulla loro evidence")
+        return parts, waves + 1, cut
 
     @staticmethod
     def _serialize(result: ToolResult) -> str:
