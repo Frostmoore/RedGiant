@@ -31,6 +31,29 @@ from redgiant.prompts.assemble import PromptParts
 
 MAX_OUT = 256
 
+# Marcatori del chat template che il modello a volte emette come TESTO nel
+# braccio nudo (osservato su T058: `total=1913</start_of_turn>`). Il braccio
+# agentico non ne soffre perche' li' l'output e' vincolato dalla grammatica
+# JSON; qui invece finiscono dentro l'artefatto e il giudice li cattura nel
+# valore, facendo fallire anche una risposta GIUSTA.
+#
+# Ripulirli e' dovuto, non generoso: e' l'immagine speculare dell'artefatto del
+# grassetto (data.md §7.5), che penalizzava il braccio workflow. Qui a essere
+# penalizzato sarebbe il NUDO — cioe' il braccio contro cui la tesi del
+# progetto si misura: lasciarlo rotto gonfierebbe i nostri stessi risultati.
+_TEMPLATE_MARKERS = ("</start_of_turn>", "<start_of_turn>", "<end_of_turn>",
+                     "<|channel>", "<channel|>", "<|im_end|>", "<eos>")
+
+
+def strip_template_markers(text: str) -> str:
+    """Taglia il testo al primo marcatore di template incontrato."""
+    cut = len(text)
+    for marker in _TEMPLATE_MARKERS:
+        i = text.find(marker)
+        if i != -1:
+            cut = min(cut, i)
+    return text[:cut]
+
 
 def main(profile: str, n_runs: int, prefix: str, think: bool = False) -> int:
     cfg = Config.load(profile)
@@ -80,8 +103,8 @@ def main(profile: str, n_runs: int, prefix: str, think: bool = False) -> int:
                 continue
             tmp = Path(tempfile.mkdtemp(prefix=f"naked_{task.id}_"))
             shutil.copytree(task.repo_dir, tmp, dirs_exist_ok=True)
-            (tmp / "answer.txt").write_text(text.strip() + "\n",
-                                            encoding="utf-8")
+            (tmp / "answer.txt").write_text(
+                strip_template_markers(text).strip() + "\n", encoding="utf-8")
             j = subprocess.run([sys.executable, "judge.py"], cwd=tmp,
                                capture_output=True, text=True, timeout=60)
             ok = j.returncode == 0

@@ -102,6 +102,65 @@ def default_catalog(cfg: Config, scope: Scope,
     return {s.name: s for s in specs}
 
 
+def _placeholder(prop: dict):
+    """Valore d'esempio per un campo, dedotto dal JSON schema dell'input_model."""
+    t = prop.get("type")
+    if t == "integer":
+        return 1
+    if t == "number":
+        return 1.0
+    if t == "boolean":
+        return False
+    if t == "array":
+        return []
+    return "<string>"
+
+
+def args_hint(spec: ToolSpec, args: dict, errors: list) -> str:
+    """LAD.10 — `bad_args` deve INSEGNARE, non riportare il dump di pydantic.
+
+    Misurato sulla ladder (data.md §7.6.5): **27 chiamate su 67 (40%)** a
+    `calculator` arrivavano con `expression=None`; il router rispondeva col
+    `e.errors()` grezzo e il modello ci ciclava dentro cinque step consecutivi
+    prima di arrendersi ("I have exhausted all attempts to use the calculator
+    tool correctly"). Non era rifiuto dello strumento: era il modello che
+    PROVAVA a usarlo e veniva respinto da un errore che non nominava
+    l'argomento mancante.
+
+    Il messaggio nomina i campi obbligatori assenti, quelli sconosciuti, e
+    mostra la FORMA ESATTA della chiamata corretta — derivata dall'input_model,
+    quindi sempre allineata al codice, mai da aggiornare a mano.
+    """
+    schema = spec.input_model.model_json_schema()
+    props = schema.get("properties", {})
+    required = schema.get("required", [])
+
+    missing = [str(e["loc"][0]) for e in errors
+               if e.get("type") == "missing" and e.get("loc")]
+    unknown = [str(e["loc"][0]) for e in errors
+               if e.get("type") == "extra_forbidden" and e.get("loc")]
+    other = [e for e in errors
+             if e.get("type") not in ("missing", "extra_forbidden")]
+
+    parts = []
+    if missing:
+        parts.append("missing required argument(s): "
+                     + ", ".join(f"'{m}'" for m in missing))
+    if unknown:
+        parts.append("unknown argument(s): "
+                     + ", ".join(f"'{u}'" for u in unknown))
+    for e in other[:2]:
+        loc = ".".join(str(x) for x in e.get("loc", ())) or "?"
+        parts.append(f"'{loc}': {e.get('msg', 'invalid value')}")
+
+    example = {name: _placeholder(props.get(name, {})) for name in required}
+    sent = json.dumps(args, ensure_ascii=False, sort_keys=True)
+    return (f"{spec.name}: " + ("; ".join(parts) or "invalid arguments")
+            + f". You sent args={sent[:120]}. Correct form: "
+            + json.dumps({"tool": spec.name, "args": example},
+                         ensure_ascii=False))
+
+
 class ToolRouter:
     def __init__(self, catalog: dict[str, ToolSpec], scope: Scope, store: StateStore) -> None:
         self.catalog = catalog
@@ -144,7 +203,11 @@ class ToolRouter:
         try:
             parsed = spec.input_model.model_validate(args)
         except ValidationError as e:
-            result = ToolResult(ok=False, data={"detail": e.errors()[:5]}, error="bad_args")
+            errors = e.errors()
+            result = ToolResult(ok=False,
+                                data={"detail": errors[:5],
+                                      "hint": args_hint(spec, args, errors)},
+                                error="bad_args")
             return self._done(task_id, subtask_id, name, args, result, t0)
 
         if spec.requires_approval:

@@ -4,6 +4,7 @@ i controlli di taratura NON si fanno a mano, stanno nella suite):
 (2) il servizio locale di T031 risponde col payload atteso;
 (3) l'harness parsa le chiavi nuove (whitelist per-task, service_script)."""
 
+import re
 import shutil
 import socket
 import subprocess
@@ -92,6 +93,12 @@ def test_ladder_judges_are_satisfiable_and_scale():
         proc = subprocess.run([sys.executable, "judge.py"], cwd=tmp,
                               capture_output=True, text=True, timeout=60)
         assert proc.returncode == 0, f"{t.id}: {proc.stdout}{proc.stderr}"
+        # le VARIANTI CONTROLLATE (suffisso di lettera nel rung: L5c) sono
+        # fuori dall'asse dell'ampiezza per costruzione — sono repliche di un
+        # gradino con un solo parametro cambiato, non scalini. Il giudice
+        # dev'essere soddisfacibile lo stesso: quello si e' appena verificato.
+        if t.tags and any(re.fullmatch(r"l\d+[a-z]", tag) for tag in t.tags):
+            continue
         sizes.append(sum(len(p.read_text(encoding="utf-8").split())
                          for p in (t.repo_dir / "docs").glob("*.md")))
     # monotona a meno del 5% (L5 ha la stessa ampiezza di L4 per costruzione:

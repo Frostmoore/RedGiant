@@ -58,6 +58,41 @@ def test_unknown_tool_error_is_actionable(tmp_path):
     assert not r2.ok and "placeholder" in r2.data["hint"]
 
 
+def test_bad_args_error_is_actionable(tmp_path):
+    """LAD.10: 27 chiamate su 67 (40%) a `calculator` arrivavano con
+    expression=None e il router rispondeva col dump di pydantic; il modello ci
+    ciclava 5 step prima di arrendersi (data.md §7.6.5). L'errore deve NOMINARE
+    il campo mancante e mostrare la forma esatta della chiamata."""
+    from redgiant.state.store import StateStore
+    from redgiant.tools.router import ToolRouter
+    cfg = Config.load("dev-fast", CONFIG_DIR)
+    scope = Scope(tmp_path, ["*.txt"])
+    store = StateStore(tmp_path / "t.db")
+    router = ToolRouter(default_catalog(cfg, scope, {}), scope, store)
+    tid = store.create_task("r", str(tmp_path), "test", __import__(
+        "redgiant.state.models", fromlist=["Budget"]).Budget(
+        max_total_tokens=100, max_tool_calls=10,
+        max_retries_per_subtask=1, max_wall_s=60))
+
+    # il caso reale: chiamata senza argomenti
+    r = router.dispatch(tid, "s1", "calculator", {})
+    assert not r.ok and r.error == "bad_args"
+    hint = r.data["hint"]
+    assert "'expression'" in hint and "missing required" in hint
+    assert '"tool": "calculator"' in hint       # la forma esatta da emettere
+    assert '"expression"' in hint
+
+    # argomento sconosciuto: va nominato anche quello
+    r2 = router.dispatch(tid, "s1", "read_file", {"filename": "x"})
+    assert not r2.ok and "'filename'" in r2.data["hint"]
+    assert "'path'" in r2.data["hint"]          # e quello giusto suggerito
+
+    # tipo sbagliato: il messaggio resta leggibile
+    r3 = router.dispatch(tid, "s1", "read_file",
+                         {"path": "x", "start_line": "molte"})
+    assert not r3.ok and "start_line" in r3.data["hint"]
+
+
 def test_ladder_step_budget_scales_with_size():
     from redgiant.eval.harness import discover_tasks
     tasks = {t.id: t for t in discover_tasks(

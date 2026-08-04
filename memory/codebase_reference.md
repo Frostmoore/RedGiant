@@ -282,8 +282,11 @@ def git_diff(scope: Scope, ref: str = "HEAD") -> ToolResult
 
 `dispatch`: unknown/bad_args/awaiting_approval/eccezioni = tutti DATI per il modello, mai crash; tutto loggato su tool_calls. Tollera l'echo `"tool"` negli args. `requires_approval` → riga approvals + task blocked.
 
+**`bad_args` che INSEGNA (LAD.10, 2026-08-04) — TRAPPOLA DISINNESCATA.** `args_hint` nomina i campi obbligatori mancanti, quelli sconosciuti, e mostra la **forma esatta** della chiamata corretta, derivata dall'`input_model` (quindi sempre allineata al codice, mai da aggiornare a mano). Esempio reale: `calculator: missing required argument(s): 'expression'. You sent args={}. Correct form: {"tool": "calculator", "args": {"expression": "<string>"}}`. **Causa tecnica:** misurato sulla ladder (`data.md` §7.6.5), **27 chiamate su 67 (40%)** a `calculator` arrivavano con `expression=None`; il router rispondeva con `e.errors()` grezzo e il modello ci ciclava cinque step consecutivi prima di arrendersi. Non era rifiuto dello strumento: era il modello che *provava* a usarlo. Verifica del suo effetto: il tasso di `bad_args` su `calculator` dev'essere ~0 nella prossima campagna (LAD.13).
+
 ```python
 def default_catalog(cfg: Config, scope: Scope, test_commands: dict[str, list[str]], persist_test_commands=None) -> dict[str, ToolSpec]
+def args_hint(spec: ToolSpec, args: dict, errors: list) -> str  # LAD.10: campi mancanti + forma esatta della chiamata
 class ToolRouter
     def __init__(self, catalog: dict[str, ToolSpec], scope: Scope, store: StateStore) -> None
     def allowed_for(self, role: str, domain: str) -> list[ToolSpec]
