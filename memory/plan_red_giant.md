@@ -1750,6 +1750,15 @@ totale esce giusto perché il control plane rifiuta l'incoerenza e restituisce i
 **⚠️ REGOLA NUOVA E NON NEGOZIABILE — nessuna conclusione sulla ladder sotto le 20 run per
 braccio, e il numero si accompagna a un test esatto, non a un'impressione.**
 
+> **SESTO DIFETTO DI MISURA (2026-08-04) — e la tecnica che l'ha trovato.** `tokens_cached` di
+> llama-server non è il riuso: è quanti token stanno nella cache **dopo** la chiamata, cioè
+> prompt+1 sempre. Il numero vero è `timings.prompt_n`. Conseguenza: in `budget_used` la
+> sottrazione `MAX(prompt - cached, 0)` valeva **sempre 0**, quindi il budget dei task **ha
+> contato solo la generazione, mai il prefill**, da F1.2 a oggi (`data.md` §7.14).
+> **Si è rivelato SOLO perché una metrica derivata è finita fuori dal suo intervallo
+> ammissibile** (riuso = 102%). Regola operativa che ne segue: **preferire quantità che HANNO
+> un intervallo ammissibile** — un rapporto tradisce sé stesso, una somma no.
+
 > **INTEGRAZIONE OBBLIGATORIA (2026-08-04), pagata subito dopo:** 20 run sono un *minimo*, non
 > un calcolo di potenza. Risolvono una differenza di ~40 punti; sono **cieche** su una di 10.
 > Con LAD.9 ho letto un 18/20 contro 16/20 (p = 0,66) come "non paga", quando l'unica
@@ -2124,6 +2133,31 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   peggiora, abbiamo finalmente la prova che qualcosa nella card serve — e sapremo cosa.
 - **Nota:** lo **schema di output** (~684 token della sezione ROLE) **non si tocca**: è la leva
   meglio misurata del progetto (0/60 → 60/60 utilizzabili).
+
+  ### 🔄 IN CORSO (2026-08-04) — variante costruita, costo misurato, A/B in esecuzione
+
+  **Risparmio misurato: 776 → 362 token, cioè 414 a ogni chiamata (5,1% della finestra).**
+  Leva `RG_WORKER_CARD=minimal`, variante in `redgiant/prompts/roles/variants/`, braccio
+  `card-min` in `run_agentic.py`. Una variante inesistente solleva `FileNotFoundError` invece
+  di ricadere in silenzio sulla card completa: un braccio che usa la card sbagliata produrrebbe
+  una misura senza senso.
+
+  **Regole tolte, e il motivo di ciascuna** — 13 test le presidiano, uno per regola: se domani
+  qualcuno la rimette, il test dice **perché** era stata tolta.
+
+  | Categoria | Regole | Motivo |
+  |---|---|---|
+  | Già imposte dalla struttura | una azione/passo · pensiero ≤300 char · confini di scope | unione discriminata, `Field(max_length=300)` e `Scope.check_write` le rendono **non violabili**: ripeterle a parole non aggiunge nulla |
+  | Misurate inefficaci o inerti | "dire non è fare" · "altre sottofasi" · "later subtasks own the rest" | la prima è violata nel **40%** dei tentativi (`data.md` §7.6.5); le altre parlano di sottofasi che **col planner spento non esistono** |
+  | Duplicate da un errore azionabile | nomi esatti dei tool · f-string | il router suggerisce il nome vicino e `syntax_hint` arriva al momento del fallimento — e quelli li abbiamo **misurati funzionare** (§7.9.2) |
+
+  **Restano, ognuna con la sua evidenza:** descrizione del compito, semantica `done`/`blocked`,
+  contratto di `edit_file` (20+ chiamate fallite → 5-6), scoperta dei comandi di test.
+
+  ⚠️ **Limite dichiarato PRIMA di vedere i numeri:** a 20 run per braccio si vedono differenze
+  di ~40 punti, non di 5. Se l'esito sarà "nessuna differenza", la conclusione lecita è
+  **"nessun danno grande rilevabile"**, non "equivalenti". Con un beneficio *certo* (414 token)
+  e un danno *non rilevabile* l'adozione è ragionevole, ma va scritta così.
 
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 

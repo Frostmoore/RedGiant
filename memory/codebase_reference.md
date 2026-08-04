@@ -18,9 +18,30 @@
 > | **Calcolatrice** (`RG_CALCULATOR`) | **spenta** (LAD.13) | 16/20 contro 17/20, **p = 1,000** |
 > | **Gate sul finish** (`RG_FINISH_GATE`) | **spento, ma NON dimostrato inutile** | A/B **sotto-potenziato**: +10 punti richiedono ~200 run/braccio |
 >
+> | **Compattazione della catena** (`RG_WORKER_ABLATE=compact`) | **ACCESA** su GPU | L7 **22/40** contro **12/40**, p = 0,0411 |
+>
 > **Runtime (F5.0-ante, misurato):** `dev-fast` gira con **`--swa-full --cache-reuse 256`**.
 > Rimuovere un blocco dal mezzo del prompt costa **1 token** invece di 2.748. `severino-sim`
 > **non** li ha ancora: `--swa-full` costa memoria e va misurato là prima di adottarlo.
+>
+> ### 📐 Dove vanno gli 8192 token (F5.0, misurato su 140 chiamate di L7)
+>
+> | Sezione | Al primo passo | Al punto di rottura | Natura |
+> |---|---|---|---|
+> | **CONTEXT** (catena dei risultati) | 284 | **4.600 — il 65% del prompt** | **l'unica che cresce** |
+> | ROLE (card 837 + schema ~684) | 1.521 | 1.521 | costante · la card è **la più grande di tutte** |
+> | TOOLS · PREAMBLE · TASK · STATE · OUTPUT | 1.009 | 1.009 | costanti |
+> | **fisso totale** | **2.530 = 31% della finestra** | | pagato **prima** di fare qualunque cosa |
+>
+> **Riuso della KV (F5.2/F5.3):** `avg_reuse_ratio` del Worker **89,3%** contro la soglia 0,6 di
+> F0.6; la curva per posizione dello step sale a **90-95% dal terzo passo** (D20 funziona). La
+> compattazione **non** lo degrada: 89,3% contro 85,8% dell'ablato, **−25% di token riprocessati
+> per chiamata**.
+>
+> **Card del Worker (F5.0-ter, in misura):** `RG_WORKER_CARD=minimal` seleziona la variante in
+> `roles/variants/` — **776 → 362 token, cioè 414 liberati a ogni chiamata (5,1% della
+> finestra)**. Default `full` finché l'A/B non parla. Ogni regola tolta è presidiata da un test
+> che ne cita il motivo.
 **Regola:** questo documento descrive **il codice che esiste**, non quello pianificato (per quello c'è [plan_red_giant.md](plan_red_giant.md)). Verifica meccanica: `python scripts/check_reference.py` — bloccante nel rituale di fine fase.
 
 ---

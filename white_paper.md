@@ -83,7 +83,7 @@ plausible-but-unmeasured improvement is not an improvement.*
 | 11 | **Full reasoning budget with untruncated material** | **0/20** | **20/20** | **p = 1.45 × 10⁻¹¹** — but only where material and reasoning fit together within 8,192 tokens; on the full rung the material would be truncated and the gain disappears. A verdict about **hardware** | 6.4 |
 | 12 | **Actionable errors** (refusals that state disk state; argument errors that name the missing field) | spirals up to **6 consecutive steps**, **7 fatal sequences** | **max 1 step**, **0 fatal**, recovery **100%** | they do not reduce mistakes (18% of calls still malformed): they remove the **spirals** mistakes used to cause. They act on the *cost* of failing, not its frequency | 6.4-ter |
 | 13 | **Runtime cache flags** (full sliding-window cache + suffix shifting) | **2,748** tokens reprocessed to remove a block mid-prompt | **1** | the model family uses sliding-window attention; with a partial cache the runtime cannot reuse anything past a divergence. Costs memory, so adopted on the development profile only | 6.4-quinquies |
-| 14 | **Wave compaction of the tool-result chain** | hardest rung **12/40 (30%)**, attempts dying at **7.7 steps** | **22/40 (55%)**, **13.2 steps** | **p = 0.0411**, sample size fixed *before* looking. Older results collapse onto the deterministic evidence line each tool already emits — no model-written summary. The +53% wall is the cost of **not dying** | 6.4-sexies |
+| 14 | **Wave compaction of the tool-result chain** | hardest rung **12/40 (30%)**, attempts dying at **7.7 steps**, **731** reprocessed tokens per call | **22/40 (55%)**, **13.2 steps**, **550** per call | **p = 0.0411**, sample size fixed *before* looking. Older results collapse onto the deterministic evidence line each tool already emits — no model-written summary. The +53% wall is the cost of **not dying**, and cache reuse *improves* (89.3% against 85.8%) | 6.4-sexies |
 
 **The common thread across all ten: none of them teaches the model anything.** Eight make an
 error *impossible to emit*; two grant more room or more attempts for the same work.
@@ -900,11 +900,49 @@ confirmatory agree to the percentage point. This is the retraction of §5.9.4 ap
 repeated — and it is the first result in this project obtained under a pre-specified sample
 size.
 
-**What is not yet established.** The reuse ratio before and after compaction has not been
-measured, so we know what the lever buys and not what it costs in cache terms — and on the
-memory-constrained profile, which lacks the runtime flags, that cost may differ substantially
-from the development profile. The intervention is therefore reported as effective and **not yet
-accepted**.
+**And it does not cost what it was expected to cost.** Compaction rewrites the prefix, so the
+natural objection is that it must destroy cache reuse. Measured, the opposite holds: **89.3%
+reuse with compaction against 85.8% without**, and **25% fewer reprocessed tokens per call**
+(550 against 731) at a lower mean prefill. A wave costs about one token under the runtime flags
+of §6.4-quinquies and leaves a *shorter* prompt, so every subsequent step processes less. The
+per-step reuse curve starts low — cold prefix — and climbs to 90–95% from the third step in both
+arms: the append-only design works as intended and survives compaction.
+
+**What remains unestablished** is the same clause as everywhere else: this holds on the
+development profile, which carries the runtime flags. On the memory-constrained reference
+profile, where a rewrite would cost a full reprocess, the account must be redone. The
+intervention is **accepted on the development profile and pending on the reference one**.
+
+### 6.4-septies Instrumentation as an intervention: two defects and one self-inflicted cost
+
+Two of this phase's findings came not from building a mechanism but from measuring one.
+
+**A ratio that exceeded one.** Reuse instrumentation initially reported 102%. A ratio above unity
+means the numerator is not the quantity one believes, so we interrogated the runtime rather than
+adjusting the formula. The field we had been recording as "cached" (`tokens_cached` in the
+server's completion response) is *how many tokens sit in the cache afterwards* — prompt+1,
+identical on cold and warm calls — whereas the quantity actually wanted is the reported
+prompt-processing count (`timings.prompt_n`: 721 cold, 1 on an identical prompt, 4 on an append). The consequence was not cosmetic: the task token
+budget subtracted `prompt − cached`, which was therefore **always zero**, so the budget had been
+counting generation and never prefill since the system's first phase. The original benchmark had
+used the correct field, so no published measurement was affected; the defect lived purely in
+runtime accounting. **The transferable point: it surfaced only because a derived quantity left
+its admissible range.** Prefer metrics that *have* an admissible range — a ratio betrays itself,
+a sum does not.
+
+**A cost we had imposed on ourselves.** The per-section breakdown showed that a fixed 31% of the
+window is consumed before any work begins, the largest single item being the executor's role
+card. Reducing that card to the rules that either carry measured evidence or are not already
+enforced by structure frees **414 tokens on every call, 5.1% of the window**. The removals fall
+into three classes, each with a stated reason: rules the type system already makes unviolable;
+rules measured ineffective, or inert under the current configuration because they describe
+entities that no longer exist; and rules duplicated by an actionable error that arrives at the
+moment of failure — the class we measured to work.
+
+The second finding deserves emphasis because it inverts the usual direction of blame. Over the
+campaign we repeatedly *added* prose to that card and repeatedly measured that the additions
+changed nothing. The instrumentation revealed we had also been paying for them, on every step of
+every run, in the scarcest resource the system has.
 
 ### 6.5 On negative results
 
@@ -953,6 +991,15 @@ control that equalized one variable by *mutilating* another produced a null resu
 confirmation for three measurements. We now require of any control that it be shown not to
 disable the mechanism under test, and we verify material-parity with the model's tokenizer
 before reading outcomes rather than after.
+
+**Measurement defects, six found in one campaign.** Beyond the benchmark artifacts below, three
+further defects were found in our own instrumentation and accounting: a control that mutilated
+the variable it was meant to hold constant (§6.4); a fixed run count read as a power calculation
+(§5.9.4); and a runtime field recorded as "cache reuse" that was nothing of the kind, leaving the
+token budget blind to prefill for the system's entire history (§6.4-septies). **None was visible
+in any success rate.** We report the count because it is the honest base rate for a project of
+this kind, and because each was found by a different technique — reading artifacts, computing
+required sample size, and checking that a derived quantity stayed inside its admissible range.
 
 **Benchmark artifacts — three found, all by reading artifacts rather than scores.** The ladder's
 first generation contained a formatting artifact that selectively disadvantaged the treatment

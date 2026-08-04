@@ -356,6 +356,43 @@ It also surfaced a bug. Rule 13 of the card ordered the model to route every sum
 
 Method note, and it is the point of the section: a 20-run pilot (11/20 vs 6/20, p = 0.20) was used **only to size the experiment**; the power calculation said 40 per arm; a **fresh** confirmatory sample was then run, with no optional stopping. Pilot and confirmatory agree exactly. It is the lesson from the finish-gate retraction applied rather than repeated.
 
+**And it does not cost what it was supposed to cost.** Compaction rewrites the prefix, so the obvious objection is that it must destroy cache reuse. Measured, it does the opposite:
+
+| Arm | Reuse | Reprocessed tokens **per call** | Mean prefill |
+|---|---|---|---|
+| compaction active | **89.3%** | **550** | **63 ms** |
+| ablated | 85.8% | 731 | 81 ms |
+
+With the runtime flags a wave costs about one token and leaves a **shorter prompt**, so every later step processes less: **25% fewer reprocessed tokens per call**. The per-step reuse curve starts low — cold prefix — and climbs to 90–95% from the third step in both arms, which is the append-only design working as intended and surviving compaction.
+
+#### A sixth measurement defect, found because a ratio exceeded one
+
+Building that instrumentation, reuse came out at **102%**. A ratio above one means the numerator is not what you think it is, so we interrogated the server rather than adjusting the formula:
+
+| Scenario | Real prompt | `tokens_cached` | `timings.prompt_n` |
+|---|---|---|---|
+| cold | 721 | 722 | **721** |
+| identical | 721 | 722 | **1** |
+| append | 724 | 725 | **4** |
+
+`tokens_cached` is *how many tokens sit in the cache afterwards* — prompt+1, identical cold and warm. The real figure is `timings.prompt_n`. **The consequence is not cosmetic:** the task budget subtracted `prompt − cached`, which was therefore always zero, so **the token budget has counted generation only and never prefill**, since the first phase. Corrected.
+
+One relief: the original benchmark already used `prompt_n`, so the published reuse numbers were right — the defect lived only in runtime accounting. And one lesson worth keeping: it surfaced *only* because a derived metric left its admissible range. **Prefer computing quantities that have an admissible range**; a ratio betrays itself, a sum does not.
+
+#### The scaffolding we pay for on every single call
+
+The same instrumentation turned an uncomfortable light on our own prompt. The worker's role card is **776 tokens on every call of every run** and the largest of all role cards. A reduced variant costs **362** — **414 tokens freed per call, 5.1% of the entire window**.
+
+It is not a cut by taste: every removed rule cites the reason it went.
+
+| Category | Removed | Why |
+|---|---|---|
+| **Already enforced structurally** | one action per step · thought ≤300 chars · scope boundaries | the discriminated union, a field constraint and the scope check make these **unviolable** — repeating them in prose adds nothing |
+| **Measured ineffective, or inert** | "saying is not doing" · two rules about *other subtasks* | the first is violated in 40% of attempts; the others describe subtasks that **do not exist** while the planner is off |
+| **Duplicated by an actionable error** | exact tool names · f-string advice | the router now suggests the near name and the syntax hint arrives *at the moment of failure* — and actionable errors are the ones we measured to work |
+
+What stays, stays for a measured reason: the task description, the `done`/`blocked` semantics, the `edit_file` contract (the project's strongest single piece of evidence: 20+ failed calls down to 5–6), and test-command discovery. The A/B is running at the time of writing; the saving is certain, the question is only whether it costs accuracy.
+
 #### What the full logs showed that no score did
 
 Reading the complete step-by-step logs of the last 40 runs surfaced **two failure modes larger than the arithmetic problem** we had been chasing:

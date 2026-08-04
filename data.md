@@ -1287,6 +1287,51 @@ nelle misure di riuso pubblicate.
 è rivelato solo perché una metrica derivata è finita fuori dal suo intervallo ammissibile — che
 è un buon argomento per calcolare sempre quantità che *hanno* un intervallo ammissibile.
 
+## 7.15 F5.3 — audit dei prefissi: nessuna violazione
+
+*(2026-08-04. La cache è byte-level, quindi l'audit lo è.)*
+
+**`avg_reuse_ratio` del Worker: 89,3%**, contro la soglia di **0,6** fissata in F0.6. D9 regge
+in produzione e non solo in teoria — la curva per posizione dello step parte bassa (prefisso
+freddo) e sale a **90-95% dal terzo passo**.
+
+Tre vie restavano scoperte dai test esistenti, tutte verificate pulite: card degli strumenti
+**deterministica**; **stabile al rimescolamento** del catalogo (che viene costruito da liste
+filtrate da ablazioni e interruttori, quindi l'ordine non deve dipendere dal dict); **preambolo
+condiviso** e mai duplicato dalle card. Aggiunto anche un presidio contro i **valori volatili**
+(date, orari) dentro S1–S4: uno solo azzererebbe il riuso a ogni chiamata.
+
+⚠️ **Lo strumento di diff previsto dal piano NON è stato costruito, di proposito.** Serviva a
+inseguire un `reuse_ratio` anomalo: non ce n'è. Resta come debito **con la sua condizione di
+innesco** — si costruisce al primo riuso fuori norma. Costruirlo ora sarebbe aggiungere un pezzo
+che nessuna misura ha richiesto, cioè la cosa che questa campagna ha imparato a non fare.
+
+## 7.16 F5.0-ter — la card del Worker: 414 token a ogni chiamata
+
+*(2026-08-04. A/B in corso al momento della scrittura: qui c'è il progetto e il risparmio
+misurato, il verdetto arriva dopo.)*
+
+La card costa **776 token a ogni chiamata di ogni run** ed è **la più grande di tutte** (3.114
+caratteri contro i 2.250 della seconda). La variante ridotta ne costa **362**: **414 token
+liberati per chiamata, il 5,1% dell'intera finestra**.
+
+**Non è un taglio a gusto: ogni regola tolta cita il motivo.** Tre categorie:
+
+| Categoria | Regole tolte | Perché |
+|---|---|---|
+| **Già imposte dalla struttura** | una azione per passo · pensiero ≤300 char · confini di scope | l'unione discriminata, `Field(max_length=300)` e `Scope.check_write` le rendono **non violabili**: ripeterle a parole non aggiunge nulla |
+| **Misurate inefficaci o inerti** | "dire non è fare" · "altre sottofasi" · "later subtasks own the rest" | la prima è violata nel **40% dei tentativi** (§7.6.5); le altre due parlano di sottofasi che **col planner spento non esistono** |
+| **Duplicate da un errore azionabile** | nomi esatti dei tool · f-string | ora il router suggerisce il nome vicino e `syntax_hint` arriva **al momento del fallimento** — e gli errori azionabili li abbiamo misurati funzionare (§7.9.2) |
+
+**Cosa resta, e perché:** descrizione del compito, semantica `done`/`blocked`, contratto di
+`edit_file` (l'evidenza più forte del progetto: 20+ chiamate fallite → 5-6) e scoperta dei
+comandi di test.
+
+**Limite dichiarato prima di vedere i numeri:** a 20 run per braccio si vedono differenze di
+~40 punti, non di 5. Se l'A/B darà "nessuna differenza", la conclusione lecita sarà **"nessun
+danno grande rilevabile"**, non "equivalenti". Con un beneficio *certo* (414 token) e un danno
+*non rilevabile*, l'adozione è ragionevole — ma va detta così.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
