@@ -38,15 +38,24 @@ FILLER = [
     "The runbook documents the failover procedure in detail.",
 ]
 
-# (rung, n_docs, n_facts, computed_total, chained)
+# (task_id, rung, n_docs, n_facts, computed_total, chained)
 RUNGS = [
-    ("L1", 5, 2, False, False),
-    ("L2", 15, 3, False, False),
-    ("L3", 40, 4, False, False),
-    ("L4", 90, 5, False, False),      # ~5.7K tok: ancora dentro gli 8192
-    ("L5", 90, 5, True, False),       # idem + totale calcolato
-    ("L6", 200, 6, False, False),     # ~12.8K tok: SFONDA il contesto
-    ("L7", 400, 8, True, False),      # ~25K tok: 3x il contesto + calcolo
+    ("T051", "L1", 5, 2, False, False),
+    ("T052", "L2", 15, 3, False, False),
+    ("T053", "L3", 40, 4, False, False),
+    ("T054", "L4", 90, 5, False, False),   # ~5.7K tok: ancora dentro gli 8192
+    ("T055", "L5", 90, 5, True, False),    # idem + totale calcolato
+    ("T056", "L6", 200, 6, False, False),  # ~12.8K tok: SFONDA il contesto
+    ("T057", "L7", 400, 8, True, False),   # ~25K tok: 3x il contesto + calcolo
+    # LAD.14 — variante CONTROLLATA di L5 (non un gradino piu' duro): stesso
+    # compito (5 fatti + somma) su materiale abbastanza piccolo da starci
+    # INTERO in entrambi i bracci nudi, pensiero compreso. A ctx 8192 il
+    # braccio nudo dispone di 7536 token di materiale e quello col pensiero
+    # pieno (1536) di 6000: con ~2.5K non tronca nessuno dei due. Serve a
+    # isolare la domanda vera — il ragionamento esplicito ripara l'aritmetica
+    # quando non c'e' nient'altro di mezzo? — senza allargare il contesto
+    # (che richiederebbe di riavviare llama-server fuori dal vincolo D8).
+    ("T058", "L5c", 40, 5, True, False),
 ]
 
 JUDGE = '''"""Giudice esterno {rid} — NON modificabile. Controlla i FATTI.
@@ -83,10 +92,12 @@ if __name__ == "__main__":
 '''
 
 
-def build_rung(rid: str, n_docs: int, n_facts: int, computed: bool,
+def build_rung(tid: str, rid: str, n_docs: int, n_facts: int, computed: bool,
                chained: bool) -> None:
+    # il seed resta legato al RUNG, non al task id: i corpus gia' generati
+    # restano byte-identici dopo questo refactor (rigenerabilita', §generate)
     rng = random.Random(f"ladder-{rid}")
-    task_dir = TASKS / f"T05{rid[1]}_ladder_{rid.lower()}"
+    task_dir = TASKS / f"{tid}_ladder_{rid.lower()}"
     repo = task_dir / "repo"
     if repo.exists():
         shutil.rmtree(repo)
@@ -141,7 +152,7 @@ def build_rung(rid: str, n_docs: int, n_facts: int, computed: bool,
               f"exactly. Verify with the 'check' command; it must pass.")
 
     (task_dir / "task.toml").write_text(
-        f'id = "T05{rid[1]}"\n'
+        f'id = "{tid}"\n'
         f'domain = "research_local"\n'
         f'prompt = "{prompt}"\n'
         f'success_cmd = "python judge.py"\n'

@@ -1522,14 +1522,38 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   non serve"* da *"256 token non bastano per ragionare"*. È un confondimento speculare al primo,
   non la sua soluzione.
 
-  **Esecuzione:** stessa L5, `RG_THINKING_BUDGET=1536`, `ctx_size ≈ 9728` (8192 + 1536) via
-  override di profilo, materiale non troncato e **verificato identico** a quello del braccio
-  nudo (il runner dichiara già il troncamento: dev'essere `8.036 → 7.536` in entrambi).
-  3 run come le altre celle di §6.2, su `severino-sim` per comparabilità.
+  **DISEGNO SCELTO — rimpicciolire il materiale, non allargare il contesto.**
+  Il contesto vero non è `cfg.llm.ctx_size` (che è solo il controllo lato client in
+  `run_naked.py:57`, `budget = ctx_size − MAX_OUT − 400 − think_budget`): è il `-c` con cui
+  `llama-server` è stato avviato, oggi **8192**. Alzarlo richiede di **riavviare il server** —
+  cambio infrastrutturale, mai di iniziativa. La stessa domanda si risponde senza toccare nulla
+  usando un gradino il cui materiale sta *comodo* in entrambi i bracci.
 
-  ⚠️ **Il risultato NON descrive una configurazione spedibile.** `ctx_size = 8192` è un vincolo
-  **misurato** (F0.6): prefill a freddo 8K = 69,6 s, 16K = 173,6 s — a ~9,7K si stimano ~90-100 s
-  su Severino, oltre il tetto accettato in D8. Va dichiarato nel report.
+  **Gradino `L5c` = `T058_ladder_l5c`** (già in `bench/ladder/generate.py::RUNGS`): stesso
+  compito di L5 — **5 fatti + la somma** — ma su **40 documenti** (~2.5K token) invece di 90.
+  A ctx 8192 il braccio nudo dispone di **7.536** token di materiale e quello col pensiero
+  pieno di **6.000**: con ~2.5K **nessuno dei due tronca**. Non è un gradino più duro: è la
+  variante **controllata** di L5.
+
+  **Esecuzione (da lanciare, NON ancora eseguita):**
+  ```
+  python bench/ladder/generate.py                              # crea T058 (seed fisso)
+  python bench/ladder/run_naked.py dev-fast 20 T058            # B1: nudo
+  python bench/ladder/run_naked.py dev-fast 20 T058 --think    # B3: pensiero 1536
+  ```
+  20 run per braccio (regola delle 20) con Fisher allegato. **GPU `dev-fast`**: serve a
+  classificare, non a produrre numeri ufficiali (D6) — se emerge un effetto, si decide se vale
+  una campagna su `severino-sim`.
+
+  **Controllo obbligatorio prima di leggere gli esiti:** il runner dichiara il troncamento; su
+  T058 **non deve comparire** in nessuno dei due bracci. Se compare, la misura è nulla.
+
+  **Variante a contesto allargato — resta disponibile, richiede autorizzazione.** L5 originale
+  con `RG_THINKING_BUDGET=1536` e `llama-server -c 9728`, per avere pensiero pieno **e** i
+  7.536 token di materiale del braccio nudo. Ha senso solo **se** L5c mostra un effetto. Il
+  risultato non descriverebbe comunque una configurazione spedibile: `ctx_size = 8192` è un
+  vincolo **misurato** (F0.6 — prefill a freddo 8K = 69,6 s contro 16K = 173,6 s; a ~9,7K si
+  stimano 90-100 s su Severino, oltre il tetto di D8).
 
   **Perché vale comunque la pena, ed è il punto dell'obiezione:** i due esiti portano a verdetti
   *di natura diversa*.
