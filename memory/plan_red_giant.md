@@ -2397,6 +2397,18 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   "leggo tutto"; seconda candidata la 13 (nomi esatti → meno passi sprecati).
   **Log:** timestampati (regola utente 2026-08-05, implementata nel runner), con percorso del
   report per run.
+  **ESITO PARZIALE (2026-08-05, notte, `@4467073`):** `card-bisA` = **3/10 in 894 s** →
+  **zona ambigua (2–3/10)** per le regole pre-specificate → serve l'**estensione a 20** (altre
+  10 run) e il giudizio SOLO sul campione completo. `card-bisB` NON eseguito (PC spento prima
+  del secondo braccio). **Coda per la ripresa:** (1) `card-bisA` +10 run → giudizio a n=20
+  contro le ancore; (2) `card-bisB` 10 run con le stesse regole. Comando:
+  `python bench/ladder/run_agentic.py dev-fast T057 card-bisA,card-bisB 10` (per bisA
+  l'estensione va aggregata a mano con le prime 10: i report stanno in `bench/results/`
+  `eval_dev-fast_static_20260804-2305*..2320*`, log timestampato nella sessione).
+  Nota rispetto alla previsione registrata: bisA a 3/10 NON conferma (per ora) che il gruppo
+  A basti da solo a orientare — se l'estensione resta sotto 4/20-equivalente, la risposta
+  potrebbe essere "servono regole di ENTRAMBI i gruppi", che è un'interazione, non una
+  bisezione pulita.
 
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 
