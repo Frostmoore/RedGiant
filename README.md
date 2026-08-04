@@ -216,7 +216,24 @@ Every rung is then measured on the full **2×2 matrix, ablations included in bot
 
 The comparisons this makes possible: **B2−B1** = value of the scaffolding · **B3−B1** = value of reasoning with no scaffolding · **(B4−B2) vs (B3−B1)** = whether reasoning pays more inside or outside the workflow · **full−(ablated arm)** = the price of each individual component.
 
-**Results so far** (severino-sim, external judges; naked arms 3 runs/rung, workflow arms 1 run/rung/arm):
+**The full matrix, re-measured at 20 runs per arm** (GPU profile, same commit for both workflow blocks — the older 3-run table follows for history):
+
+| Rung | Task | **B1** naked | **B3** naked+think | **B2** workflow | **B4** workflow+think |
+|---|---|---|---|---|---|
+| L1–L3 | 2–4 facts | **20/20** | **20/20** | — | — |
+| L4 | 5 facts | **20/20** | **20/20** | — | — |
+| **L5** | 5 facts **+ sum** | **0/20** | **0/20** | **19/20** | 16/20 |
+| L6 | 6 facts, 200 docs | **0/20** | **0/20** | 16/20 | **19/20** |
+| L7 | 8 facts + sum, 400 docs | **0/20** | **0/20** | 8/20 | **12/20** |
+| **L5c** | 5 facts + sum, *material fits* | **0/20** | **20/20** | — | — |
+
+Three readings, none available from a single arm:
+
+- **The naked ceiling is aggregation, not breadth.** L5c carries *less* material than L4 and still scores 0/20 naked: five facts yes, their sum no.
+- **The scaffolding wins the rung the model cannot see** — 0/20 → 19/20 on L5 — and the ablations name the component responsible.
+- **Reasoning and scaffolding are substitutes, not complements.** Alone, reasoning takes the aggregation rung from 0/20 to **20/20** (p = 1.45 × 10⁻¹¹). Inside the workflow it adds **nothing**: 43/60 against 47/60 across the three hard rungs, **p = 0.528**, at **+55% wall**. Whichever arrives first takes all — see [§6.4-quater of the white paper](white_paper.md).
+
+**Historical results** (severino-sim, external judges; naked arms 3 runs/rung, workflow arms 1 run/rung/arm):
 
 | Rung | Corpus | Facts | **B1**<br/>naked | **B3**<br/>naked+think | **B2** full<br/>workflow | **B2** −search | **B2** −verify | **B2** −retry |
 |---|---|---|---|---|---|---|---|---|
@@ -288,6 +305,31 @@ What this does *not* overturn: the official coding verdict (Δ = 0 verified acro
 So there are now **two independent solutions to the same rung, in different regimes**: the coherence gate delivers 18/20 on the *full* rung at the shipping context size, while full reasoning delivers 20/20 only where material and reasoning fit together — which the full rung does not permit. The gate is the deployable answer today; reasoning is the one that needs a bigger window. They are two points on one cost-versus-capacity curve, and that curve is what the context phase now exists to optimize.
 
 The retracted claim agreed with the literature we cited for it, which is precisely why it survived three measurements. **Agreement with prior work is not evidence; it is a reason to check the control harder.**
+
+#### Two more components were switched off, and one verdict was withdrawn
+
+**The calculator left the catalogue.** With the coherence gate in place, `full` scored 16/20 against 17/20 for the ablated arm — **Fisher p = 1.000** — and not for want of use: the full arm made **27 successful calls** with the right expression. The gate had made the tool redundant: the total comes out right because the control plane refuses the incoherence and hands back the number, without depending on the model choosing to compute. Two paths to the same place, and the deterministic one does not require a decision. It ships disabled, with a written reopening condition for domains where the gate does not apply (the gate only understands totals in text files).
+
+**The finish-gate verdict was withdrawn, and the reason matters more than the gate.** We had reported it as *no effect, because retry was already paying for the phantom finish*. Log analysis falsified that: across a later campaign every one of the seven failing runs failed by phantom finish **in all three of its attempts** — retry does not pay. The correct reading of p = 0.66 is arithmetic: 18/20 against 16/20 is a **ten-point** effect, and separating ten points from noise needs roughly **200 runs per arm**, not twenty. We had adopted a twenty-run rule one day earlier without asking *twenty runs to detect what*, then read our own insufficient sample as a verdict. **A null result on a small effect is not a verdict; it is an insufficient sample.** The gate stays off as *unproven*, not as useless — and the mechanistic evidence now favours it, since it targets 100% of the residual failures on the rung the system wins.
+
+#### A constraint that structured an entire phase turned out to be our own configuration
+
+The next phase — context and cache — was designed around a measurement from the very first benchmark: changing one byte in the middle of a prompt costs **7,971 tokens** of reprocessing against **65** for a pure append. That number makes compaction look prohibitive, and it shaped the plan.
+
+Before writing any code we re-measured it, because the original probe answered a different question: it changed a byte *in place*, whereas compaction **removes a block** and shifts everything after it. It also turned out that `llama-server` has a flag for exactly that case which we were not using.
+
+| Configuration | byte changed mid-prompt | **block removed from the middle** |
+|---|---|---|
+| our default | 4003 | **2748** |
+| `--cache-reuse 256` alone | 4003 | **2748** |
+| `--swa-full` alone | **2001** | **1390** |
+| **`--swa-full --cache-reuse 256`** | **2001** | **1** |
+
+**Removing a block goes from 2,748 reprocessed tokens to one.** `--swa-full` is the prerequisite — Gemma is a sliding-window model, and with a partial SWA cache llama.cpp cannot reuse anything past a divergence; the flag restores prefix reuse, which is why the byte-change case halves exactly as theory predicts. `--cache-reuse` then shifts the suffix instead of recomputing it.
+
+Two design traps were found in the probe itself, both by measuring: cutting at an arbitrary *character* offset breaks tokenization at the seam, so no reuse is possible with or without the flag; and a homogeneous filler prompt makes a middle removal indistinguishable from a truncation. Both are now documented in the benchmark code.
+
+**The lesson, and it is the fifth of this campaign:** *a constraint that structures an entire phase must be re-measured before designing around it* — particularly when the number supporting it is old and was gathered to answer a different question.
 
 #### What the full logs showed that no score did
 

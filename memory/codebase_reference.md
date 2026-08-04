@@ -1,6 +1,26 @@
 # Red Giant — Codebase Reference (atlante)
 
-**Aggiornato al:** 2026-08-03 · **Versione repo:** `v4.4.0` · **Fase completata:** F3-bis (domini non-coding) + planner system (PS0–PS6) + campagna thinking (TH0–TH3) + ladder di attribuzione
+**Aggiornato al:** 2026-08-04 · **Versione repo:** `v5.3.0` · **Fase completata:** F3-bis + planner system (PS0–PS6) + campagna thinking (TH0–TH3) + **campagna ladder completa (LAD.1–LAD.15)** · **Prossima:** F5 (anticipata prima di F4, decisione utente)
+
+> ### ⚡ Stato dei verdetti al 2026-08-04 — leggere PRIMA di toccare il codice
+>
+> | Componente | Stato | Numero che lo decide |
+> |---|---|---|
+> | Ricerca selettiva (`search_code`) | **ACCESO** | ablarla = 0/5 su ogni gradino, replicato 3× |
+> | Verifica deterministica | **ACCESO** | ablarla = 8 false dichiarazioni in 5 run |
+> | Retry (2 tentativi) | **ACCESO** | ablarlo = 0/3, muore a −59% token |
+> | Guardia di coerenza (`coherence.py`) | **ACCESO** | 18/20 contro 9/20, p = 0,0057 |
+> | Errori azionabili (`args_hint`, `refusal_state`) | **ACCESO** | spirali da max 6 passi a max 1, 7 fatali → 0 |
+> | Planner in-loop | **spento** (D11) | 2/10 contro 9/10 |
+> | Plan compiler | **spento** (PS-D9) | 2/13 contro 6/13 e 8/13 |
+> | Thinking nel workflow | **spento** (TH2+LAD.11) | 43/60 contro 47/60, p = 0,528 |
+> | Thinking sul modello **nudo** | ⚠️ **PAGA**, ma non ci sta in 8192 | **20/20 contro 0/20**, p = 1,45×10⁻¹¹ (LAD.14) |
+> | **Calcolatrice** (`RG_CALCULATOR`) | **spenta** (LAD.13) | 16/20 contro 17/20, **p = 1,000** |
+> | **Gate sul finish** (`RG_FINISH_GATE`) | **spento, ma NON dimostrato inutile** | A/B **sotto-potenziato**: +10 punti richiedono ~200 run/braccio |
+>
+> **Runtime (F5.0-ante, misurato):** `dev-fast` gira con **`--swa-full --cache-reuse 256`**.
+> Rimuovere un blocco dal mezzo del prompt costa **1 token** invece di 2.748. `severino-sim`
+> **non** li ha ancora: `--swa-full` costa memoria e va misurato là prima di adottarlo.
 **Regola:** questo documento descrive **il codice che esiste**, non quello pianificato (per quello c'è [plan_red_giant.md](plan_red_giant.md)). Verifica meccanica: `python scripts/check_reference.py` — bloccante nel rituale di fine fase.
 
 ---
@@ -473,7 +493,9 @@ Regola di metodo (utente, 2026-08-03): **ogni componente aggiunto dev'essere abl
 | calcolatrice | `calc` | `calculator` dal catalogo | ~nullo: il tool era invocato nel 40% delle run |
 | coerenza | `coherence` | la guardia F4 in scrittura | **18/20 vs 9/20** su L5, p=0.0057 (`data.md` §7.6) |
 
-**Non tutto si abla: ciò che è misurato come non pagante si SPEGNE.** Il gate sul finish (LAD.9) non ha una leva di ablazione ma un interruttore di accensione, `RG_FINISH_GATE=1`, **spento di default** (L5 18/20 vs 16/20 p=0.66; L7 11/20 vs 11/20 p=1.00; +15% di tempo — `data.md` §7.7). Stesso trattamento di `planner_enabled` (D11) e `RG_THINKING_ROLES` (TH3). Polarità dei bracci in `run_agentic.py`: **`−x` abla un componente attivo, `+x` accende uno spento.**
+**Non tutto si abla: ciò che è misurato come non pagante si SPEGNE.** Interruttori di accensione (default OFF), non leve di ablazione: `RG_FINISH_GATE=1` (gate sul finish, LAD.9), `RG_CALCULATOR=1` (calcolatrice, LAD.13), `RG_THINKING_ROLES` (TH2), `planner_enabled` in config (D11). Polarità dei bracci in `run_agentic.py`: **`−x` abla un componente attivo, `+x` accende uno spento.**
+
+⚠️ **RETTIFICA sul gate sul finish (2026-08-04).** L'atlante diceva che il gate era spento *perché il retry pagava già*. **Falso**: i log di LAD.13 mostrano che le 7 run fallite sono **7 su 7 finish fantasma, in tutti e tre i tentativi** — il retry non paga. Il vero motivo è che **l'A/B era sotto-potenziato**: 18/20 contro 16/20 è un effetto da +10 punti, e servono ~200 run per braccio per vederlo. Resta spento perché **non dimostrato**, non perché inutile — e l'evidenza meccanicistica gli è favorevole, dato che colpisce il 100% dei fallimenti residui di L5 (`data.md` §7.7, §7.9.4).
 
 ```python
 def worker_ablated(component: str) -> bool
@@ -553,7 +575,36 @@ Rotte GUI: tabella F2.2 del piano (inline in `web/app.py`) + **PS7.2**: `GET /ta
 
 V. `config/default.toml` (commentato, con blocco decisioni F0.6) e piano §A6. Novità F1: `security.shell_whitelist` include `python` (serve ai giudici dei task). **Novità PS0:** sezione `[plansys]` (`enabled=false` PS-D9, `max_phases`, `max_micro_per_phase`, `projection_max_tokens`, `m_pass_max_tokens`, `test_author_max_tokens`, `mutation_probe`) → `Config.plansys_enabled: bool` + `Config.plansys: PlansysCfg`. **Novità F3b.1:** chiave `security.http_allowed_domains` (whitelist per `http_get`, default `[]` = niente rete; i task la estendono via task.toml, mai il default). **Novità TH0:** chiavi `[llm] think_open`/`think_close` (marcatori del canale di pensiero, estratti dal chat template incorporato nel GGUF: `<|channel>thought\n` / `<channel|>`; default "" nei profili senza thinking → `complete(think=N)` con marcatori vuoti alza LlmError). **Novità F3 (gate D11):** sezione `[planner]` con `enabled = false` di default → `Config.planner_enabled: bool` — a Planner spento l'Orchestrator usa `_naive_plan` e rifiuta il replanning; `rg eval --planner` riaccende via `dataclasses.replace(cfg, planner_enabled=True)` nell'harness. Pin di piattaforma: v. §6 della versione precedente, invariati (immagine ghcr digest b10200; binari win b10217; GGUF QAT UD-Q4_K_XL sha `e531...6889`).
 
+### 6-bis. Configurazione del RUNTIME (flag di `llama-server`, misurati in F5.0-ante)
+
+Non sono chiavi di config del progetto ma **decidono il comportamento della cache**, quindi vivono qui.
+
+| Flag | `dev-fast` | `severino-sim` | Effetto misurato (rimozione di un blocco dal mezzo) |
+|---|---|---|---|
+| *(nessuno)* | — | ✅ attuale | **2.748** token riprocessati |
+| `--cache-reuse 256` da solo | — | — | 2.748 (inutile da solo: Gemma è SWA) |
+| `--swa-full` da solo | — | — | 1.390 (torna il riuso del **prefisso**) |
+| **`--swa-full --cache-reuse 256`** | ✅ **adottato** | ❌ **da misurare** | **1** (il suffisso viene **traslato**) |
+
+`--swa-full` è il prerequisito: con la cache SWA parziale llama.cpp non riusa nulla dopo una divergenza. `--cache-reuse` aggiunge lo shifting. **Costo di `--swa-full`: memoria** (cache SWA piena) — irrilevante su GPU, da misurare su `severino-sim` (10 GB, ctx 16384) prima di adottarlo. Impostati in `scripts/start-llama.ps1` (parametri `-CacheReuse`, `-NoSwaFull`). **`--context-shift` resta disattivato di proposito:** scarterebbe i token più vecchi, cioè la descrizione del task.
+
+### 6-ter. Strumenti di misura (`bench/`)
+
+```python
+# bench/run_bench.py
+def _mk_blocks(client, url, target_tokens: int) -> list[str]   # materiale ETEROGENEO a blocchi numerati
+# scenari di riuso: A freddo · B append · C byte cambiato in place (prova di D9)
+#                   D blocco RIMOSSO dal mezzo · E D+coda nuova  (F5.0-ante)
+# bench/ladder/run_naked.py
+def strip_template_markers(text: str) -> str   # equita' del braccio nudo
+```
+**Trappole di disegno delle sonde, disinnescate:** tagliare a un offset di *carattere* spezza la tokenizzazione alla sutura (nessun riuso possibile, flag o non flag); e con un prompt base omogeneo rimuovere il centro dà un testo identico a un suo *prefisso* — si misurerebbe un troncamento invece di uno shift.
+
 ## 7. Catalogo dei test
+
+`tests/unit/` — **144 test**, nessuno tocca il modello. Aggiunte della campagna ladder: `test_coherence_guard.py` (guardia F4 sui contenuti + `refusal_state`), `test_finish_gate.py` (gate LAD.9, default OFF, tetto ai rifiuti, polarità dei bracci), `test_naked_arm_fairness.py` (marcatori di template: una risposta *esatta* veniva bocciata), `test_calc_tool.py` (`bad_args` che insegna, calcolatrice fuori dal catalogo, card che si accorcia).
+
+*(Il testo storico qui sotto è della fotografia F1–PS5 e va letto come tale.)*
 
 `tests/unit/` — 80 test, nessuno tocca il modello (delta PS4 in `test_plansys_gates.py`: validate_verification, oracle gate che qualifica l'oracolo buono e respinge tautologie/scollegati/new_behavior-che-passa, validate_bundle; delta PS5 in `test_plansys_compiler.py`: work_order con verification=proof:*, retry gate anti-fotocopia, bookkeeping fasi/eleggibilità/proof-commands) (delta PS2 in `test_plansys_gates.py`: gate macro su copertura/id/grafo, normalize dei sentinelli, richiamata correttiva del Senior con [RULES] e MacroRejected; delta PS3 in `test_plansys_compiler.py`: anti-invenzione M1, ownership esclusiva M2, _apply_patch replace/add/remove con ValueError su target ignoto, flusso patch→rigenerazione→CompileFailed, NeedsDecision con analisi persistita) (delta PS0 in `test_plansys_artifacts.py`: round-trip+forbid degli artefatti, tetti che mordono, versioning ps_artifacts monotono con KeyError esplicito, renderer deterministico e greppabile, config plansys spenta di default; delta PS1 in `test_plansys_ledger.py`: firme qualificate via AST anche su file rotti, ledger deterministico con decisioni/test/firme, proiezione a budget con obbligatori sempre presenti e troncamento dichiarato) (i conteggi per file sotto sono della fotografia F1; il delta F2 copre: rotte GUI, grant/override/estensioni budget, ripresa, syntax gate, CRLF, scoperta comandi, union strutturale, simmetria oracoli; il delta F3 copre: validazione logica piano/design incl. regola scoped, `normalize_plan` sentinelli+auto-dipendenza, `no_op_edit`, guard `identical_repeat` con esenzione run_tests, gate D11 `_naive_plan`+replan rifiutato):
 
@@ -656,7 +707,8 @@ Le 8 di F0 (v. storia git per il dettaglio: grammatica-non-informa, turn templat
 - **⭐ Il Senior sottodimensiona la richiesta e nessun gate se ne accorge** (T041 ufficiale, l'unica forbice completed≠verified): criteri = un terzo della richiesta, coverage interno verde, giudice esterno `No module named 'hist'`. Fix a piano: i file NOMINATI nella richiesta devono comparire negli artifacts di qualche fase (gate deterministico su S).
 - **L'eccezione "test_file esistente" dei nomi canonici tiene anche file non-py** (T003 ufficiale: M3 punta a `test.php` esistente → non canonicalizzato → morte in repair). Fix a piano: eccezione solo per `test_*.py` esistenti.
 - **⭐ Varianza run-to-run ANCHE su severino-sim** (ri-misura PS6-bis: baseline 6/13→8/13 a codice IDENTICO, 4 task flippati): lo stato della cache del server cambia i numeri (llama.cpp #2838: prompt valutato a freddo ≠ con cache, numericamente) — banda **±2/13**. Regola permanente: verdetti ufficiali SOLO su run multiple mediate; le diagnosi "è il codice, non il rumore" su run singola sono vietate (già costata una diagnosi troppo sicura sulla regressione 9/10→6/10, da rifare come bisection multi-run).
-- **⭐ VERDETTO CAMPAGNA THINKING (TH3, 2026-08-03):** thinking a tempo pieno **OFF in produzione per ogni ruolo** — TH2 ufficiale (2 batterie/braccio): Giano pensante 1,5/13 medio vs controllo 1,5/13, Δ=0 a 1,4× token e 1,9× wall pulito. Lo scalpo T002 (batteria 1, mai passato nella storia) non riprodotto in batteria 2: reale ma nel rumore. Leva futura NON misurata: thinking selettivo al retry (TH-bis). Meccanica two-call pronta dietro `RG_THINKING_ROLES` per F7/chat.
+- **⭐ VERDETTO CAMPAGNA THINKING (TH3, 2026-08-03) — ⚠️ PARZIALMENTE RIBALTATO IL 2026-08-04, LEGGERE ENTRAMBE LE RIGHE:** thinking a tempo pieno **OFF in produzione per ogni ruolo** — TH2 ufficiale (2 batterie/braccio): Giano pensante 1,5/13 medio vs controllo 1,5/13, Δ=0 a 1,4× token e 1,9× wall pulito. Lo scalpo T002 (batteria 1, mai passato nella storia) non riprodotto in batteria 2: reale ma nel rumore. Meccanica two-call pronta dietro `RG_THINKING_ROLES` per F7/chat.
+- **⭐ RIBALTAMENTO (LAD.14, 2026-08-04) — il thinking PAGA sul modello nudo, ma non ci sta in 8192.** Sul gradino controllato L5c (materiale che entra intero in **entrambi** i bracci, verificato col tokenizer prima di leggere gli esiti): **B1 nudo 0/20, B3 nudo+pensiero 20/20**, Fisher p = 1,45×10⁻¹¹. Le tre misure precedenti che dicevano il contrario erano **tutte confondute**: due davano pensiero pieno e materiale troncato, la terza materiale alla pari e **pensiero mutilato a 256** (budget che TH0 aveva già misurato come "mai una chiusura naturale"). **Formulazione corretta: il ragionamento compra l'aritmetica, ma non entra in 8192 token insieme al materiale — è un verdetto sull'HARDWARE, non sul modello.** E dentro il workflow non aggiunge nulla (LAD.11: 43/60 contro 47/60, p = 0,528): impalcatura e ragionamento sono **sostituti**, chi arriva primo prende tutto. *(Regola di metodo nata qui: un controllo che MUTILA la variabile invece di isolarla non è un controllo — produce un nullo illeggibile che sembra una conferma.)*
 - **⭐ Il muro migra verso chi non pensa** (TH1, 7 bracci × 20 run GPU): thinking su M → oracoli più esigenti (O2/O3) → muore J (0-2/20); thinking su J → morti J DIMEZZATE (5/20 vs 10-11) e 4/20 verdi a 1,6× costo; thinking su tutti → i due effetti si annullano a 4× costo (1/20). Regola: ogni potenziamento di un ruolo si misura sull'INTERA catena. Corollario fixato: M2 pensante copia la fase sbagliata nel phase_id → identità imposta dal control plane in `_norm` (5/20 nel round 1).
 - **Residuo NON risolto (il muro, F18)**: ~metà delle morti residue è J che non riproduce i formati esatti chiesti dai proof (report/storage) pur vedendo sorgente dei test e assertion diff; gli f-string annidati restano una debolezza riconosciuta ma non attuata dal modello (hint + regola 12 della card). Leva proposta e in attesa di decisione: emendamento PS-D6 (un tentativo informato in più prima del blocco fotocopia).
 

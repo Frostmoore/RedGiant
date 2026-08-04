@@ -73,6 +73,61 @@ prima di costruire una difesa, misurare **chi sta già pagando** per il problema
 | ~~6~~ | ~~Buco nella matrice: B4~~ | ✅ **CHIUSO il 2026-08-04** (§7.10): B2 e B4 rimisurati sullo **stesso commit**, 20 run per gradino. La matrice 2×2 della ladder è completa | — | — |
 | 7 | **Syntax gate, `no_op_edit`, hint su `unknown_tool`** | validati da piloti e collaudi (es. 13 task su 43 sprecavano passi su nomi inventati; 15 edit no-op consecutivi osservati) | mai passati dalla ladder con bracci ablati | bassa: patologie documentate e costo nullo |
 
+### 0.4 Le conclusioni, nella forma in cui reggono davvero
+
+*Scritte il 2026-08-04, dopo la campagna ladder. Ogni frase qui sotto è stata potata fino a
+quello che i numeri sostengono — le versioni più ambiziose sono state provate e sono cadute.*
+
+**1. L'impalcatura funziona, ma non fa quello che sembra.**
+A livello di singolo passo il sistema trasforma un modello inutilizzabile in un esecutore
+affidabile: output strutturati da 0/60 a 60/60, un'interfaccia di modifica che passa da 20+
+chiamate fallite a 5-6, intere famiglie di errore azzerate. Questo è il risultato più solido del
+progetto e non è in discussione.
+Ma **non lo rende più intelligente**. Delle tredici leve che funzionano, dieci rendono un errore
+*impossibile da commettere* e tre danno solo più spazio o più tentativi. **Nessuna leva che si
+limita a chiedere qualcosa al modello ha mai funzionato**, e ne abbiamo provate quattro.
+
+**2. Converte solo dove esiste un modo economico di verificare la risposta.**
+Dove c'è un oracolo deterministico e il modello nudo cade per ampiezza o incoerenza, la
+conversione è netta: il gradino dell'aggregazione passa da **0/20 a 19/20**. Dove l'oracolo non
+c'è — i task di ingegneria del software multi-sessione — siamo a **0 su 3 in ogni braccio**, con
+e senza pianificatore, con e senza ragionamento. È il fallimento aperto del progetto, e nessuno
+dei componenti costruiti finora lo tocca nemmeno di striscio.
+
+**3. Il valore dell'impalcatura è relativo, non assoluto.**
+È la scoperta che ridimensiona di più la tesi originale. Sul gradino dell'aritmetica il
+ragionamento **da solo**, senza alcun workflow, fa **20/20**. Dentro il workflow non aggiunge
+nulla. Impalcatura e ragionamento **risolvono lo stesso collo di bottiglia**: chi arriva primo
+prende tutto. Quindi la domanda giusta non è *"quanto vale la nostra impalcatura?"* ma **"quanto
+vale rispetto a ciò che risolverebbe lo stesso problema in un altro modo?"**.
+
+**4. Il vincolo che morde non è l'intelligenza: è la finestra di contesto.**
+Due misure indipendenti puntano lì. Il gradino più duro non esaurisce i passi — ne usa 8,5 su 60
+— muore perché il contesto si riempie. E il ragionamento, che risolverebbe l'aritmetica, **non ci
+sta in 8192 token insieme al materiale**. Il contesto non è una voce di costo: è la risorsa che
+decide **quali capacità sono raggiungibili**.
+
+**5. Quello che non possiamo ancora dire.**
+Quasi tutti i numeri recenti vengono dalla GPU, su task **sintetici**, con giudici scritti da
+noi. Il profilo ufficiale su CPU non ha ancora visto nessuno di questi fix. Finché quella
+campagna non gira, **tutto ciò che c'è sopra è una direzione solida, non una misura definitiva**.
+E l'onestà impone di aggiungere che in due giorni abbiamo trovato **cinque difetti di misura**
+(un formato sleale, un giudice che regalava la risposta, marcatori che bocciavano risposte
+esatte, un campione insufficiente letto come verdetto, un vincolo mai rimisurato): nessuno era
+visibile nei punteggi, tutti trovati leggendo artefatti e log. È ragionevole assumere che ce ne
+siano altri.
+
+---
+
+**La tesi, riformulata in modo che regga:**
+
+> Su hardware modesto, un control plane deterministico rende un modello da 2 miliardi di
+> parametri **affidabile** — non più capace — nei compiti in cui esiste un modo economico di
+> verificare il risultato. Non alza l'intelligenza del modello: **riduce i punti in cui serve
+> intelligenza**. Dove quel modo economico di verificare non esiste, non abbiamo ancora niente
+> da mostrare. E il tetto che oggi ci limita non è il modello: è quanto contesto entra nella
+> macchina.
+
 ---
 
 ## 1. Come si leggono questi dati

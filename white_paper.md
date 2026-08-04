@@ -82,6 +82,7 @@ plausible-but-unmeasured improvement is not an improvement.*
 | 10 | Step budget proportional to task size | L7 died without ever writing the file | L7 **11/20** | 20 steps cannot collect 8 facts from 400 documents: not incapacity, budget | 5.9.5 |
 | 11 | **Full reasoning budget with untruncated material** | **0/20** | **20/20** | **p = 1.45 × 10⁻¹¹** — but only where material and reasoning fit together within 8,192 tokens; on the full rung the material would be truncated and the gain disappears. A verdict about **hardware** | 6.4 |
 | 12 | **Actionable errors** (refusals that state disk state; argument errors that name the missing field) | spirals up to **6 consecutive steps**, **7 fatal sequences** | **max 1 step**, **0 fatal**, recovery **100%** | they do not reduce mistakes (18% of calls still malformed): they remove the **spirals** mistakes used to cause. They act on the *cost* of failing, not its frequency | 6.4-ter |
+| 13 | **Runtime cache flags** (full sliding-window cache + suffix shifting) | **2,748** tokens reprocessed to remove a block mid-prompt | **1** | the model family uses sliding-window attention; with a partial cache the runtime cannot reuse anything past a divergence. Costs memory, so adopted on the development profile only | 6.4-quinquies |
 
 **The common thread across all ten: none of them teaches the model anything.** Eight make an
 error *impossible to emit*; two grant more room or more attempts for the same work.
@@ -98,7 +99,8 @@ tasks). None was closed by opinion.*
 | 2 | Plan compiler | **2/13 vs 6/13**, and **2/13 vs 8/13** on re-measurement · −44% tokens, +9.4 points of useful tokens, no additional greens | the gates move deaths *deeper* (from 0 tool calls to 20–38 at 80–93% useful tokens) without converting them | multi-session tasks |
 | 3 | Explicit reasoning **inside the workflow** | Δ = 0 over four coding batteries · and on the ladder **43/60 vs 47/60**, **p = 0.528**, at **+55% wall** | **the workflow and reasoning resolve the same bottleneck — whichever arrives first takes all.** Alone, reasoning does the arithmetic (row 11); above a coherence gate that has already closed it, it adds nothing. Substitutes, not complements | on the hardest rung, if the context phase lifts the capacity ceiling — the one place neither covers the bottleneck |
 | ~~4~~ | ~~Explicit reasoning on arithmetic~~ | ⛔ **RETRACTED 2026-08-04** — see §0.1 row 11 and §6.4: all three prior measurements were confounded | — | — |
-| 4 | In-loop finish gate | L5 **18/20 vs 16/20**, **p = 0.66** · L7 **11/20 vs 11/20**, **p = 1.00** · **+15% wall** | ⚠️ **not shown useless — underpowered** (corrected 2026-08-04): ten points require ~200 runs/arm. The original explanation ("retry already pays") was falsified: all seven failing runs of a later campaign failed by phantom finish in all three attempts | an A/B sized for the effect · and large coding tasks |
+| 4 | **The deterministic calculator** | `full` **16/20** vs ablated **17/20**, **Fisher p = 1.000** — and not for want of use: 27 successful calls in the full arm | the **coherence gate made it redundant**: the total is right because the control plane refuses incoherence and returns the number, without depending on the model choosing to compute | domains where the gate does not apply (it only understands totals in text files) |
+| 5 | In-loop finish gate | L5 **18/20 vs 16/20**, **p = 0.66** · L7 **11/20 vs 11/20**, **p = 1.00** · **+15% wall** | ⚠️ **not shown useless — underpowered** (corrected 2026-08-04): ten points require ~200 runs/arm. The original explanation ("retry already pays") was falsified: all seven failing runs of a later campaign failed by phantom finish in all three attempts | an A/B sized for the effect · and large coding tasks |
 
 **What unites the first three:** everything switched off is "intelligent" — planning, compiling
 plans, reasoning, self-supervision. Everything switched on in §0.1 is mechanical — searching,
@@ -814,6 +816,48 @@ The one caveat worth stating: on that hardest rung both arms remain far from cei
 22–61% and 39–78%, heavily overlapping), and it is the only rung whose bottleneck — capacity —
 is covered by *neither*. If the context phase lifts that ceiling, this comparison must be
 repeated there; it is the one place where the two might stop being substitutes.
+
+### 6.4-quinquies A constraint that structured a phase, and belonged to our configuration
+
+The context-and-cache phase was designed around a measurement from the project's first
+benchmark: altering one byte mid-prompt costs 7,971 tokens of reprocessing against 65 for a pure
+append (§5.1). That figure makes compaction look prohibitive and shaped the plan accordingly.
+
+Re-measured before any code was written, it does not survive, for two independent reasons.
+
+**The original probe answered a different question.** It changed a byte *in place* — the correct
+test for prefix stability, which is what it was built for. Compaction instead **removes a block**
+and shifts everything after it. Adding that scenario required repairing two design faults we
+found only by measuring: cutting at an arbitrary character offset breaks tokenization at the
+seam, so no reuse is possible under any configuration; and a homogeneous filler prompt makes a
+middle removal byte-identical to a truncation, measuring the wrong thing entirely.
+
+**The runtime has a mechanism for this case, and we were not using it.**
+
+| Configuration | byte changed mid-prompt | **block removed** |
+|---|---|---|
+| our default | 4003 | **2748** |
+| suffix-shifting alone | 4003 | **2748** |
+| full sliding-window cache alone | **2001** | **1390** |
+| **both** | **2001** | **1** |
+
+Removing a block falls from 2,748 reprocessed tokens to one. The full sliding-window cache is
+the prerequisite: this model family uses sliding-window attention, and with a partial cache the
+runtime cannot reuse anything past a divergence — which is why enabling it halves the
+byte-change case exactly as theory predicts. Suffix shifting then translates the remaining KV
+rather than recomputing it.
+
+Two consequences. First, an eviction-based context policy is no longer excluded on cache
+grounds, and the phase must be redesigned with that option restored. Second — the transferable
+part — **the standard warning that compaction invalidates the cache is correct in general and
+runtime-dependent in practice**: this runtime can shift, if asked. The full cache costs memory,
+so the flag is adopted on the development profile and remains unmeasured on the memory-
+constrained reference profile.
+
+**The methodological lesson:** *a constraint that structures an entire phase must be
+re-measured before designing around it*, especially when the number supporting it is old and was
+gathered to answer a different question. Ours was correct for prefix stability and simply did
+not transfer to removal.
 
 ### 6.5 On negative results
 
