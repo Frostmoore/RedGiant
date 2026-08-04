@@ -29,7 +29,7 @@ from redgiant.eval.harness import run_eval
 # Convenzione: "-x" ABLA un componente attivo, "+x" ACCENDE un componente che
 # il progetto tiene spento (verdetto negativo ma aperto, come D11 e TH3).
 _ENV_VARS = ("RG_WORKER_ABLATE", "RG_THINKING_ROLES", "RG_FINISH_GATE",
-             "RG_CALCULATOR")
+             "RG_CALCULATOR", "RG_WORKER_CARD")
 ARMS = {
     "full": {},
     "-search": {"RG_WORKER_ABLATE": "search"},
@@ -37,6 +37,7 @@ ARMS = {
     "-retry": {"RG_WORKER_ABLATE": "retry"},
     "-coherence": {"RG_WORKER_ABLATE": "coherence"},  # la guardia F4 sull'aritmetica
     "-compact": {"RG_WORKER_ABLATE": "compact"},     # F5.0-bis: catena volatile
+    "card-min": {"RG_WORKER_CARD": "minimal"},       # F5.0-ter: card ridotta
     "+calc": {"RG_CALCULATOR": "1"},                 # LAD.13: spenta di default
     "+finishgate": {"RG_FINISH_GATE": "1"},          # LAD.9: spento di default
     "think": {"RG_THINKING_ROLES": "worker"},        # B4: percorso diretto = Giano

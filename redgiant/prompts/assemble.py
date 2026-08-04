@@ -87,6 +87,26 @@ class PromptAssembler:
         if not self._cards:
             raise FileNotFoundError(f"no role cards in {roles_dir}")
 
+        # F5.0-ter — leva di A/B sulle CARD, non sui componenti.
+        #
+        # Misura che la motiva (data.md §7.12): la card del Worker costa 837
+        # token a OGNI chiamata di OGNI run — il 10% della finestra — ed e' la
+        # piu' grande di tutte (3.114 char contro 2.250 della seconda). La
+        # campagna ladder ha dimostrato che almeno tre delle sue regole non
+        # producono obbedienza, e una citava uno strumento che avevamo rimosso.
+        #
+        # `RG_WORKER_CARD=minimal` seleziona la variante in roles/variants/.
+        # Default `full`: si cambia coi numeri, non per fede — ed e' proprio
+        # cio' che questa leva serve a misurare.
+        import os
+        variant = os.environ.get("RG_WORKER_CARD", "").strip().lower()
+        if variant and variant != "full":
+            alt = roles_dir / "variants" / f"worker.{variant}.md"
+            if not alt.is_file():
+                raise FileNotFoundError(
+                    f"RG_WORKER_CARD={variant} ma manca {alt}")
+            self._cards["worker"] = alt.read_text(encoding="utf-8").strip()
+
     def build(self, role: str, *, task: TaskState, subtask: SubtaskSpec | None,
               tools: Sequence["ToolSpec"], volatile: str,
               output_schema: dict | None = None, schema_name: str | None = None) -> PromptParts:
