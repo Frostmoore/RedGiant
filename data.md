@@ -33,6 +33,7 @@ comparabili e numerosità adeguata; tutto ciò che è stato *osservato* ma non *
 | 9 | **Guardia di coerenza aritmetica** | **9/20 (45%)** · 797 s | **18/20 (90%)** · 500 s | **Fisher p = 0,0057**; e **−37% di tempo**: rifiutare presto costa meno che fallire tardi | §7.6 |
 | 10 | **Budget di passi proporzionale alla taglia** | L7 moriva senza mai scrivere il file | L7 **11/20** | 20 passi non bastano per 8 fatti in 400 documenti: non era incapacità, era budget | §7.7.2 |
 | 11 | **Pensiero a budget pieno, materiale intero** | **0/20** | **20/20** | **p = 1,45×10⁻¹¹** — ma solo dove materiale e pensiero **ci stanno insieme** in 8192: sul gradino vero il materiale verrebbe troncato e il guadagno sparisce. Verdetto sull'**hardware** | §7.8 |
+| 12 | **Errori azionabili** (`bad_args` LAD.10, `refusal_state` LAD.6) | spirali fino a **6 passi consecutivi**, **7 sequenze fatali** | **max 1 passo**, **0 fatali**, recupero **100%** | non riducono gli sbagli (18% di chiamate ancora malformate): **tolgono le spirali che gli sbagli causavano**. Agiscono sul *costo* del fallire, non sulla frequenza | §7.9.2 |
 
 **Il filo comune delle 10 righe:** nessuna insegna qualcosa al modello. Otto rendono
 *impossibile* un errore, due gli danno più spazio o più tentativi per lo stesso lavoro.
@@ -50,8 +51,8 @@ domini non-coding, task larghi). Nessuna è stata chiusa per opinione.*
 | 3 | **Thinking mode sul coding** (TH2) | **Δ verificati = 0** (1,5/13 contro 1,5/13) su 4 batterie ufficiali · **~787K contro ~652K token**, **1,9× tempo** | sul coding sintetico non converte; e la sua collocazione conta più della quantità (TH1: solo-Giano 4/20, tutti 1/20) | domini everyday/matematica post-F6/F7 |
 | ~~4~~ | ~~**Thinking sull'aritmetica**~~ | ⛔ **VERDETTO RIBALTATO il 2026-08-04** — v. §0.1 riga 11 e §7.8 | le tre prove precedenti erano confondute | — |
 | 5 | **Calcolatrice deterministica** (LAD.13) | `full` **16/20** contro `−calc` **17/20**, **Fisher p = 1,000** — e non per mancato uso: **27 chiamate riuscite** nel braccio completo | **la guardia di coerenza l'ha resa superflua**: due percorsi allo stesso esito, e quello deterministico non dipende da una scelta del modello | domini di F7 (matematica, everyday), dove la guardia non si applica |
-| 6 | **`bad_args` che insegna** (LAD.10) | chiamate malformate da **40% a 27%** — previsione registrata ("~0") **sbagliata** | migliorare il messaggio rende, ma poco: quarta conferma. *Resta in produzione* (gratis, vale per ogni strumento), ma non è una leva che cambia il sistema | — |
-| 4 | **Gate sul finish in-loop** (LAD.9) | L5 **18/20 contro 16/20**, **p = 0,66** · L7 **11/20 contro 11/20**, **p = 1,00** · **+15% di tempo** | la patologia era reale (40% dei tentativi) ma **il retry la pagava già**: difesa ridondante rispetto a un componente esistente | task coding larghi T040–T042, dove un tentativo sprecato costa 100K+ token invece di 25 s |
+| ~~6~~ | ~~`bad_args` che insegna~~ | ✅ **SPOSTATA fra le dimostrate** — v. §0.1 riga 12: la metrica pre-registrata era quella sbagliata, l'effetto c'è ed è sulle **spirali** | — | — |
+| 4 | **Gate sul finish in-loop** (LAD.9) | L5 **18/20 contro 16/20**, **p = 0,66** · L7 **11/20 contro 11/20**, **p = 1,00** · **+15% di tempo** | ⚠️ **NON dimostrato inutile: A/B sotto-potenziato** (rettifica 2026-08-04). +10 punti richiedono ~200 run per braccio. La spiegazione originale — "il retry pagava già" — è stata **smentita** dai log: le 7 run fallite di LAD.13 sono 7/7 finish fantasma in tutti e tre i tentativi | ~200 run per braccio · e su T040–T042, dove un tentativo sprecato costa 100K+ token |
 
 **La lezione che unisce le prime tre:** tutto ciò che abbiamo spento è "intelligente"
 (pianificare, compilare piani, ragionare, sorvegliarsi). Tutto ciò che è acceso in §0.1 è
@@ -63,7 +64,8 @@ prima di costruire una difesa, misurare **chi sta già pagando** per il problema
 
 | # | Cosa | Stato della prova | Cosa manca | Rischio se sbagliata |
 |---|---|---|---|---|
-| 1 | **`refusal_state`** — il rifiuto dichiara lo stato del disco | meccanismo **osservato** sui log: recuperi da **2 su 4** a **4 su 4** dopo il fix; e la causa è certa (`edit_file` su un file mai creato, due volte nella stessa run) | mai isolato con un A/B suo: il 18/20 di §0.1 riga 9 è stato misurato **coi due fix insieme** | bassa: costa nulla e non può nuocere, ma il merito attribuito alla guardia potrebbe essere in parte suo |
+| 1 | **`refusal_state`** — il rifiuto dichiara lo stato del disco | meccanismo **osservato** sui log: recuperi da **2 su 4** a **4 su 4**; e la causa è certa (`edit_file` su un file mai creato, due volte nella stessa run). Rafforzata da LAD.10, che ha lo stesso profilo su un campione più grande (§0.1 riga 12) | mai isolato con un A/B suo: il 18/20 di §0.1 riga 9 è stato misurato **coi due fix insieme** | bassa: costa nulla e non può nuocere, ma il merito attribuito alla guardia potrebbe essere in parte suo |
+| 8 | **Il gate sul finish è davvero inutile?** | ⚠️ **il suo A/B era sotto-potenziato** (§7.7): 18/20 contro 16/20, e +10 punti richiedono ~200 run per braccio. L'evidenza meccanicistica gli è **favorevole**: colpisce il 100% dei fallimenti residui di L5 (7 su 7 finish fantasma) | un A/B dimensionato sull'effetto, o su un gradino dove il fenomeno è più frequente | **media**: è spento un componente che potrebbe valere ~10 punti sul gradino conquistato |
 | ~~2~~ | ~~**`calculator` nel catalogo**~~ | ✅ **RISOLTA il 2026-08-04** (§7.9): **p = 1,000** a n=20 — spenta di default. Il sospetto era fondato: la guardia di coerenza l'aveva resa superflua | resta da rimisurare nei domini di F7, dove la guardia non si applica | — |
 | 3 | **Tutti i numeri della ladder** | GPU `dev-fast`, non `severino-sim` | **LAD.7**: run ufficiale su CPU, 20 run per braccio | media: la direzione è solida, l'ampiezza no (IC 95% del 18/20: **70–97%**) |
 | 4 | **L7 = 11/20** | misurato a n=20 su GPU | attribuzione: è il cumulo di 5 fix, nessuno isolato | bassa sul numero, alta sull'interpretazione |
@@ -689,22 +691,39 @@ fantasma** di §7.6.5, misurato al 40% dei tentativi.
 | **L5** | 18/20 · 725 s | 16/20 · 633 s | **p = 0.66** |
 | **L7** | 11/20 · 629 s | 11/20 · 623 s | **p = 1.00** |
 
-**Nessun effetto su nessuno dei due gradini, e un costo del +15% in tempo su L5.**
+**Nessuna differenza rilevabile a n=20, e un costo del +15% in tempo su L5.**
 
-**Perché — ed è questo il vero risultato:** *il loop di retry pagava già per il finish
-fantasma.* La verifica esterna lo intercetta e il tentativo successivo di solito scrive il file.
-Abbiamo trovato una patologia reale che l'architettura **tollerava già**. Il gate è ridondante
-rispetto a un componente che esisteva.
+> ### ⚠️ RETTIFICA (2026-08-04) — la spiegazione qui sotto era SBAGLIATA
+>
+> Avevo scritto: *"il loop di retry pagava già per il finish fantasma; il gate è ridondante
+> rispetto a un componente che esisteva"*. **I log di LAD.13 la smentiscono** (§7.9.4): le 7
+> run fallite di quella campagna sono **7 su 7 finish fantasma, in tutti e tre i tentativi**.
+> Il retry non paga affatto — dà tre occasioni e il modello le spreca tutte allo stesso modo.
+>
+> **La lettura corretta di p = 0,66 è un'altra:** gate acceso **18/20**, spento **16/20**. È un
+> effetto di **+10 punti**; per distinguerlo dal rumore a quella dimensione servono circa
+> **200 run per braccio**, non 20. Ho scambiato *"non l'ho misurato"* per *"non c'è"* — e a n=20
+> quell'A/B era semplicemente **sotto-potenziato**, non conclusivo.
+>
+> **Il gate resta spento**, ma il motivo cambia: non perché sia ridondante, ma perché **il suo
+> effetto non è ancora dimostrato**. E l'evidenza meccanicistica ora gli è *favorevole*: colpisce
+> il 100% dei fallimenti residui di L5.
 
 **Verdetto: SPENTO di default** (`RG_FINISH_GATE=1` per accenderlo), stesso trattamento di D11
-(planner) e TH3 (thinking) — costruito, misurato, spento, verdetto **aperto**. Condizione di
-retest scritta: sui task coding larghi un tentativo sprecato costa **100K+ token** invece di 25
-secondi (T032 ha bruciato 140K token in loop), e lì convertirlo in un passo potrebbe pagare. Va
-rimisurato su T040–T042 prima di dichiararlo inutile.
+(planner) e TH2 (thinking) — costruito, misurato, spento, verdetto **aperto**. Due condizioni di
+retest, entrambe scritte:
+1. **A n adeguato** per l'effetto in gioco (~200 run per braccio, o su un gradino dove il
+   fenomeno è più frequente): l'A/B fatto non poteva vedere +10 punti.
+2. **Sui task coding larghi** (T040–T042), dove un tentativo sprecato costa **100K+ token**
+   invece di 25 secondi (T032 ha bruciato 140K token in loop).
 
-**Corollario di metodo:** una patologia frequente non è automaticamente una patologia costosa.
-Il 40% di finish fantasma sembrava enorme, ma il sistema aveva già chi lo assorbiva. Prima di
-costruire una difesa, va misurato **chi sta già pagando** per il problema.
+**Corollario di metodo — anche questo va corretto.** Avevo tratto: *"una patologia frequente non
+è automaticamente costosa; prima di costruire una difesa, misura chi sta già pagando"*. La
+seconda metà resta valida come domanda da porsi; la **prima è stata smentita dai dati**: quella
+patologia *era* costosa, ed è oggi l'unico modo di fallire rimasto su L5. La lezione vera è
+un'altra e più scomoda: **un A/B nullo su un effetto piccolo non è un verdetto, è un campione
+insufficiente** — e avevo appena scritto la regola delle 20 run senza chiedermi *20 run per
+quale ampiezza d'effetto*.
 
 ### 7.7.2 LAD.8 risolto: L7 non finisce i passi, finisce il CONTESTO
 
@@ -844,31 +863,71 @@ applica — lì la calcolatrice potrebbe essere l'unico meccanismo.
 **Beneficio concreto della rimozione:** la sua voce nella card dei tool era pagata a **ogni step
 di ogni task**. Un test permanente asserisce che la card si accorcia quando è spenta.
 
-### 7.9.2 LAD.10 — verifica della previsione: migliora di un terzo, non risolve
+### 7.9.2 LAD.10 — la previsione era sbagliata, ma il fix funziona meglio di così
 
-Avevo pre-registrato: *"il tasso di `bad_args` su `calculator` dev'essere ~0 nella prossima
-campagna"*. Misurato sui soli task **post-fix** (41 chiamate nella campagna LAD.13):
+Avevo pre-registrato: *"il tasso di `bad_args` su `calculator` dev'essere ~0"*. **La previsione
+non è centrata — e la metrica che avevo scelto era quella sbagliata.**
 
-| | Chiamate con `expression=None` |
-|---|---|
-| Prima di LAD.10 | **27 su 67 — 40%** |
-| Dopo LAD.10 | **11 su 41 — 27%** |
+⚠️ *(I primi numeri che avevo calcolato — "40% → 27%" — erano su un campione **contaminato**:
+mescolavano i due bracci di LAD.13 e più campagne. Nel braccio `−calc` le chiamate a
+`calculator` tornano `unknown_tool`, non `bad_args`, e non possono per definizione riprendersi:
+includerle falsava sia il tasso sia il recupero. Il confronto qui sotto è ristretto ai soli task
+in cui lo strumento **era** nel catalogo.)*
 
-**La previsione è sbagliata.** Un errore che nomina il campo mancante *e* mostra la forma esatta
-della chiamata riduce le invocazioni malformate di circa un terzo, e un quarto continua ad
-arrivare vuoto.
+| | Prima del fix | Dopo il fix |
+|---|---|---|
+| Chiamate malformate | 78 su 240 — **32%** | 6 su 33 — **18%** |
+| Sequenze consecutive di fallimenti, **lunghezza max** | **6** | **1** |
+| Sequenze **fatali** (nessun recupero nel task) | **7** | **0** |
+| Recupero | 85% | **100%** |
 
-**È la quarta conferma della stessa cosa** (dopo la regola sulla calcolatrice, la regola 8 della
-card e il messaggio del giudice riportato nel retry): **migliorare il messaggio rende, ma rende
-poco.** Il fix resta — è gratis, vale per ogni strumento del catalogo e un terzo è un terzo — ma
-non va contato fra le leve che cambiano il sistema.
+**Il messaggio azionabile non impedisce l'errore: elimina la spirale.** Il modello continua a
+mandare argomenti vuoti nel 18% dei casi, ma prima un errore poteva costare **sei passi
+consecutivi** e uccidere il tentativo, mentre ora ne costa **esattamente uno** — e la chiamata
+successiva riesce, 6 volte su 6.
+
+**Regola generale, che vale per tutta la famiglia** (`refusal_state` si comportò allo stesso
+modo: recuperi da 2 su 4 a 4 su 4): **gli errori azionabili non riducono gli sbagli, tolgono le
+spirali che gli sbagli causavano.** È un effetto sul *costo* del fallire, non sulla sua
+frequenza — e quindi va cercato nella lunghezza delle sequenze, non nel tasso di errore. La
+metrica che avevo pre-registrato non poteva vederlo.
 
 ### 7.9.3 Lettura d'insieme delle due
 
-Messe accanto, dicono una cosa sola: **su questo modello l'unica leva affidabile è togliere la
-scelta, non facilitarla.** La guardia di coerenza — che non chiede nulla al modello — vale 45
-punti; la calcolatrice — che gliela chiede — vale zero, anche quando la usa; e l'errore che
-gliela spiega meglio vale un terzo delle chiamate malformate.
+**Su questo modello l'unica leva che cambia gli esiti è togliere la scelta, non facilitarla.**
+La guardia di coerenza — che non chiede nulla al modello — vale 45 punti; la calcolatrice — che
+gliela chiede — vale zero, anche quando la usa.
+
+Ma le due famiglie non sono in concorrenza: **agiscono su assi diversi.** I gate deterministici
+cambiano *quanto spesso si riesce*; gli errori azionabili cambiano *quanto costa sbagliare*.
+Confonderli è ciò che mi ha portato a pre-registrare la metrica sbagliata per LAD.10.
+
+### 7.9.4 Il meccanismo di LAD.13, letto sui log (e ciò che ha smentito)
+
+| | `full` | `−calc` |
+|---|---|---|
+| Morsi della guardia di coerenza | **13** | **17** |
+| …di cui la run poi scrive 1792 | 12 | 16 |
+| Chiamate riuscite alla calcolatrice | 27 | 0 |
+| Tentativi di chiamare uno strumento assente | 3 | **8** |
+| **Artefatti finali col totale SBAGLIATO** | **0** | **0** |
+| Run senza artefatto | 4 | 3 |
+
+**La guardia morde di più quando la calcolatrice non c'è** (17 contro 13): raccoglie esattamente
+il lavoro che l'altra non fa. È la sostituzione, misurata direttamente sui log invece che dedotta
+dal punteggio.
+
+**Il dato che vale più del p-value: zero artefatti sbagliati su 40 run, in entrambi i bracci.**
+Su L5 l'aritmetica non è "migliorata": è **chiusa**. Nessuna run scrive più un totale errato.
+
+**E quindi tutti i fallimenti residui sono un'altra cosa.** Ho letto i log integrali delle 7 run
+fallite: **7 su 7 sono il finish fantasma**, e non in un tentativo — in **tutti e tre**. È questo
+che ha smentito la spiegazione di §7.7 (*"il retry pagava già"*): il retry dà tre occasioni e il
+modello le spreca tutte allo stesso modo.
+
+**Nota minore ma indicativa:** nel braccio `−calc` il modello prova comunque a chiamare la
+calcolatrice **8 volte** su 20 run, ricevendo `unknown_tool`. Toglierla dalla card non lo
+dissuade del tutto — costa ~0,4 passi per run, e non cambia l'esito.
 
 ## 8. Cosa manca (aggiornamento previsto)
 

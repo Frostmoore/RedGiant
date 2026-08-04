@@ -1396,19 +1396,35 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   (Fisher bilaterale **p = 0.66**), L7 **11/20 vs 11/20** (**p = 1.00**), con un **+15% di
   tempo** su L5. Nessun effetto su nessuno dei due gradini.
 
-  **Perché, ed è il vero risultato:** *il loop di retry pagava già per il finish fantasma* — la
-  verifica esterna lo intercetta e il tentativo dopo di solito scrive. Abbiamo trovato una
-  patologia reale che l'architettura **tollerava già**; il gate è ridondante rispetto a un
-  componente esistente.
+  ### ⚠️ RETTIFICA DEL 2026-08-04 — la spiegazione era sbagliata, il verdetto va riletto
+
+  Avevo scritto: *"il loop di retry pagava già per il finish fantasma; il gate è ridondante"*, e
+  ne avevo tratto il corollario *"una patologia frequente non è automaticamente costosa"*.
+  **I log di LAD.13 smentiscono entrambi** (`data.md` §7.9.4): le 7 run fallite di quella
+  campagna sono **7 su 7 finish fantasma, in tutti e tre i tentativi**. Il retry non paga —
+  offre tre occasioni e il modello le spreca tutte allo stesso modo. E quella patologia *è*
+  costosa: oggi è **l'unico modo di fallire rimasto** su L5.
+
+  **La lettura corretta di p = 0,66:** 18/20 contro 16/20 è un effetto di **+10 punti**, e per
+  separarlo dal rumore servono ~**200 run per braccio**. **L'A/B era SOTTO-POTENZIATO, non
+  conclusivo.** Avevo adottato la regola delle 20 run il giorno prima senza chiedermi *20 run
+  per vedere quale ampiezza d'effetto*, e ho letto il mio campione insufficiente come verdetto.
+
+  **Il gate resta spento, ma per un motivo diverso:** non perché sia ridondante, ma perché il
+  suo effetto **non è ancora dimostrato**. L'evidenza meccanicistica ora gli è **favorevole**:
+  colpisce il 100% dei fallimenti residui del gradino che il sistema vince.
 
   **Verdetto: spento di default**, `roles/worker.py::finish_gate_enabled` dietro
-  `RG_FINISH_GATE=1` — stesso trattamento di D11 e TH3. **Verdetto APERTO**, condizione di
-  retest: sui task coding larghi un tentativo sprecato costa **100K+ token** invece di 25
-  secondi (T032: 140K in loop), e lì potrebbe pagare → rimisurare su **T040–T042**.
+  `RG_FINISH_GATE=1`. **APERTO**, con DUE condizioni di retest:
+  1. **Un A/B dimensionato sull'effetto** (~200 run per braccio, o un gradino dove il fenomeno
+     è più frequente): quello fatto non poteva vedere +10 punti.
+  2. **Sui task coding larghi T040–T042**, dove un tentativo sprecato costa **100K+ token**
+     invece di 25 secondi (T032: 140K in loop).
 
-  **Corollario di metodo (da ricordare prima di costruire la prossima difesa):** una patologia
-  *frequente* non è automaticamente una patologia *costosa*. Prima di costruire, misurare
-  **chi sta già pagando** per il problema.
+  **Corollario di metodo CORRETTO** (quello precedente è ritirato): **un A/B nullo su un effetto
+  piccolo non è un verdetto, è un campione insufficiente.** Un numero fisso di run non è un
+  calcolo di potenza: 20 run risolvono una differenza di 40 punti e sono cieche su una di 10.
+  Prima di dichiarare "non paga", chiedersi *quale differenza sarei in grado di vedere*.
 
   Specifica originale conservata qui sotto, perché la condizione di retest la richiede.
 
@@ -1492,11 +1508,25 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   **APERTO:** la guardia copre solo i *totali in file di testo*; nei domini di F7 (matematica,
   everyday) l'aritmetica non ha quella forma → **rimisurare lì** prima di dichiararla inutile
   in generale.
-  **Verifica della previsione di LAD.10, nella stessa campagna:** avevo registrato "il tasso di
-  `bad_args` su calculator dev'essere ~0". **Sbagliata**: da **40%** (27 su 67) a **27%**
-  (11 su 41). Migliorare il messaggio rende un terzo, non risolve — **quarta conferma** che
-  l'istruzione non è una superficie di controllo. Il fix resta (è gratis e vale per ogni
-  strumento) ma non va contato fra le leve che cambiano il sistema.
+  **Verifica della previsione di LAD.10 — la previsione era sbagliata, e con essa la metrica.**
+  Avevo registrato *"il tasso di `bad_args` dev'essere ~0"*. Confronto **pulito** (soli task in
+  cui lo strumento era nel catalogo; i primi numeri che avevo calcolato mescolavano i due bracci
+  e più campagne, e nel braccio ablato l'errore è `unknown_tool`, non `bad_args`):
+
+  | | Prima | Dopo |
+  |---|---|---|
+  | Chiamate malformate | 78/240 (**32%**) | 6/33 (**18%**) |
+  | Sequenze consecutive, **max** | **6** | **1** |
+  | Sequenze **fatali** | **7** | **0** |
+  | Recupero | 85% | **100%** |
+
+  **L'errore azionabile non impedisce lo sbaglio: elimina la spirale.** Il modello manda ancora
+  argomenti vuoti una volta su cinque, ma prima costava fino a **sei passi** e uccideva il
+  tentativo, ora ne costa **uno**. Stesso profilo di `refusal_state` (LAD.6).
+  **Regola generale da portarsi dietro:** *i gate deterministici cambiano quanto spesso si
+  riesce; gli errori azionabili cambiano quanto costa sbagliare.* Sono assi diversi — e una
+  metrica di frequenza è **cieca** al secondo. È per questo che avevo pre-registrato la metrica
+  sbagliata.
 
   Specifica originale conservata qui sotto.
 
@@ -1684,7 +1714,16 @@ dell'impalcatura. **Nei blocchi vincenti il modello spesso non invoca mai la cal
 totale esce giusto perché il control plane rifiuta l'incoerenza e restituisce il numero.
 
 **⚠️ REGOLA NUOVA E NON NEGOZIABILE — nessuna conclusione sulla ladder sotto le 20 run per
-braccio, e il numero si accompagna a un test esatto, non a un'impressione.** Pagata sul campo:
+braccio, e il numero si accompagna a un test esatto, non a un'impressione.**
+
+> **INTEGRAZIONE OBBLIGATORIA (2026-08-04), pagata subito dopo:** 20 run sono un *minimo*, non
+> un calcolo di potenza. Risolvono una differenza di ~40 punti; sono **cieche** su una di 10.
+> Con LAD.9 ho letto un 18/20 contro 16/20 (p = 0,66) come "non paga", quando l'unica
+> conclusione lecita era "non l'ho misurato". **Prima di dichiarare un componente inutile,
+> dichiarare quale differenza il campione era in grado di vedere.** Un nullo su un effetto
+> piccolo non è un verdetto: è un campione insufficiente.
+
+Pagata sul campo:
 i primi blocchi erano a n=5 e hanno prodotto, **su codice funzionalmente identico**,
 `−coherence` = 1/5 e poi 5/5 (`full` = 2/5, 3/5, 5/5). Su quella base avevo scritto
 un'attribuzione in tre documenti e ho dovuto ritirarla. Causa: il comportamento del modello

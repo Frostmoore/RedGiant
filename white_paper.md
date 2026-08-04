@@ -81,6 +81,7 @@ plausible-but-unmeasured improvement is not an improvement.*
 | 9 | **Write-time arithmetic coherence gate** | **9/20 (45%)** · 797 s | **18/20 (90%)** · 500 s | **Fisher exact two-sided p = 0.0057**, and **37% faster**: refusing early costs less than failing late | 5.9 |
 | 10 | Step budget proportional to task size | L7 died without ever writing the file | L7 **11/20** | 20 steps cannot collect 8 facts from 400 documents: not incapacity, budget | 5.9.5 |
 | 11 | **Full reasoning budget with untruncated material** | **0/20** | **20/20** | **p = 1.45 × 10⁻¹¹** — but only where material and reasoning fit together within 8,192 tokens; on the full rung the material would be truncated and the gain disappears. A verdict about **hardware** | 6.4 |
+| 12 | **Actionable errors** (refusals that state disk state; argument errors that name the missing field) | spirals up to **6 consecutive steps**, **7 fatal sequences** | **max 1 step**, **0 fatal**, recovery **100%** | they do not reduce mistakes (18% of calls still malformed): they remove the **spirals** mistakes used to cause. They act on the *cost* of failing, not its frequency | 6.4-ter |
 
 **The common thread across all ten: none of them teaches the model anything.** Eight make an
 error *impossible to emit*; two grant more room or more attempts for the same work.
@@ -97,7 +98,7 @@ tasks). None was closed by opinion.*
 | 2 | Plan compiler | **2/13 vs 6/13**, and **2/13 vs 8/13** on re-measurement · −44% tokens, +9.4 points of useful tokens, no additional greens | the gates move deaths *deeper* (from 0 tool calls to 20–38 at 80–93% useful tokens) without converting them | multi-session tasks |
 | 3 | Explicit reasoning **on synthetic coding** | **Δ verified = 0** (1.5/13 vs 1.5/13) over four official batteries · ~787K vs ~652K tokens · **1.9× wall** | no conversion in that domain; and placement dominates quantity (worker-only 4/20 vs everyone 1/20) | non-coding domains, with routing active |
 | ~~4~~ | ~~Explicit reasoning on arithmetic~~ | ⛔ **RETRACTED 2026-08-04** — see §0.1 row 11 and §6.4: all three prior measurements were confounded | — | — |
-| 4 | In-loop finish gate | L5 **18/20 vs 16/20**, **p = 0.66** · L7 **11/20 vs 11/20**, **p = 1.00** · **+15% wall** | the pathology was real (40% of attempts) but **retry was already paying for it**: a defence redundant with an existing component | large coding tasks, where a wasted attempt costs 100K+ tokens instead of 25 s |
+| 4 | In-loop finish gate | L5 **18/20 vs 16/20**, **p = 0.66** · L7 **11/20 vs 11/20**, **p = 1.00** · **+15% wall** | ⚠️ **not shown useless — underpowered** (corrected 2026-08-04): ten points require ~200 runs/arm. The original explanation ("retry already pays") was falsified: all seven failing runs of a later campaign failed by phantom finish in all three attempts | an A/B sized for the effect · and large coding tasks |
 
 **What unites the first three:** everything switched off is "intelligent" — planning, compiling
 plans, reasoning, self-supervision. Everything switched on in §0.1 is mechanical — searching,
@@ -116,6 +117,7 @@ one. Before building a defence, measure who is already paying for the problem.
 | ~~5~~ | ~~The reasoning verdict on arithmetic~~ | ✅ **RESOLVED 2026-08-04, and it was wrong** (§6.4): 20/20 against 0/20 at full budget and full material. The risk we had labelled "high" materialized exactly as pre-registered | confirmation on the reference CPU profile | — |
 | 6 | Reasoning × workflow (block B4) | the pre-fix block was **discarded** as non-comparable | re-measurement | medium: half the 2×2 matrix on the ladder is empty |
 | 7 | Syntax gate, no-op-edit guard, near-name tool hints | validated by pilots (13 of 43 runs squandered steps on invented tool names; 15 consecutive no-op edits observed) | never passed through the ladder with ablated arms | low: documented pathologies, zero cost |
+| 8 | **Is the finish gate actually useless?** | ⚠️ its A/B was **underpowered** (§5.9.4): 18/20 against 16/20, and ten points need ~200 runs/arm. Mechanistic evidence now *favours* it — it targets 100% of residual failures on the rung the system wins | an A/B sized for the effect | **medium**: a component worth perhaps ten points on the won rung is currently switched off |
 
 ---
 
@@ -594,15 +596,28 @@ oracle is red — the finish is refused and becomes one more step, with the cont
 | L5 | 18/20 · 725 s | 16/20 · 633 s | **p = 0.66** |
 | L7 | 11/20 · 629 s | 11/20 · 623 s | **p = 1.00** |
 
-**No effect on either rung, at a 15% wall-clock cost.** The explanation is the finding:
-**the retry loop was already paying for the phantom finish** — external verification catches it
-and the following attempt usually writes the file. We had found a real pathology that the
-architecture already tolerated, and built a defence redundant with an existing component. The
-gate ships switched off, under the same treatment as the two rejected planning architectures.
+**No detectable difference at n = 20, at a 15% wall-clock cost.** The gate ships switched off.
 
-The generalizable lesson is one we expect to need again: **a frequent pathology is not
-automatically a costly one. Before building a defence, measure which component is already
-paying for the problem.**
+> **Correction (2026-08-04).** An earlier version of this subsection explained the null by
+> asserting that *the retry loop was already paying for the phantom finish*, and drew from it a
+> lesson about frequent-but-costless pathologies. **Subsequent log analysis falsified both.**
+> In a later campaign on the same rung, every one of the seven failing runs failed by phantom
+> finish — **in all three of its attempts**. Retry does not pay for it; it offers three chances
+> and the model squanders all three identically.
+>
+> The correct reading of p = 0.66 is arithmetic rather than mechanistic: 18/20 against 16/20 is
+> a **ten-point** effect, and separating ten points from noise requires on the order of **200
+> runs per arm**, not twenty. **The A/B was underpowered, not conclusive.** We had adopted a
+> standing rule of twenty runs per arm one day earlier without asking *twenty runs to detect
+> what effect size* — and then read our own insufficient sample as a verdict.
+>
+> The gate remains disabled, but for a different reason: not redundancy, but **unproven
+> effect**. The mechanistic evidence now favours it — it targets 100% of the residual failures
+> on the rung the system otherwise wins.
+
+The lesson we do retain, restated correctly: **a null result on a small effect is not a verdict,
+it is an insufficient sample.** Power must be chosen against the effect size one expects to
+matter, and "how many runs" is not answerable without "to detect what".
 
 #### 5.9.5 Where the hardest rung actually dies
 
@@ -732,19 +747,35 @@ left leaves the model reasoning about a state that does not exist.** This holds 
 that refuses an action, and we had shipped the same trap in the syntax gate since the first
 phase without noticing it.
 
-### 6.4-ter The bound on the make-it-impossible principle
+### 6.4-ter Two error families, acting on different axes
 
-§5.9.4 is, to our knowledge, the more useful half of that section. Having twice converted a
-measured pathology into a structural defence with good results, we applied the same reasoning
-to a third — a pathology present in 40% of attempts — and obtained nothing at all, at a
-measurable cost.
+An earlier version of this subsection claimed to have found a *bound* on the make-it-impossible
+principle: that a defence pays only where nothing already absorbs the failure, the phantom
+finish supposedly being absorbed by retry. **That claim was falsified by later log analysis and
+is withdrawn** (§5.9.4): retry does not absorb it, and the null that motivated the claim was an
+underpowered sample rather than an absent effect.
 
-The principle therefore has a precondition we had not articulated: **a defence pays only where
-nothing is already absorbing the failure.** The phantom finish was frequent, real, and fully
-paid for by the retry loop; the arithmetic incoherence was equally frequent and paid for by
-nobody, because it produced a *plausible artifact* that only an oracle could reject. Frequency
-predicts neither cost nor opportunity. The operative question before building is not "how often
-does this happen" but "what currently happens when it does".
+What survives, and is better supported, is a distinction between two families of intervention
+that we had been conflating:
+
+**Deterministic gates change how often the system succeeds.** The write-time coherence gate
+takes the aggregation rung from 45% to 90%. It asks the model for nothing.
+
+**Actionable errors change how much a mistake costs.** Making a refused write declare the disk
+state took recoveries from 2 of 4 to 4 of 4. Making a malformed-arguments error name the missing
+field and show the exact call shape left the malformed-call *rate* barely improved — 32% to 18%,
+the model still sends empty arguments roughly one time in five — but eliminated the spirals
+those mistakes used to cause: the longest run of consecutive failures fell from **six to one**,
+and **seven fatal sequences became zero**, with the following call succeeding in every case.
+
+This distinction matters practically, because it dictates *what to measure*. We pre-registered
+the wrong metric for the argument-error work — predicting the error *rate* would fall to zero —
+and would have recorded a real improvement as a failure had we not read the sequences. An
+intervention that acts on the cost of failing is invisible to a frequency metric.
+
+The operative question before building a defence therefore remains worth asking — *what
+currently happens when this occurs?* — but its answer must come from logs, not from the
+assumption that some other component is coping.
 
 ### 6.5 On negative results
 
@@ -766,13 +797,17 @@ pinned inference build. Several calibrated tolerances (retry thresholds, step bu
 formatting heuristics) are plausibly overfitted to this configuration and require re-validation
 on any change of model or runtime.
 
-**Non-determinism, and a demonstrated failure to respect it.** Neither environment is fully
+**Non-determinism, and two demonstrated failures to respect it.** Neither environment is fully
 reproducible (§4.3). Worse, the effective variance exceeds the hardware noise band: the model's
 behaviour swings in *whole blocks*, and we observed the same configuration produce 1/5 and then
 5/5 on functionally identical code (§5.9.3). One attribution was published internally on that
-basis and retracted. Verdicts here are therefore drawn at 20 runs per arm with an exact test;
-rows still resting on 5 runs are labelled as family classification rather than rates, and
-should be read as hypotheses.
+basis and retracted. We then adopted a standing rule of twenty runs per arm — and immediately
+committed the complementary error, reading an underpowered null (18/20 against 16/20) as a
+verdict of no effect (§5.9.4). **A fixed run count is not a power calculation**; twenty runs
+resolve a forty-point difference and are blind to a ten-point one. Verdicts here are drawn at
+twenty runs per arm with an exact test, which is adequate for the large effects reported and
+explicitly inadequate for the small ones — those are now labelled as unresolved rather than
+negative.
 
 **Synthetic tasks.** All batteries to date are synthetic and small — 2 to 15 file repositories
 and generated document corpora. The behaviour of the system on a real codebase with genuine
