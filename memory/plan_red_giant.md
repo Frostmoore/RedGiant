@@ -1930,6 +1930,66 @@ hardware di `data.md` §1.3. La regola vale per la ladder e per ogni A/B futuro 
 > tavolino.
 🧭 **Perché questa fase, perché ora:** è il cuore ingegneristico del progetto — l'ispirazione dichiarata a Dwarf Star: lavorare forte sul prefill per ridurne i tempi. Arriva DOPO F4 per una ragione di metodo sperimentale: solo con la pipeline completa ogni ottimizzazione ha un prima/dopo onesto sull'intero set dell'Evaluator. Ottimizzare prima significherebbe ottimizzare un sistema che non esiste ancora. Su CPU il prefill è il costo dominante: qui si decide se Red Giant è *usabile* o solo dimostrativo.
 
+> ### 📋 CHECKLIST DI F5 — ordine di esecuzione e criterio di uscita (2026-08-04)
+>
+> **Le sottofasi F5.1–F5.6 qui sotto sono state scritte quando F5 era una fase di
+> PRESTAZIONI. Restano valide, ma nessuna di esse tocca ciò che uccide L7.** Due sottofasi
+> nuove vengono prima, e il criterio di uscita cambia.
+>
+> **Ordine:** F5.0 → F5.0-bis → F5.2 → F5.3 → F5.1 → F5.5 → F5.4 → F5.6.
+> *(F5.2 e F5.3 salgono perché sono la spina dorsale della misura: senza, tutto il resto è
+> ottimizzazione a sentimento. F5.4 SlotManager scende: è prestazioni pure, non capacità.)*
+>
+> **Regola non negoziabile per ogni sottofase:** nasce con la sua **leva di ablazione** e si
+> chiude con un A/B a **20 run per braccio minimo**, dichiarando *quale ampiezza d'effetto il
+> campione era in grado di vedere* (lezione di LAD.9).
+
+#### F5.0 — 📌 Dove vanno gli 8192 token (strumentazione, PRIMA di ogni ottimizzazione)
+
+- [ ] 🤖 **Obiettivo:** conoscere la composizione **reale** di ogni prompt, sezione per sezione,
+  su ogni chiamata — non solo quando esplode.
+- **Motivazione misurata:** LAD.8 dice *che* la finestra si riempie, non *di cosa*. L'unica
+  scomposizione che abbiamo è quella che il client stampa **nel messaggio d'errore**
+  (`per-section: PREAMBLE=314, ROLE=1521, TOOLS=…`): esiste già il calcolo, manca la
+  persistenza. Ottimizzare senza questa tabella significa scegliere la leva a caso.
+- **Implementazione:** `redgiant/llm/client.py` — la scomposizione per sezione già calcolata
+  viene persistita **sempre**, non solo in overflow; nuova colonna `sections` (JSON) su
+  `llm_calls` con migrazione idempotente in `StateStore.init_schema`, come si è fatto per
+  `thinking_tokens`.
+- **Accettazione:** per una run completa di L7, la tabella della composizione media del prompt
+  agli step 1 / 5 / 10 e **al punto di sfondamento**. È questa tabella che decide quale leva
+  di F5.0-bis vale la pena costruire — nessuna leva si costruisce prima di averla letta.
+
+#### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
+
+- [ ] 🤖 **Obiettivo:** tenere la catena append-only dei risultati dentro un budget dichiarato,
+  senza distruggere il riuso della KV.
+- **Motivazione misurata (LAD.8):** su 92 tentativi di L7 il Worker usa **8,5 passi di media,
+  massimo 18 su 60 disponibili**; nessuno esaurisce i passi. Muoiono perché
+  `parts.with_appended_context` accumula risultati fino a sfondare gli 8192 — un singolo
+  risultato di ricerca su 400 documenti pesa fino a `_RESULT_MAX_CHARS = 6000` caratteri
+  (~1500 token), e cinque o sei saturano la finestra.
+  **Nessuna delle sottofasi F5.1–F5.6 esistenti agisce su questa catena:** il ContextBuilder
+  lavora sull'*assemblaggio* del prompt, lo StateCompressor su S5 (stato durevole). Questa è
+  S6, dentro il loop.
+- **Tre leve candidate — si MISURANO, non si scelgono a tavolino:**
+  1. **Risultati più stretti**: abbassare `_RESULT_MAX_CHARS` e `max_results` di
+     `search_code`. Costo zero sulla KV (il prefisso resta append-only), ma il modello vede
+     meno per chiamata.
+  2. **Sfratto dei risultati vecchi**: tenere gli ultimi N per intero e sostituire i più
+     vecchi con un digest **deterministico** (mai generato dal modello: sarebbe
+     un'allucinazione dentro la catena di verità). ⚠️ **Rompe l'append-only** → il prefisso
+     cambia a metà → **F0.5: 65 token riprocessati contro 7.971**. È il compromesso centrale
+     della fase.
+  3. **Scarico su artefatto**: il modello scrive i fatti trovati su un file di appoggio e la
+     catena tiene solo il riferimento. Sposta il costo dal contesto al filesystem.
+- **Leva di ablazione:** `RG_WORKER_ABLATE=compact`.
+- **Accettazione — DUE condizioni, entrambe obbligatorie:**
+  (a) **capacità**: L7 migliora con A/B a 20 run per braccio e test esatto allegato;
+  (b) **la KV non crolla**: `avg_reuse_ratio` del Worker misurato prima e dopo (F5.2), e se
+  scende il baratto va **dichiarato in numeri** — quanto contesto si compra per quanto prefill
+  si ripaga. Una leva che vince sui verdi e distrugge il riuso non è accettata senza quel conto.
+
 #### F5.1 — Context Builder
 
 - [ ] 🤖 **Obiettivo:** la selezione del contesto minimo per ruolo (specsheet §9), al posto dell'assemblaggio semplice usato finora.
@@ -2002,7 +2062,28 @@ hardware di `data.md` §1.3. La regola vale per la ladder e per ogni A/B futuro 
 
 #### F5.6 — 🔎 Verifica di fase
 
-- [ ] Sull'intero set Evaluator su `severino-sim`, confronto contro il "prima" (fine F4): **riduzione ≥40% del tempo medio di prefill per sottofase** (target fissato in F0.6 coi numeri reali; se va rivisto, la revisione è scritta con la ragione), a parità di completion rate; `reuse_ratio` medio Worker ≥ soglia; ripresa da slot dimostrata; A/B nell'atlante.
+⚠️ **CRITERIO DI USCITA RIVISTO (2026-08-04): F5 è una fase di CAPACITÀ.** Il criterio
+originale — solo prestazioni — è conservato ma **non basta più da solo**.
+
+**Condizioni di capacità (nuove, bloccanti):**
+- [ ] **L7 sale**, con A/B a 20 run per braccio e test esatto: è il gradino che muore per
+  capienza, ed è la ragione per cui questa fase è stata anticipata. Baseline da battere:
+  **B2 8/20 · B4 12/20** (`data.md` §7.10).
+- [ ] **Il ragionamento entra insieme al materiale su L5.** Oggi il pensiero risolve
+  l'aritmetica 20/20 solo sul gradino controllato, perché su L5 vero il materiale viene
+  troncato a 6.000 token (§7.8). Se dopo F5 il braccio B3 su **L5** passa, il verdetto
+  "il thinking non ci sta in 8192" è stato sciolto — ed è il risultato più significativo
+  che questa fase possa produrre.
+- [ ] **Il confronto B2/B4 su L7 va rifatto** (§7.10.4): è l'unico gradino dove il collo di
+  bottiglia non è coperto né dall'impalcatura né dal pensiero. Se F5 lo rimuove, potrebbe
+  essere l'unico posto dove i due smettono di essere sostituti — e quella è una scoperta,
+  non un dettaglio.
+
+**Condizioni di prestazione (originali, mantenute):**
+- [ ] Sull'intero set Evaluator su `severino-sim`, confronto contro il "prima": **riduzione ≥40% del tempo medio di prefill per sottofase** (target fissato in F0.6 coi numeri reali; se va rivisto, la revisione è scritta con la ragione), a parità di completion rate; `reuse_ratio` medio Worker ≥ soglia; ripresa da slot dimostrata; A/B nell'atlante.
+
+**Condizione di onestà:** se una leva compra capacità **pagando** in riuso KV, il baratto va
+scritto in numeri (quanto contesto, quanto prefill) e non nascosto dietro il verde.
 
 **Rituale di fine fase** → `v5.0.0`.
 
