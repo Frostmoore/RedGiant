@@ -292,9 +292,19 @@ chiede la stessa cosa banale ("il `listen_port` del servizio X è N"); cresce so
 | L6 | **0/3** | 17.737 → 7.536 (−57%) | **0/3** | 17.737 → 6.000 (−66%) |
 | L7 | **0/3** | 35.263 → 7.536 (−79%) | **0/3** | 35.263 → 6.000 (−83%) |
 
-¹ **Confondimento RISOLTO** (severino-sim, 3 run): ripetuto con budget di pensiero 256, il
+¹ **Confondimento risolto a metà** (severino-sim, 3 run): ripetuto con budget di pensiero 256, il
 troncamento torna a **7.280 token** — alla pari col braccio nudo (7.536, −3%) — e il risultato
 resta **0/3**. Il fallimento di L5 col thinking **non** era dovuto al contesto rubato.
+
+⚠️ **Ma resta una cella mai misurata** (obiezione dell'utente, 2026-08-04): entrambe le prove
+tengono costante *una* variabile sacrificando l'altra — o pensiero pieno e materiale ridotto, o
+materiale pieno e pensiero **mutilato**. Con 256 token un esito nullo non distingue *"il
+ragionamento non serve"* da *"256 token non bastano per ragionare"*. La quarta configurazione —
+**pensiero 1536 E materiale 7.536**, che richiede `ctx_size ≈ 9728`, fuori dal vincolo D8 — è
+**LAD.14** nel piano. Serve perché i due esiti danno verdetti di natura diversa: 0/3 rende TH3
+definitivo su questo asse; un passaggio lo riqualifica da *"il thinking non paga"* a **"il
+thinking paga e non ci sta in 8192"** — un verdetto sull'hardware, non sul modello, che
+cambierebbe l'obiettivo di F5.
 
 **Conclusione su L5, con tutte le configurazioni misurate:**
 
@@ -302,7 +312,8 @@ resta **0/3**. Il fallimento di L5 col thinking **non** era dovuto al contesto r
 |---|---|---|
 | nudo | 0/3 | 7.536 tok |
 | nudo + thinking (fusibile 1536) | 0/3 | 6.000 tok |
-| nudo + thinking (fusibile 256) | **0/3** | 7.280 tok (alla pari) |
+| nudo + thinking (fusibile 256) | **0/3** | 7.280 tok (alla pari, ma pensiero mutilato) |
+| nudo + thinking (fusibile 1536, ctx 9728) | **da misurare — LAD.14** | 7.536 tok (pieno) |
 | workflow **con** `calc` | **4/5** | lettura selettiva |
 | workflow **senza** `calc` | 0/5 | lettura selettiva |
 
@@ -635,6 +646,7 @@ coerenza, `refusal_state`, budget di passi proporzionale alla taglia.
 - [ ] Ladder B4 post-fix (workflow + thinking, con le stesse ablazioni) — il blocco pre-fix è da buttare
 - [ ] **Ladder ufficiale su severino-sim**: B2 + B4 col codice fixato, run multiple → i numeri che andranno nel README
 - [ ] Diagnosi di L7 (perché 60 passi non bastano)
-- [ ] Disambiguazione del confondimento B3/L5 (budget di pensiero 256)
+- [x] ~~Disambiguazione del confondimento B3/L5 (budget di pensiero 256)~~ — fatta, §6.2 nota 1
+- [ ] **LAD.14**: pensiero PIENO (1536) con materiale PIENO (ctx 9728) — la cella mai misurata, §6.2
 - [ ] Retest dei verdetti aperti (planner e thinking) col router attivo, post-F6/F7
 - [ ] Benchmark pubblici a fine progetto (valori comparabili con la letteratura)

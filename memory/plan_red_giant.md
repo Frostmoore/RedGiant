@@ -1498,12 +1498,49 @@ e sopra quel punto attribuire ogni verde a un componente identificato tramite ab
   del giudice, quindi non comparabile): nella matrice c'è un **buco dichiarato**, non un dato
   mancante per dimenticanza. Nessuno vada a cercarlo in `bench/results/`.
   Comando: `python bench/ladder/run_agentic.py dev-fast T056,T057 B4 20`.
-- [ ] **LAD.12** 🔎 **Disambiguazione del confondimento B3/L5.** Il braccio nudo+thinking su L5
-  è confondato: il budget di pensiero consuma 1536 token di contesto, quindi su un gradino al
-  limite il braccio col thinking vede **meno materiale** (6.0K contro 7.5K) — il suo 0/3 può
-  essere causato dal contesto mangiato, non dal ragionamento. Si ripete L5 con
-  `RG_THINKING_BUDGET=256` a parità di materiale visto. Finché non è fatto, **il verdetto TH3
-  non può essere citato su questo gradino**.
+- [x] ~~**LAD.12** Disambiguazione del confondimento B3/L5 col fusibile a 256.~~ **GIÀ FATTA**
+  (`data.md` §6.2, nota 1): ripetuta su severino-sim con `RG_THINKING_BUDGET=256`, il
+  troncamento risale a **7.280 token** contro i 7.536 del nudo — alla pari — e il risultato
+  resta **0/3**. *(Era finita fra le cose da fare per un mio errore di trascrizione da una
+  lista "cosa manca" non aggiornata: la sottofase esisteva già come misura eseguita.)*
+
+- [ ] **LAD.14** 🔎 **Il pensiero a budget PIENO e materiale PIENO — la cella mai misurata.**
+  (obiezione dell'utente, 2026-08-04: *"non ha senso RIDURRE i token del pensiero, bisogna
+  AUMENTARE i token di contesto se c'è il pensiero"*.)
+
+  **Perché le due misure esistenti non bastano.** Entrambe tengono costante una variabile
+  sacrificando l'altra:
+
+  | Configurazione | Pensiero | Materiale visto | L5 |
+  |---|---|---|---|
+  | nudo | — | 7.536 | 0/3 |
+  | nudo + thinking, fusibile 1536 | pieno | **6.000** (meno) | 0/3 |
+  | nudo + thinking, fusibile 256 | **mutilato** | 7.280 (alla pari) | 0/3 |
+  | **LAD.14** | **1536 (pieno)** | **7.536 (pieno)** | **?** |
+
+  Il fusibile a 256 rende un risultato nullo **illeggibile**: non distingue *"il ragionamento
+  non serve"* da *"256 token non bastano per ragionare"*. È un confondimento speculare al primo,
+  non la sua soluzione.
+
+  **Esecuzione:** stessa L5, `RG_THINKING_BUDGET=1536`, `ctx_size ≈ 9728` (8192 + 1536) via
+  override di profilo, materiale non troncato e **verificato identico** a quello del braccio
+  nudo (il runner dichiara già il troncamento: dev'essere `8.036 → 7.536` in entrambi).
+  3 run come le altre celle di §6.2, su `severino-sim` per comparabilità.
+
+  ⚠️ **Il risultato NON descrive una configurazione spedibile.** `ctx_size = 8192` è un vincolo
+  **misurato** (F0.6): prefill a freddo 8K = 69,6 s, 16K = 173,6 s — a ~9,7K si stimano ~90-100 s
+  su Severino, oltre il tetto accettato in D8. Va dichiarato nel report.
+
+  **Perché vale comunque la pena, ed è il punto dell'obiezione:** i due esiti portano a verdetti
+  *di natura diversa*.
+  - **Resta 0/3** ⇒ il verdetto TH3 si rafforza ed è definitivo su questo asse: il ragionamento
+    esplicito non compra l'aritmetica, punto, indipendentemente da quanto contesto gli dai.
+  - **Passa** ⇒ TH3 va **riqualificato**: non *"il thinking non paga"* ma **"il thinking paga e
+    non ci sta in 8192"**. Diventa un verdetto sull'**hardware**, non sul modello — e cambia
+    l'obiettivo di **F5**, che a quel punto dovrebbe ottimizzare il contesto anche per fare
+    spazio al pensiero, non solo al materiale.
+
+  Questa distinzione non è deducibile da nessuna delle celle già misurate.
 - [ ] **LAD.7** 🔎 **Verifica di campagna:** L5/L6/L7 su `severino-sim` col codice finale,
   bracci B2 completi (`full`, `−search`, `−verify`, `−retry`, `−calc`, `−coherence`) e B4
   simmetrico, **20 run per braccio** (regola sotto) con test esatto allegato. Sono **questi** i
