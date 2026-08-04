@@ -1457,6 +1457,65 @@ dove serve una *strategia di recupero*, non dove serve ragionare in astratto.
 È la prima regola di routing del progetto che nasce da una misura invece che da un'intuizione, e
 va portata in **F6**: *thinking ON per i task a recupero largo, OFF per il coding.*
 
+## 7.18 F5.6b — la sintesi regge: il pensiero sostituisce la card
+
+*(2026-08-04, dev-fast, 20 run, `@64843a1`. **Prima previsione registrata che risulta corretta**,
+su tre.)*
+
+| L7 | card intera | card ridotta |
+|---|---|---|
+| **senza pensiero** | 12/20 | **1/20** |
+| **con pensiero** | **20/20** | **19/20** |
+
+**La card conta enormemente quando il pensiero è spento (12 contro 1), e quasi nulla quando è
+acceso (20 contro 19).** Le due leve agiscono sulla stessa variabile — *cercare invece di
+leggere* — e sono **largamente intercambiabili**.
+
+**Conseguenza di progetto:** col pensiero attivo si possono liberare i **414 token** della card
+al prezzo di 1/20. Si può *pagare in ragionamento* invece che in token di prompt — ed è una
+scelta, non un vincolo.
+
+**Conseguenza sulla teoria:** la sintesi di §7.17.4 regge nella forma forte. Tre interventi
+indipendenti (un tool, un pezzo di prosa, un canale di ragionamento) non solo spingono la stessa
+leva: **si sostituiscono a vicenda**. Dove uno è presente, gli altri smettono di contare.
+
+## 7.19 Audit di novità: quanto di tutto questo era già noto
+
+*(2026-08-04, sette ricerche mirate. **Risposta: praticamente tutto, sul piano concettuale.**)*
+
+Erano state elencate cinque scoperte come "non trovate in letteratura". Cercandole **una per
+una**, sono state trovate **tutte e cinque**, più una sesta che non era nemmeno in lista:
+
+| Nostra "scoperta" | Stato reale |
+|---|---|
+| Il nudo come controllo: *"se il modello nudo passa, il task non misura l'impalcatura"* | **Noto** — [*Baselines Before Architecture*](https://arxiv.org/html/2607.13085) lo enuncia nel titolo |
+| Ablare le regole del prompt e misurarne l'esito | **Noto** — [RubricRefine](https://arxiv.org/pdf/2605.09730) quantifica l'impatto per categoria di regola |
+| Cercare contro leggere come variabile del successo | **Noto** — [*Is Grep All You Need?*](https://arxiv.org/html/2605.15184v1) e la letteratura sulla *direct corpus interaction* |
+| Ragionamento condizionato al dominio | **Noto come concetto** (routing base/CoT). ⚠️ Ma il canone dice che il CoT aiuta l'**aritmetica** e ReAct il **recupero**: il nostro dato va nella direzione opposta |
+| La forbice `completed ≠ verified` | **Noto**, con lo stesso nome: [*Characterizing False Success in LLM Agents*](https://arxiv.org/pdf/2606.09863), e lo stesso rimedio (controllore deterministico) |
+| Guardia di coerenza in scrittura | **Noto** — è il pattern *reject-and-regenerate* dei guardrail di output, applicato a totali e somme |
+
+E la decomposizione che stiamo facendo esiste già, fatta meglio su alcuni assi:
+[*Where Does Agent Reliability Come From?*](https://arxiv.org/html/2607.17044) misura
+**struttura +9,5pp contro verifica +1,5pp** su SpreadsheetBench — **la nostra stessa conclusione**,
+raggiunta indipendentemente.
+
+### Cosa resta davvero nostro
+
+Non i concetti. **Il regime e i numeri.**
+
+1. **Un solo modello da 2B fa tutto, su 15 W, in locale.** La letteratura più vicina usa un
+   modello di frontiera come generatore più piccoli specialisti, e misura economia di serving
+   cloud — dichiara esplicitamente di **non** riportare inferenza su hardware vincolato.
+2. **Il numero**: 0/20 → 20/20 su 400 documenti, con quel modello e quell'hardware.
+3. **La tabella di attribuzione** delle sette leve sulla stessa famiglia di task, allo stesso
+   commit — che è ciò che ancora non abbiamo, ed è il vero prodotto della fase.
+4. **Il catalogo dei risultati negativi** con regole di decisione pre-registrate.
+
+**Conseguenza editoriale, non negoziabile:** il whitepaper va riscritto **citando** questi
+lavori e posizionandosi rispetto a essi. Pubblicare una decomposizione senza citarli ci farebbe
+sembrare disinformati o disonesti — e su alcuni assi loro l'hanno fatta meglio.
+
 ## 8. Cosa manca (aggiornamento previsto)
 
 - [ ] Ladder B2 post-fix: ablazioni `−calc`, `−search`, `−verify`, `−coherence` su GPU (L5 fatto a n=20: §7.6.1; mancano L6 e L7)
