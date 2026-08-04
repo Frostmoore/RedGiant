@@ -5,8 +5,67 @@ con e senza fix, con e senza thinking. Ogni numero qui dentro viene da un report
 [`bench/results/`](bench/results/) o da un log di run archiviato; le righe segnate *(non
 ufficiale)* non hanno valore di verdetto (v. §1.3).
 
-> **Ultimo aggiornamento:** 2026-08-03 · **Prossimo:** dopo il run ufficiale della ladder su
+> **Ultimo aggiornamento:** 2026-08-04 · **Prossimo:** dopo il run ufficiale della ladder su
 > severino-sim (B2+B4 col codice fixato), che chiuderà la campagna in corso.
+
+---
+
+## 0. IL BILANCIO — cosa migliora, cosa no, cosa è ancora incerto
+
+*Le tre tabelle di sintesi. Ogni riga rimanda alla sezione con i dati completi; qui c'è solo il
+verdetto, il numero che lo sostiene e la ragione tecnica.*
+**Criterio di collocazione:** una riga sta in §0.1 o §0.2 solo se ha un A/B con bracci
+comparabili e numerosità adeguata; tutto ciò che è stato *osservato* ma non *isolato* sta in
+§0.3. Un miglioramento plausibile ma non misurato non è un miglioramento.
+
+### 0.1 Cose che migliorano il sistema — DIMOSTRATE
+
+| # | Leva | Senza | Con | Perché funziona | Fonte |
+|---|---|---|---|---|---|
+| 1 | **Grammatica + schema nel prompt** | 0/60 output utilizzabili | **60/60** | il ramo malformato non è *generabile*, non viene corretto dopo | §2 |
+| 2 | **Prefisso stabile / loop append-only** | 7.971 token riprocessati | **65** (**122×**) | la KV cache si riusa solo se il prefisso non cambia mai (D9) | §2 |
+| 3 | **`edit_file` al posto dei diff unificati** | 20+ chiamate fallite per un fix | **5–6 pulite** | i diff sono ostili a un 2B: la sostituzione esatta con unicità garantita no | §3.1 |
+| 4 | **Unioni discriminate sugli step** | loop da 60 chiamate dopo un derail | **8/8 recuperi** | dopo un apice non escapato non esiste più un'uscita sintattica incoerente | §3.1 |
+| 5 | **Identità gestita dal control plane** | 6/20 file inventati · 11/20 nomi disallineati · 5/20 `phase_id` errati | **0 · 0 · 0** | il modello crea il significato, il control plane crea l'identità (PS-D11) | §3.3 |
+| 6 | **Ricerca selettiva** (`search_code`) | **0/5** su *tutti* i gradini, replicato **3×** su due corpus, spendendo **+35%** di token | 4/5 → 18/20 | è l'unico componente la cui rimozione perde il gradino conquistato: compra **capacità** | §6.5, §7.1 |
+| 7 | **Verifica deterministica** | **8 false dichiarazioni in 5 run** | 1 sola in **550+** run verificate | compra **onestà**, non throughput: è il trust boundary (D10) | §6.5, §7.3 |
+| 8 | **Retry (2 tentativi)** | 0/3, muore **veloce e a buon mercato** (−59% token) | — | è il **carburante**: assorbe i fallimenti transitori, incluso il finish fantasma | §6.5, §7.7 |
+| 9 | **Guardia di coerenza aritmetica** | **9/20 (45%)** · 797 s | **18/20 (90%)** · 500 s | **Fisher p = 0,0057**; e **−37% di tempo**: rifiutare presto costa meno che fallire tardi | §7.6 |
+| 10 | **Budget di passi proporzionale alla taglia** | L7 moriva senza mai scrivere il file | L7 **11/20** | 20 passi non bastano per 8 fatti in 400 documenti: non era incapacità, era budget | §7.7.2 |
+
+**Il filo comune delle 10 righe:** nessuna insegna qualcosa al modello. Otto rendono
+*impossibile* un errore, due gli danno più spazio o più tentativi per lo stesso lavoro.
+
+### 0.2 Cose che NON migliorano il sistema — verdetto con numeri
+
+⚠️ *"Irrevocabile" va inteso come: **dimostrato falso nel regime misurato**. Tre di queste
+quattro righe hanno una condizione di riapertura scritta, perché il regime cambierà (router,
+domini non-coding, task larghi). Nessuna è stata chiusa per opinione.*
+
+| # | Leva | Numeri | Perché non funziona | Riapertura |
+|---|---|---|---|---|
+| 1 | **Planner in-loop** (D11) | **2/10 contro 9/10** (baseline statica) · 815K contro 710K token · ~10× chiamate LLM | su task piccoli pianificare **costa più di quanto renda**: il piano diventa un'altra cosa che può sbagliare | col router attivo, F6 |
+| 2 | **Plan compiler** (PS-D9) | **2/13 contro 6/13**, e **2/13 contro 8/13** nella ri-misura · −44% token e +9,4 punti di token utili, ma i verdi non salgono | i gate spostano le morti **in profondità** (da 0 tool call a 20–38 con 80–93% di token utili) senza convertirle in verdi | task larghi multi-sessione, F6 |
+| 3 | **Thinking mode** (TH3) | **Δ verificati = 0** (1,5/13 contro 1,5/13) su 4 batterie ufficiali · **~787K contro ~652K token**, **1,9× tempo** · su L5 **0/3 in tre configurazioni** (fusibile 1536, fusibile 256, e col materiale ridotto) | il ragionamento esplicito **non compra l'aritmetica**; e la sua collocazione conta più della quantità (TH1: solo-Giano 4/20, tutti 1/20) | domini everyday/matematica post-F6/F7 · e la cella mai misurata di **LAD.14** |
+| 4 | **Gate sul finish in-loop** (LAD.9) | L5 **18/20 contro 16/20**, **p = 0,66** · L7 **11/20 contro 11/20**, **p = 1,00** · **+15% di tempo** | la patologia era reale (40% dei tentativi) ma **il retry la pagava già**: difesa ridondante rispetto a un componente esistente | task coding larghi T040–T042, dove un tentativo sprecato costa 100K+ token invece di 25 s |
+
+**La lezione che unisce le prime tre:** tutto ciò che abbiamo spento è "intelligente"
+(pianificare, compilare piani, ragionare, sorvegliarsi). Tutto ciò che è acceso in §0.1 è
+meccanico (cercare, verificare, riprovare, rifiutare l'incoerente).
+**La quarta insegna un'altra cosa:** una patologia *frequente* non è automaticamente *costosa* —
+prima di costruire una difesa, misurare **chi sta già pagando** per il problema.
+
+### 0.3 Decisioni prese ma NON ancora certe
+
+| # | Cosa | Stato della prova | Cosa manca | Rischio se sbagliata |
+|---|---|---|---|---|
+| 1 | **`refusal_state`** — il rifiuto dichiara lo stato del disco | meccanismo **osservato** sui log: recuperi da **2 su 4** a **4 su 4** dopo il fix; e la causa è certa (`edit_file` su un file mai creato, due volte nella stessa run) | mai isolato con un A/B suo: il 18/20 di §0.1 riga 9 è stato misurato **coi due fix insieme** | bassa: costa nulla e non può nuocere, ma il merito attribuito alla guardia potrebbe essere in parte suo |
+| 2 | **`calculator` nel catalogo** | ⚠️ **acceso senza prove**, unico caso: invocato nel ~40% delle occasioni, spesso **mai** nelle run vincenti di L5; ablazione senza differenze **ma a n=5** | LAD.13 (A/B a n=20) — **dopo** LAD.10, perché il 40% delle chiamate fallisce sull'interfaccia (`expression=None`) e giudicarlo ora condannerebbe l'implementazione | media: occupa token di prompt a ogni step per un servizio forse già svolto dalla guardia di coerenza |
+| 3 | **Tutti i numeri della ladder** | GPU `dev-fast`, non `severino-sim` | **LAD.7**: run ufficiale su CPU, 20 run per braccio | media: la direzione è solida, l'ampiezza no (IC 95% del 18/20: **70–97%**) |
+| 4 | **L7 = 11/20** | misurato a n=20 su GPU | attribuzione: è il cumulo di 5 fix, nessuno isolato | bassa sul numero, alta sull'interpretazione |
+| 5 | **Il verdetto TH3 su L5** | 0/3 in tre configurazioni | **LAD.14**: pensiero pieno **e** materiale pieno, mai provati insieme | **alta**: se passasse, TH3 diventerebbe un verdetto sull'**hardware** ("il thinking paga e non ci sta in 8192") e cambierebbe l'obiettivo di F5 |
+| 6 | **Buco nella matrice: B4** | il blocco pre-fix è stato **buttato** (codice non comparabile) | **LAD.11** | media: metà della matrice 2×2 sulla ladder è vuota |
+| 7 | **Syntax gate, `no_op_edit`, hint su `unknown_tool`** | validati da piloti e collaudi (es. 13 task su 43 sprecavano passi su nomi inventati; 15 edit no-op consecutivi osservati) | mai passati dalla ladder con bracci ablati | bassa: patologie documentate e costo nullo |
 
 ---
 
