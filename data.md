@@ -1430,6 +1430,64 @@ potenza adeguata**: `RG_WORKER_CARD` resta su `full`.
 Candidate a posteriori (mai misurate, da trattare come tali): la regola 10 (*"il TASK è
 sfondo"*) e la 2 (*thought ≤300*).
 
+### 7.16.3 Lettura dei log della bisezione — non è "cercare di più", è **non mettersi a leggere**
+
+*(2026-08-05, analisi **ESPLORATIVA** dei log dei bracci `card-bisA` e `card-bisB`, 40 run,
+`@4467073`/`@da21184`. Nessuna ipotesi pre-specificata: genera ipotesi, non le verifica.)*
+
+La mappatura run→braccio è venuta dai **log timestampati con il percorso del report** introdotti
+poche ore prima: `eval_runs.report_path` incrocia il log della sessione, e i conteggi tornano
+esatti (20 e 20, 4/20 e 9/20 come dal runner). **Primo dividendo della regola sui log.**
+
+**Scomposizione delle chiamate per esito, dentro lo stesso braccio:**
+
+| Braccio / esito | run | `search_code`/run | `read_file`/run | s/r |
+|---|---|---|---|---|
+| `bisA` vinte | 4 | 10,2 | 19,8 | 0,52 |
+| `bisA` perse | 16 | 14,1 | 46,0 | 0,31 |
+| **`bisB` vinte** | 9 | **11,8** | **2,1** | **5,58** |
+| **`bisB` perse** | 11 | **11,5** | **42,1** | 0,27 |
+
+**Il numero di ricerche è praticamente identico fra run vinte e perse** (11,8 contro 11,5 in
+bisB; in bisA le vinte cercano perfino *meno*). A cambiare di **venti volte** è il numero di
+letture. La variabile non è *"cerca di più"*: è **"non si mette a leggere"**.
+
+**Il test che separa causa da conseguenza** — l'obiezione ovvia è che leggere 42 file sia la
+*conseguenza* di una run che sta andando male, non la causa. Guardando **solo i primi 5 passi**,
+prima che l'esito sia determinato (bisA+bisB in pool, n = 40):
+
+| Nei primi 5 passi… | vinte | perse | tasso di successo |
+|---|---|---|---|
+| **legge** almeno un file | 3 | 17 | **15%** |
+| **non legge** | 10 | 10 | **50%** |
+
+**Fisher esatto bilaterale p = 0,0407.** Chi apre leggendo perde tre volte su quattro; chi apre
+senza leggere vince una volta su due. Il bias di sopravvivenza è **ridotto ma non azzerato**:
+una run che legge presto potrebbe essere già in difficoltà per un'altra causa. È però
+significativo che il totale delle chiamate distingua nettamente vinte e perse (bisB: 22,9 contro
+62,0 per run) mentre **le ricerche restino piatte**: se fosse solo sopravvivenza, dovrebbero
+crescere entrambe.
+
+**Conseguenza sulla tesi del progetto.** La sintesi di §7.17.4 dice *"la variabile che predice il
+successo è se il modello cerca o legge"*. Va **riformulata più precisamente**: cercare è quasi
+una costante; ciò che discrimina è **se il modello scivola nella lettura**. Non è una sfumatura
+lessicale, cambia l'intervento implicato: non serve spingerlo a cercare di più (lo fa già), serve
+**rendergli difficile o costoso leggere** su corpus larghi — che è un intervento *strutturale*,
+in linea con tutto ciò che in questo progetto ha funzionato, invece di un intervento persuasivo.
+
+⚠️ **Statuto di questo risultato: esplorativo.** Analisi decisa *dopo* aver visto gli esiti, su
+un pool di due bracci con card diverse, con p = 0,0407 vicino alla soglia e senza correzione per
+molteplicità. **Non è un verdetto.** Il test che lo deciderebbe è quello già specificato per la
+campagna fattoriale: registri per-run della strategia nei primi passi, su **istanze generate
+indipendentemente**, con la finestra "primi N passi" fissata *prima* di guardare.
+
+**Reperto minore, nella stessa analisi:** le chiamate a tool inesistenti (`tool_name`,
+`tool_call_spec_id_1`, `tool_name_placeholder`) valgono 1,1/run in `bisA` — che **contiene** la
+regola 13 sui nomi esatti — contro 1,6/run in `bisB`, che **non la contiene**, e 0,4/run in
+`card-no10` (che la contiene). Indizio debole che la regola 13 dimezzi le chiamate fantasma
+**senza convertirle in successi**: coerente con §7.9.2, dove gli errori azionabili agivano sul
+*costo* del fallire e non sulla *frequenza*.
+
 ## 7.17 F5.6a — il pensiero fa 20/20 su L7, e tre scoperte diventano una sola
 
 *(2026-08-04, dev-fast, 20 run per braccio, `@018e5a7` — codice con le ondate riarmabili.)*
