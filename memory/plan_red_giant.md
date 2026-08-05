@@ -667,9 +667,27 @@ l'ignoranza in tempo, ed è ciò che la ricerca è.
 
 - **In fase di comprensione i micro-test uno per volta VANNO BENE**, purché ognuno *spieghi*
   qualcosa. Non sono inefficienza: sono il lavoro.
-- **È PREMATURO** congelare il codice per una campagna di verifica lunga (le ~22 ore della
-  matrice completa): misurerebbe con precisione un sistema che stiamo ancora scoprendo.
+- **È PREMATURO** congelare il codice per una campagna di verifica lunga: misurerebbe con
+  precisione un sistema che stiamo ancora scoprendo.
 - **Ottimizzare prima di aver capito non ha senso.**
+
+> ⚠️ **CORREZIONE 2026-08-05 — "la campagna fattoriale completa" NON è eseguibile, e la stima
+> di ~22 ore era sbagliata.** Con 12 leve a due livelli il fattoriale completo è **2¹² = 4.096
+> celle**: a 20 run per cella e ~60 s per run fa **1.365 ore ≈ 57 giorni**, e perfino a **1 run
+> per cella** resterebbero **68 ore** (senza alcuna potenza statistica). Le ~22 ore stimate in
+> precedenza descrivevano "tutti i bracci × tutte le famiglie", che è **un'altra cosa**: una
+> collezione di ablazioni una-alla-volta, non un fattoriale.
+>
+> **Disegno corretto, in due stadi** (standard DOE, e la letteratura dice esplicitamente che i
+> fattoriali completi *"scalano combinatoriamente"* rendendosi impraticabili):
+> 1. **Screening** — disegno di Plackett-Burman a **16 celle** per 12 fattori (soli effetti
+>    principali) × 20 run ≈ **5,3 h**. Serve a scartare le leve inerti, non a spiegarle.
+> 2. **Fattoriale COMPLETO sui 4-5 fattori sopravvissuti** — 16 celle × 20 run ≈ **5,3 h**.
+>    Qui, e solo qui, si leggono le interazioni (che è ciò che ci serve: card×pensiero,
+>    ridondanza fra regole).
+>
+> **Totale ≈ 11 ore invece di 57 giorni**, con le interazioni che ci interessano davvero
+> misurate meglio di quanto farebbe un fattoriale completo mal dimensionato.
 
 ### 🎯 Il traguardo che apre la fase successiva: il "tetto del pavimento"
 
@@ -2442,11 +2460,12 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
      **potenza adeguata** prima di potare la card — su un effetto da 15 punti servono ~100+ run
      per braccio, non 20.
 
-  **Prossimo passo suggerito (non lanciato):** bisezione di 2° livello DENTRO il gruppo B per
-  isolare la singola regola — candidata principale la 10 (*"il TASK è sfondo, fai SOLO il tuo
-  obiettivo"*), che plausibilmente impedisce al modello di vagare leggendo il corpus; seconda
-  la 2 (*thought ≤300*), che sopprimerebbe il "pianifico di leggere tutto". **Ipotesi a
-  posteriori, mai misurate** — vanno trattate come tali.
+  ~~**Prossimo passo suggerito:** bisezione di 2° livello DENTRO il gruppo B.~~
+  ⛔ **LINEA CHIUSA il 2026-08-05.** Il leave-one-out sulla regola 10 ha dato 6/10 (§7.16.2-bis)
+  e la ricerca preventiva ha confermato che **i disegni a rimozione singola sono strutturalmente
+  ciechi alla ridondanza e alle interazioni** — nessuna bisezione ulteriore può rispondere alla
+  domanda "quale regola conta". Le regole della card entrano come **fattori nello screening**
+  (v. disegno in due stadi), non come altri esperimenti a sé.
 
   ⚠️ **CONFONDIMENTO DEL DISEGNO, scoperto il 2026-08-05 dopo la chiusura** (verifica meccanica
   delle regole su tutte le varianti): A ∪ B copre tutte e 13 le regole, **ma** l'inciso della

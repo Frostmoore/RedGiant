@@ -1532,11 +1532,25 @@ noto, ma la ricerca ha prodotto **un numero che vale più della nostra proposta*
 | **`read_file` che restituisce solo la regione pertinente** | **Noto e standard.** [Anthropic, context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents): hard-cap sulle letture, paginazione offset/limit; pattern `page_up`/`page_down`/`find_on_page`; preview compressa + copia integrale sul server | **Non è ricerca, è ingegneria dovuta.** Va implementato perché serve, non misurato come scoperta |
 | **Il leave-one-out è cieco alla ridondanza** (§7.16.2-bis) | **Noto, ed è testuale:** *"i disegni leave-one-out sono strutturalmente ciechi alle interazioni, e i disegni fattoriali che le coglierebbero scalano combinatoriamente"*; e sull'ablazione delle teste di attenzione, **70–90% rimovibili con perdita minima** proprio per ridondanza | La nostra osservazione è corretta e **non originale**. Rafforza però l'argomento per il fattoriale, che ora ha una citazione diretta oltre a [16] |
 
-**Il ritorno concreto di questa ricerca** (secondo caso in cui cercare prima ci cambia il piano,
-dopo `--swa-full`): il numero di ToolMenuBench dice che il beneficio del filtro sul catalogo
-passa in buona parte per il **costo in token**, non solo per il tasso di successo — e noi il
-costo in token lo misuriamo già. Quindi l'esperimento sulla lettura va disegnato con **due
-endpoint dichiarati prima** (verde su L7 **e** token per run), non con uno solo.
+**Le QUATTRO conseguenze operative** (secondo caso in cui cercare prima ci cambia il piano,
+dopo `--swa-full`):
+
+1. **L'esperimento sulla lettura cambia leva.** Sourcegraph non ha risolto *limitando le
+   letture* ma **migliorando ciò che la ricerca restituisce**: dal grep tornano trenta path e il
+   modello, non potendo decidere su uno snippet, legge. Quindi la leva n.1 diventa
+   **`search_code` con abbastanza contesto attorno al match da rispondere senza aprire il file**
+   (i nostri risultati oggi sono larghi ~1.500 token ma *rumorosi*, non necessariamente
+   *informativi*). Limitare `read_file` scende a leva n.2 — resta valida, ma agisce sul sintomo.
+2. **Due endpoint invece di uno.** ToolMenuBench mostra che il filtro sul catalogo vale
+   **+53,6 punti E −98% di token**: il beneficio passa in larga parte per il costo. Ogni
+   esperimento su lettura/catalogo va dichiarato prima con **verde su L7 *e* token per run**.
+   Con un endpoint solo avremmo misurato metà dell'effetto.
+3. **`read_file` parziale/paginato non è un esperimento, è debito di ingegneria.** Va
+   implementato con la sua leva di ablazione ed entra nello screening; non merita un A/B da 20
+   run per "scoprire" uno standard industriale.
+4. **La linea delle bisezioni della card è CHIUSA** e il disegno della campagna cambia: v. la
+   correzione sul fattoriale (screening a 16 celle + fattoriale sui sopravvissuti, ≈ 11 h contro
+   i 57 giorni che un fattoriale completo a 12 leve richiederebbe davvero).
 
 ## 7.17 F5.6a — il pensiero fa 20/20 su L7, e tre scoperte diventano una sola
 
