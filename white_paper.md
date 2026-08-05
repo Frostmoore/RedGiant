@@ -2,7 +2,7 @@
 
 ### A verification-first agentic architecture, and the measurements that judge it
 
-**Red Giant Project** · Working paper, revision of 2026-08-05
+**Red Giant Project** · Working paper, revision of 2026-08-05 (late)
 Model under test: Gemma 4 E2B (≈2B effective parameters), Q4 QAT GGUF, CPU-only inference
 Reference hardware: 4 CPU cores, 15 W, no usable GPU
 
@@ -136,7 +136,7 @@ factorial campaign that would make its rows simultaneously true is scheduled, no
 | 12 | **Actionable errors** (refusals that state disk state; argument errors that name the missing field) | spirals up to **6 consecutive steps**, **7 fatal sequences** | **max 1 step**, **0 fatal**, recovery **100%** | they do not reduce mistakes (18% of calls still malformed): they remove the **spirals** mistakes used to cause. They act on the *cost* of failing, not its frequency | 6.4-ter |
 | 13 | **Runtime cache flags** (full sliding-window cache + suffix shifting) | **2,748** tokens reprocessed to remove a block mid-prompt | **1** | the model family uses sliding-window attention; with a partial cache the runtime cannot reuse anything past a divergence. Costs memory, so adopted on the development profile only | 6.4-quinquies |
 | 14 | **Wave compaction of the tool-result chain** | hardest rung **12/40 (30%)**, attempts dying at **7.7 steps**, **731** reprocessed tokens per call | **22/40 (55%)**, **13.2 steps**, **550** per call | **p = 0.0411**, sample size fixed *before* looking. Older results collapse onto the deterministic evidence line each tool already emits — no model-written summary. The +53% wall is the cost of **not dying**, and cache reuse *improves* (89.3% against 85.8%) | 6.4-sexies |
-| 15 | **The role card, discovered by ablating it** | stripped card: **1/20**, and the model **reads** instead of searching (440 `read_file` against 169 `search_code`) | full card: **15/20** (294 searches against 146 reads) | **p = 1.0 × 10⁻⁵**. Its function is not to state rules but to **steer tool choice**, and only where selective retrieval is indispensable — on the narrow rung the difference is nil | 5.9 |
+| 15 | **The role card, discovered by ablating it** | stripped card: **1/20**, and the model **reads** instead of searching (440 `read_file` against 169 `search_code`) | full card: **15/20** (294 searches against 146 reads) | **p = 1.0 × 10⁻⁵**. Its function is not to state rules but to **steer tool choice**, and only where selective retrieval is indispensable — on the narrow rung the difference is nil. **Bisected (§5.9.6):** the effect lives in the *perimeter/focus* rules (9/20, p = 0.0084 against the stripped card), not in the action-discipline rules (4/20, indistinguishable from stripped); and **no single rule is necessary** — a leave-one-out on the leading candidate changed nothing (6/10, p = 1.000) | 5.9, 5.9.6 |
 | 16 | **Explicit reasoning on wide-retrieval tasks** (not on coding: see §0.2 row 3) | **12/20** on the widest rung, 15.7 steps per attempt, 59 compaction waves | **20/20** (CI 84–100%), 12.4 steps, **13 waves** | **p = 0.0033**. Reasoning does not add context, it **reduces the need for** it: 168 searches against 5 reads. Yields the project's first measured routing rule | 6.4-quater |
 
 **The common thread across the first fourteen: none of them teaches the model anything.** Eight
@@ -369,10 +369,25 @@ reasoning (19/20), so a one-lever-at-a-time protocol would have assigned each le
 that does not exist independently of the other. (Strictly, "higher-order" in the quotation
 refers to interactions among three or more components — which only a factorial design can
 surface at all; our 2×2 is the two-factor case that already sufficed to break per-lever
-attribution.) The full-factorial campaign described in §8 — every arm, coding and non-coding,
-with every ablation and every switch in both positions, on one commit and on the reference CPU
-profile — is therefore not thoroughness for its own sake. It is the design the literature says
-is missing, run in the regime the literature does not cover.
+attribution.) A second instance arrived from the card bisection (§5.9.6): removing the leading
+individual rule changed nothing, which is compatible both with that rule being inert and with
+several rules carrying the same signal redundantly — a distinction no single-removal design can
+draw.
+
+**But the same literature names the reason a full factorial is not simply the answer:** such
+designs *"scale combinatorially, making them impractical"*. That constraint binds us concretely.
+With twelve ablatable levers, a complete factorial is 2¹² = **4,096 cells**; at our standing 20
+runs per arm that is roughly **57 days** of measurement, and even one run per cell — which would
+carry no statistical power at all — costs 68 hours. An earlier version of this paper described a
+"full-factorial campaign" of about 22 hours: that figure in fact described *every arm crossed
+with every task family*, which is a collection of one-at-a-time ablations, not a factorial. We
+correct it here rather than quietly restate it.
+
+The design that fits both the need and the constraint is the standard two-stage one, and it is
+what §8 now specifies: a **screening design** over all levers to discard the inert ones, followed
+by a **full factorial over the four or five survivors**, where the interactions we actually care
+about — card × reasoning, redundancy among perimeter rules — are measured with real power
+instead of one run per cell.
 
 ---
 
@@ -562,7 +577,10 @@ is the honest substitute for one:
 
 - **Confirmatory** (pre-specified endpoint, sample size fixed before looking, fresh sample):
   the wave-compaction A/B — pilot used only for sizing, verdict from a new fixed-n sample
-  (p = 0.0411). This is the protocol the factorial campaign will apply to everything.
+  (p = 0.0411). This is the protocol the screening and factorial campaign will apply to
+  everything, with **two endpoints declared in advance** — success rate *and* tokens per run —
+  since interventions on the tool catalogue are reported to move both [48], and scoring on
+  success alone would measure half the effect.
 - **Pre-specified but single-sample**: the coherence gate (p = 0.0057), the reasoning-vs-naked
   comparison (p = 1.45 × 10⁻¹¹), the card ablation (p = 1.0 × 10⁻⁵), reasoning on the widest
   rung (p = 0.0033). Decision rules were written before the data; the same sample generated
@@ -865,6 +883,57 @@ read these deaths as "step budget exhausted" — the pattern matched the phrase 
 in a context-overflow message. The correct diagnosis came from reading the failure reasons in
 full rather than counting them.)*
 
+#### 5.9.6 Bisecting the role card: which rules steer, and why the question has no finer answer
+
+Since ablating the whole card costs fourteen points (§5.9), the obvious follow-up is *which
+rules*. We split the nine rules the stripped card removes into two disjoint groups and measured
+each on the widest rung, 20 runs per arm, judged against the two existing anchors.
+
+- **Group A — action and tool discipline**: one action per step · read the error, never repeat
+  an identical failing call · only tool calls change the world · call tools by their exact name.
+- **Group B — perimeter, focus and style**: `thought` ≤ 300 characters · do not touch files
+  outside scope · your job is ONLY your objective, the task description is background · if
+  tests fail outside your boundary, finish with evidence · prefer concatenation to f-strings.
+
+| Arm | Verified | 95% CI | vs stripped card | vs full card |
+|---|---|---|---|---|
+| stripped card (anchor) | 1/20 = 5% | 1–24% | — | p = 0.0002 |
+| **Group A** | **4/20 = 20%** | 8–42% | p = 0.342 | **p = 0.0225** |
+| **Group B** | **9/20 = 45%** | 26–66% | **p = 0.0084** | p = 0.527 |
+| full card (anchor) | 12/20 = 60% | 39–78% | p = 0.0002 | — |
+
+**The effect lives in the perimeter rules, not the tool-discipline rules.** Group B is
+statistically indistinguishable from the full card and clearly better than the stripped one;
+Group A is indistinguishable from the stripped card. The plausible reading — untested, and we
+label it as such — is that telling the model *the task description is background, do only your
+objective* stops it treating a 400-document corpus as material to study, whereas rules about
+*how* to use tools say nothing about *what* to look at.
+
+**Three limits we state rather than hide.** First, **the groups do not sum**: 20% + 45% against
+the full card's 60%. Second, **"Group A not detectable" is not "Group A useless"**: 4/20 against
+1/20 is a ~15-point effect and 20 runs per arm are blind below ~30 points (§4.5). Third, our
+**registered prediction was wrong** — we had predicted Group A would carry the effect and Group
+B would not; the result was the near-exact opposite.
+
+**A leave-one-out that could not have answered the question.** We then removed the single
+leading candidate — *"your job is ONLY your objective"* — from the otherwise complete card
+(mechanically verified: 12 rules against 13, that clause the only difference). Result **6/10,
+p = 1.000 against the full card**: no detectable loss, and our registered prediction wrong again.
+The instructive part is not the number but the design flaw it exposes: **leave-one-out is
+structurally blind to redundancy.** If several rules carry the same perimeter signal, removing
+any one of them changes nothing while the set remains necessary — a limitation the ablation
+literature states explicitly, alongside the finding that 70–90% of attention heads are
+individually removable for the same reason. No further single-removal experiment can identify
+"the rule that matters"; only a factorial design can, which is why this line of experiments was
+closed rather than continued (§8).
+
+**A confound in our own design, found afterwards and reported.** Group A ∪ Group B covers all
+thirteen rules, but one clause of rule 7 — *"never include the `N<TAB>` line-number prefix that
+`read_file` displays"*, one of the measured interface fixes of §6.3 — was present only in the
+full card and in neither variant. The full card therefore exceeds A ∪ B by that clause, so part
+of the residual gap may belong to it rather than to Group A. The leave-one-out above was built
+from the complete card specifically to avoid repeating the error.
+
 ---
 
 ## 6. Discussion
@@ -1070,16 +1139,53 @@ spends fewer steps, closes in half the attempts, and never approaches the window
 > channel — all move that one behaviour, and their outcomes order exactly as the force with
 > which they move it.
 
-We state this as a hypothesis, not a demonstrated mediator, because the evidence is aggregate
-tool-call counts, and aggregates of this kind are confounded: successful runs are longer-lived
-and accumulate calls differently, the interventions themselves alter run length, and a
-search-heavy profile may partly be a *consequence* of a run going well rather than its cause.
-The test that would settle it — per-run records relating early-step strategy (before the
-outcome is determined) to eventual success, across independently generated instances — is
-specified for the factorial campaign. What the current data does establish is narrower and
-still useful: three independent interventions each shift the search/read ratio in the
-direction of their outcome, and no intervention that improved outcomes shifted it the other
-way.
+**We can now sharpen this, and the sharpening changes what to build.** Splitting the bisection
+runs by outcome *within the same arm* shows that the two halves of the ratio behave completely
+differently:
+
+| Arm / outcome | runs | `search_code` per run | `read_file` per run |
+|---|---|---|---|
+| Group B, won | 9 | **11.8** | **2.1** |
+| Group B, lost | 11 | **11.5** | **42.1** |
+| Group A, won | 4 | 10.2 | 19.8 |
+| Group A, lost | 16 | 14.1 | 46.0 |
+
+**Search counts are flat between winning and losing runs** — 11.8 against 11.5, and in Group A
+the winners search slightly *less*. What differs by a factor of twenty is reading. The variable
+is therefore not "searches more" but **"does not fall into reading"**.
+
+The obvious objection is survivorship: reading forty files may be the *consequence* of a run
+already going badly. We tested it on the window before the outcome is determined — the **first
+five tool calls** of each run, both arms pooled (n = 40):
+
+| In the first five steps… | won | lost | success rate |
+|---|---|---|---|
+| **reads** at least one file | 3 | 17 | **15%** |
+| **does not read** | 10 | 10 | **50%** |
+
+**Fisher exact two-sided p = 0.0407.** Survivorship is reduced, not eliminated — a run that
+reads early may already be in trouble for some other reason — but the asymmetry argues against
+it as the sole explanation: total call counts separate winners from losers sharply (22.9 against
+62.0 per run in Group B) while *search* counts stay flat. Pure survivorship would inflate both.
+
+**This is exploratory** (§4.5): the analysis was chosen after seeing the outcomes, pools two
+different cards, sits near threshold, and carries no multiplicity correction. It is a hypothesis
+sharpened, not a verdict. The design that would settle it is stated in §8.
+
+The reformulation matters because it changes the intervention implied. "Push the model to
+search" is not actionable — it already searches, in winning and losing runs alike. "Make reading
+expensive, or make search results good enough that reading is unnecessary" is. This aligns with
+an industrial report of the same failure mode at larger scale [47], where an agent lacking
+adequate search degenerated into *grep → read → wrong → grep again* (96 tool calls, 6 reversals,
+score 0.32) and a targeted search tool resolved the same task in 5 calls (score 0.68) — with the
+mechanism attributed not to reading being tempting but to grep returning thirty paths the model
+cannot adjudicate from a one-line snippet. That points at result *quality* as the primary lever
+and read restriction as the secondary one, which is the order our next experiments follow (§8).
+
+A minor artefact from the same logs, consistent with §6.4-ter: calls to non-existent tool names
+run at 1.1 per run in the arm that **contains** the "call tools by their exact name" rule,
+against 1.6 in the arm that does not — a rule that roughly halves the malformed calls without
+converting any of them into successes. Frequency and cost again come apart.
 
 This is the same variable the retrieval literature has been converging on independently —
 grep-style direct corpus interaction outperforming embedding retrieval for agents [21, 22, 24].
@@ -1395,33 +1501,69 @@ not of compaction (§6.4-quinquies); with the correct flags, wave compaction *im
 reuse (§6.4-sexies). What remains open on the reference profile is the memory cost of those
 flags, unmeasured on the 10 GB CPU target.
 
-**The principal planned campaign is full-factorial, and the reason is in our own data.** The
-2×2 of §6.4-quater shows a lever worth twelve points in one configuration and one point in
-another, which means "the value of component X" is not a well-defined quantity in this system.
-One-lever-at-a-time ablation — which is what every campaign in this paper used, and what the
-literature identifies as its own standing limitation [16] — assigns each component a number that
-exists only conditionally on the position of the others. The planned campaign therefore runs
-every arm, coding and non-coding, with every ablation lever and every enable-switch in both
-positions, on a single commit and on the reference CPU profile. It is expensive (an estimated
-~22 hours of CPU wall time) and it is the only design that can produce an attribution table
-whose rows are simultaneously true.
+**The principal planned campaign is a two-stage factorial, and both the need and its shape come
+from our own data.** The need: the 2×2 of §6.4-quater shows a lever worth twelve points in one
+configuration and one point in another, and the bisection of §5.9.6 shows an individual rule
+whose removal costs nothing while the group it belongs to is load-bearing. "The value of
+component X" is not a well-defined quantity in this system, and one-lever-at-a-time ablation —
+what every campaign in this paper used, and the standing limitation the literature names for
+itself [16] — assigns each component a number that exists only conditionally on the others.
 
-Planned work, in order: (i) the official campaign on the reference CPU profile, since every
-**ladder** number (§5.8–§5.9, §6.4-*) was obtained on the development GPU and is directionally
-but not quantitatively transferable — the coding-domain campaigns of §5.1–§5.7 already ran on
-CPU; (ii) the full-factorial campaign described above, which also supplies what §4.5 identifies
-as missing — multiple independently generated task instances per rung, per-run strategy records
-for the search-versus-read mediation test, and the data for a formal `reasoning × card`
-interaction model; (iii) bisection of
-the role card, to identify *which* rule group steers tool choice — 414 tokens per call are
-provably not free and provably not all necessary; (iv) a properly powered re-judgement of the
-calculator and of the finish gate, the latter because its rejection is now known to have been
-underpowered rather than negative; (v) the remaining context-and-cache components under the two
-objectives above; (vi) adaptive routing by task size and task kind, using two measured rules —
-micro-tasks must **not** be planned, and reasoning belongs on wide-retrieval tasks but not on
-coding; (vii) re-measurement of all remaining rejected verdicts with routing active and on
-non-coding domains, since all were measured on synthetic coding only; (viii) public benchmark
-runs, to place the system on scales others can read; and (ix) the real-codebase examination.
+The shape follows from arithmetic we got wrong once and correct here. With twelve ablatable
+levers a complete factorial is 2¹² = **4,096 cells**: at 20 runs per arm, ~57 days of
+measurement; at one run per cell, still 68 hours and no power. A previous revision quoted "~22
+hours for the full-factorial campaign", which actually described every arm crossed with every
+task family — a set of one-at-a-time ablations, not a factorial. The corrected design is the
+standard two-stage one:
+
+1. **Screening** — a Plackett–Burman design over the twelve levers, **16 cells** × 20 runs
+   (≈ 5 hours), estimating main effects only. Its job is to discard inert levers, not to explain
+   them.
+2. **Full factorial over the four or five survivors** — 16 cells × 20 runs (≈ 5 hours), where
+   the interactions that motivated all of this are measured with real power.
+
+Roughly **eleven hours instead of fifty-seven days**, and the interactions of interest measured
+better than an under-powered complete factorial would manage. The campaign also supplies what
+§4.5 identifies as missing: multiple independently generated task instances per rung, and
+per-run early-strategy records for the read-versus-search mediation test.
+
+**On the reading failure mode, the next experiments follow the evidence rather than the
+intuition.** §6.4-quater shows the discriminating behaviour is falling into reading, not failing
+to search; [47] attributes that behaviour to search results the model cannot adjudicate. The
+primary lever is therefore **result quality** — returning enough context around each match that
+opening the file is unnecessary — with **restricting or paginating reads** as the secondary one.
+Both carry two pre-declared endpoints rather than one, because tool-menu filtering is reported
+to buy **+53.6 points of success and −98% of tokens** simultaneously [48]: an experiment scored
+on success alone would measure half the effect. Retrieval budgets — capping how much context an
+agent may accumulate before it must answer — are the related lever in that literature [50] and
+map directly onto our step-and-context accounting. Partial and paginated file reads are treated as
+engineering debt with an ablation lever attached rather than as an experiment, since they are
+established practice [38a] and nothing about them needs discovering.
+
+Planned work, in order: (i) the two-stage screening and factorial campaign described above,
+which also supplies what §4.5 identifies as missing — multiple independently generated task
+instances per rung, per-run early-strategy records for the read-versus-search mediation test,
+and the data for a formal `reasoning × card` interaction model; (ii) the search-result-quality
+and read-restriction experiments just described; (iii) the remaining context-and-cache
+components under the two objectives above; (iv) adaptive routing by task size and task kind,
+using three measured rules — micro-tasks must **not** be planned, reasoning belongs on
+wide-retrieval tasks but not on coding, and the tool menu itself should be task-dependent [48];
+(v) re-measurement of all remaining rejected verdicts with routing active and on non-coding
+domains, since all were measured on synthetic coding only; and (vi) **public benchmark runs on
+the target hardware** — IFBench, BFCL, RULER, τ²-bench and Terminal-Bench Hard — which replace
+the previously planned confirmatory campaign on the CPU simulator: absolute numbers will come
+from published benchmarks executed on the deployment machine, with the development GPU retained
+for internal deltas. Published baselines for this model exist for several of them (IFBench 38.0,
+τ²-bench 31.0/34.6/19.7, Terminal-Bench Hard 3.0, MRCR 19.1) [49], which also lets us report a
+figure its authors do not: the cost of 4-bit quantization and a CPU runtime, measured as the gap
+between their naked baseline and ours. Finally (vii), the real-codebase examination.
+
+Two items are deliberately **removed** from the roadmap rather than deferred. Further bisection
+of the role card is abandoned: §5.9.6 establishes that single-removal designs cannot answer the
+question, so those rules become factors in the screening instead. And the standalone re-judgement
+of the calculator and the finish gate is folded into the screening, where both appear as levers
+with adequate power, rather than run as separate under-powered A/Bs — which is how they came to
+be switched off in the first place.
 
 ---
 
@@ -1602,6 +1744,24 @@ accessed 2026-08-02
 2026-08-02
 [46a] GitHub, *Spec Kit* (spec-driven development toolkit). github.blog, accessed 2026-08-02
 [46b] AWS, *Kiro* (spec-driven IDE). accessed 2026-08-02
+
+**The reading failure mode, tool menus, and baselines for the model under test**
+
+[47] Sourcegraph, *Why coding agents fail in large codebases (and what to do about it)*.
+sourcegraph.com blog, accessed 2026-08-05 — documents the degenerate *grep → read → wrong →
+grep again* cycle and attributes it to search results the model cannot adjudicate from a
+one-line snippet; reports 96 tool calls / 6 reversals / score 0.32 against 5 targeted calls /
+score 0.68 on the same task
+[48] *ToolMenuBench: Benchmarking Tool-Menu Filtering Strategies for Reliable and Efficient LLM
+Agents*, arXiv:2606.15508 (2026), accessed 2026-08-05 — exposing all tools yields 32.1% success
+at 56,062 tokens per task; aggressive filtering (≈1 visible tool) yields 85.7% at 1,125 tokens
+[49] Google DeepMind, *Gemma 4 Technical Report*, arXiv:2607.02770 (2026), Table 5, accessed
+2026-08-05 — published baselines for the model under test (E2B, bf16, thinking mode): IFBench
+38.0, IFEval 94.6, τ²-bench airline/retail/telecom 31.0/34.6/19.7, Terminal-Bench Hard 3.0,
+MRCR v2 8-needle 128k 19.1. No quantized-checkpoint accuracy is reported
+[50] *Lost in the Maze: Overcoming Context Limitations in Long-Horizon Agentic Search*,
+arXiv:2510.18939 (2025), accessed 2026-08-05 — retrieval budgets as a constraint on how much
+context an agent may accumulate
 
 ---
 
