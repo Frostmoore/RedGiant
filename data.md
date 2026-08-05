@@ -1520,6 +1520,24 @@ regola 13 sui nomi esatti — contro 1,6/run in `bisB`, che **non la contiene**,
 **senza convertirle in successi**: coerente con §7.9.2, dove gli errori azionabili agivano sul
 *costo* del fallire e non sulla *frequenza*.
 
+### 7.16.4 Ricerca preventiva (D22) sui prossimi passi — 3 su 4 già noti, e uno ci cambia il disegno
+
+*(2026-08-05, quattro ricerche mirate PRIMA di implementare, come da D22. Esito: il grosso è
+noto, ma la ricerca ha prodotto **un numero che vale più della nostra proposta**.)*
+
+| Cosa volevamo costruire/affermare | Stato in letteratura | Conseguenza per noi |
+|---|---|---|
+| **"Scivolare nella lettura" come modo di fallire** su corpus larghi | **Noto e descritto bene.** [Sourcegraph](https://sourcegraph.com/blog/why-coding-agents-fail-large-codebases) descrive il ciclo degenerato *grep → leggi → sbagliato → grep diverso → leggi* e ne dà i numeri: agente base **96 tool call in 84 minuti, 6 inversioni di rotta, punteggio 0,32**; con ricerca mirata **5 chiamate in 4,4 minuti, 0,68**. La causa meccanica è la stessa che vediamo noi: dal grep tornano trenta path, il modello non può ragionare su uno snippet e allora **legge** | La nostra §7.16.3 **non è nuova come fenomeno**. Resta nostro il *quando*: la strategia nei **primi 5 passi** predice l'esito (15% contro 50%, p = 0,0407) — cioè si vede prima che la run vada male |
+| **Togliere/limitare tool per forzare la strategia** | **Noto, con numeri molto forti.** [ToolMenuBench](https://arxiv.org/pdf/2606.15508): esporre tutti i tool dà **32,1%** di successo con 125 tool visibili per passo e 56.062 token/task; filtrando aggressivamente (**0,99 tool visibili** in media) si arriva a **85,7%** con 1.125 token — **+53,6 punti** e **−98% di token**. Idem [Lost in the Maze](https://arxiv.org/pdf/2510.18939) sui budget di recupero. ⚠️ La "subtraction principle" divulgativa di MindStudio è **priva di dati**: l'ho verificata e non cita misure proprie | La leva "togliere `read_file` sopra una soglia" è **plausibile e già validata altrove**, ma il guadagno atteso è sul *token budget* oltre che sul successo. Da misurare comunque nel nostro regime |
+| **`read_file` che restituisce solo la regione pertinente** | **Noto e standard.** [Anthropic, context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents): hard-cap sulle letture, paginazione offset/limit; pattern `page_up`/`page_down`/`find_on_page`; preview compressa + copia integrale sul server | **Non è ricerca, è ingegneria dovuta.** Va implementato perché serve, non misurato come scoperta |
+| **Il leave-one-out è cieco alla ridondanza** (§7.16.2-bis) | **Noto, ed è testuale:** *"i disegni leave-one-out sono strutturalmente ciechi alle interazioni, e i disegni fattoriali che le coglierebbero scalano combinatoriamente"*; e sull'ablazione delle teste di attenzione, **70–90% rimovibili con perdita minima** proprio per ridondanza | La nostra osservazione è corretta e **non originale**. Rafforza però l'argomento per il fattoriale, che ora ha una citazione diretta oltre a [16] |
+
+**Il ritorno concreto di questa ricerca** (secondo caso in cui cercare prima ci cambia il piano,
+dopo `--swa-full`): il numero di ToolMenuBench dice che il beneficio del filtro sul catalogo
+passa in buona parte per il **costo in token**, non solo per il tasso di successo — e noi il
+costo in token lo misuriamo già. Quindi l'esperimento sulla lettura va disegnato con **due
+endpoint dichiarati prima** (verde su L7 **e** token per run), non con uno solo.
+
 ## 7.17 F5.6a — il pensiero fa 20/20 su L7, e tre scoperte diventano una sola
 
 *(2026-08-04, dev-fast, 20 run per braccio, `@018e5a7` — codice con le ondate riarmabili.)*
