@@ -2463,9 +2463,16 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   12 regole contro 13, unica differenza, **−65 token**; l'inciso `N<TAB>` **mantenuto**, così il
   confondimento di cui sopra non si ripete.
   **10 run su L7**, giudizio contro le ancore a n=20 (`full` 12/20, `card-min` 1/20).
-  **Regole scritte PRIMA di lanciare:** **≤1/10** (vs full: p ≤ 0,017) = **la regola 10 è
-  portante da sola** · **≥4/10** (p ≥ 0,44) = **non è individualmente necessaria**, l'effetto
-  del gruppo B è distribuito su più regole · **2–3/10** = ambiguo → estensione a 20.
+  **STATUS: ESPLORATIVO** (deciso dall'utente 2026-08-05, *prima* dell'esito): questo braccio
+  serve **solo a saggiare l'ipotesi**, non a emettere un verdetto. **Nessuna estensione a 20**:
+  se l'esito cade in zona ambigua resta ambiguo e F5.0-quater rimane chiusa com'è. Nel white
+  paper questa riga va sotto "esplorativo", mai come risultato confermativo.
+  *(Nota di disciplina: cambiare una regola di decisione a esperimento avviato è di norma
+  scorretto. Qui il cambio è **conservativo** — rinuncia a raccogliere dati e **indebolisce**
+  ciò che potremo affermare, non lo rafforza — ed è registrato prima di vedere i numeri.)*
+  **Soglie indicative scritte PRIMA di lanciare:** **≤1/10** (vs full: p ≤ 0,017) = forte
+  indizio che **la regola 10 sia portante da sola** · **≥4/10** (p ≥ 0,44) = indizio che
+  **non sia individualmente necessaria** · **2–3/10** = non concludente, e ci si ferma lì.
   **PREVISIONE REGISTRATA:** mi aspetto **≤1/10**, cioè che la regola 10 sia la responsabile
   principale dell'effetto del gruppo B. ⚠️ Da pesare col fatto che **3 delle 4 previsioni
   registrate finora sono risultate sbagliate**, l'ultima proprio su questa card.
