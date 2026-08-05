@@ -2477,6 +2477,24 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   principale dell'effetto del gruppo B. ⚠️ Da pesare col fatto che **3 delle 4 previsioni
   registrate finora sono risultate sbagliate**, l'ultima proprio su questa card.
 
+  **ESITO (2026-08-05, `@8f76eae`, 532 s): `card-no10` = 6/10 = 60%**, IC 95% 31–83%.
+  - vs `card-full` 12/20 (60%): **p = 1,000 — indistinguibile**
+  - vs `card-min` 1/20: p = 0,0021 · vs `card-bisA` 4/20: p = 0,0449 · vs `card-bisB` 9/20: p = 0,700
+
+  **→ La regola 10 NON è individualmente necessaria.** Toglierla dalla card intera non produce
+  alcun calo rilevabile: il tasso resta identico a quello della card completa. **PREVISIONE
+  SBAGLIATA — la quarta su cinque** (avevo previsto ≤1/10, è uscito 6/10, l'estremo opposto).
+
+  **Lettura, con le sue riserve:** l'effetto del gruppo B **non risiede in una singola regola**
+  — o è distribuito su più regole, o è ridondante (più regole veicolano lo stesso segnale di
+  perimetro, e toglierne una lascia le altre a fare il lavoro). Il leave-one-out su una singola
+  regola è cieco alla ridondanza **per costruzione**: se A e B dicono la stessa cosa, togliere
+  A non cambia nulla e togliere B nemmeno, pur essendo insieme necessarie. È lo stesso motivo
+  per cui la bisezione di 1° livello NON è sommabile (§7.16.2) e per cui la campagna deve essere
+  **fattoriale**, non una sequenza di leave-one-out.
+  Nota di potenza: n=10 vede ~40 punti; un calo di 15 punti sarebbe passato inosservato. "Non
+  necessaria" qui significa **"non necessaria da sola e in modo grande"**, non "inerte".
+
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 
 - [ ] 🤖 **Obiettivo:** tenere la catena append-only dei risultati dentro un budget dichiarato,

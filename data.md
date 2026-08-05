@@ -1430,6 +1430,38 @@ potenza adeguata**: `RG_WORKER_CARD` resta su `full`.
 Candidate a posteriori (mai misurate, da trattare come tali): la regola 10 (*"il TASK è
 sfondo"*) e la 2 (*thought ≤300*).
 
+### 7.16.2-bis F5.0-quinquies — leave-one-out sulla regola 10: non è lei (ESPLORATIVO)
+
+*(2026-08-05, dev-fast, **10 run** su L7, `@8f76eae`, 532 s. Braccio dichiarato **esplorativo
+prima dell'esito** su decisione dell'utente: nessuna estensione, nessun verdetto.)*
+
+Candidata principale emersa dalla bisezione: la regola 10, *"Your job is ONLY the subtask
+objective; the TASK section is background"*. Braccio `card-no10` = **card intera meno quella
+sola regola** (verificato meccanicamente: 12 regole contro 13, unica differenza, −65 token;
+l'inciso `N<TAB>` della regola 7 **mantenuto**, così il confondimento del disegno precedente non
+si ripete).
+
+| Confronto | `card-no10` 6/10 = 60% (IC 31–83%) | Fisher |
+|---|---|---|
+| vs `card-full` 12/20 (60%) | identico | **p = 1,000** |
+| vs `card-bisB` 9/20 (45%) | — | p = 0,700 |
+| vs `card-bisA` 4/20 (20%) | meglio | p = 0,0449 |
+| vs `card-min` 1/20 (5%) | molto meglio | p = 0,0021 |
+
+**La regola 10 non è individualmente necessaria:** toglierla non produce alcun calo rilevabile.
+**Previsione registrata sbagliata — la quarta su cinque:** avevo scritto ≤1/10, è uscito 6/10.
+
+**Cosa insegna, al di là del singolo esito.** L'effetto del gruppo B non sta in *una* regola:
+o è distribuito, o è **ridondante** — più regole veicolano lo stesso segnale di perimetro, e
+togliendone una le altre coprono. Il leave-one-out è **cieco alla ridondanza per costruzione**:
+se due regole dicono la stessa cosa, rimuoverne una non cambia nulla e rimuovere l'altra
+nemmeno, pur essendo insieme necessarie. È lo stesso motivo per cui la bisezione di 1° livello
+non è sommabile, ed è un argomento in più per la campagna **fattoriale** contro qualunque
+sequenza di rimozioni singole.
+
+⚠️ **Potenza:** n=10 risolve ~40 punti. "Non necessaria" qui significa *"non necessaria da sola
+e in misura grande"*, non *"inerte"*: un calo di 15 punti sarebbe passato inosservato.
+
 ### 7.16.3 Lettura dei log della bisezione — non è "cercare di più", è **non mettersi a leggere**
 
 *(2026-08-05, analisi **ESPLORATIVA** dei log dei bracci `card-bisA` e `card-bisB`, 40 run,
