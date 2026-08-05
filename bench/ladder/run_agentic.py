@@ -61,6 +61,11 @@ ARMS = {
     # estensione a 20.
     "card-bisA": {"RG_WORKER_CARD": "bisect-a"},
     "card-bisB": {"RG_WORKER_CARD": "bisect-b"},
+    # F5.0-quinquies — leave-one-out: card INTERA meno la sola regola 10
+    # ("il TASK e' sfondo, fai SOLO il tuo obiettivo"), candidata principale
+    # emersa dalla bisezione. Verificato meccanicamente: unica differenza da
+    # `full`, 12 regole contro 13, ~65 token in meno.
+    "card-no10": {"RG_WORKER_CARD": "no10"},
     "+calc": {"RG_CALCULATOR": "1"},                 # LAD.13: spenta di default
     "+finishgate": {"RG_FINISH_GATE": "1"},          # LAD.9: spento di default
     "think": {"RG_THINKING_ROLES": "worker"},        # B4: percorso diretto = Giano

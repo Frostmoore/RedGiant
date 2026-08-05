@@ -2448,6 +2448,28 @@ chiamata, e spiega le 8 chiamate a un tool inesistente di §7.9.4. Test permanen
   la 2 (*thought ≤300*), che sopprimerebbe il "pianifico di leggere tutto". **Ipotesi a
   posteriori, mai misurate** — vanno trattate come tali.
 
+  ⚠️ **CONFONDIMENTO DEL DISEGNO, scoperto il 2026-08-05 dopo la chiusura** (verifica meccanica
+  delle regole su tutte le varianti): A ∪ B copre tutte e 13 le regole, **ma** l'inciso della
+  regola 7 — *«never include the "N<TAB>" line-number prefix that read_file displays»*, 72
+  caratteri, ~18 token, uno dei fix di interfaccia MISURATI (§6.3 del white paper) — è presente
+  **solo in `full`** e assente da `minimal`, `bisect-a` e `bisect-b`. Quindi
+  `full` = A ∪ B **+ quell'inciso**: parte dei 15 punti fra `bisB` (45%) e `full` (60%) potrebbe
+  essere quell'inciso e non le regole del gruppo A. **Non è un difetto dei dati ma del disegno**,
+  ed è la ragione per cui F5.0-quinquies parte dalla card intera invece che da `minimal`.
+
+- [ ] **F5.0-quinquies** 🔎 **Leave-one-out sulla regola 10** (deciso dall'utente 2026-08-05).
+  Braccio `card-no10` = `worker.no10.md` = **card INTERA meno la sola regola 10** (*"Your job is
+  ONLY the subtask objective; the TASK section is background"*). Verificato meccanicamente:
+  12 regole contro 13, unica differenza, **−65 token**; l'inciso `N<TAB>` **mantenuto**, così il
+  confondimento di cui sopra non si ripete.
+  **10 run su L7**, giudizio contro le ancore a n=20 (`full` 12/20, `card-min` 1/20).
+  **Regole scritte PRIMA di lanciare:** **≤1/10** (vs full: p ≤ 0,017) = **la regola 10 è
+  portante da sola** · **≥4/10** (p ≥ 0,44) = **non è individualmente necessaria**, l'effetto
+  del gruppo B è distribuito su più regole · **2–3/10** = ambiguo → estensione a 20.
+  **PREVISIONE REGISTRATA:** mi aspetto **≤1/10**, cioè che la regola 10 sia la responsabile
+  principale dell'effetto del gruppo B. ⚠️ Da pesare col fatto che **3 delle 4 previsioni
+  registrate finora sono risultate sbagliate**, l'ultima proprio su questa card.
+
 #### F5.0-bis — La catena volatile del Worker (il vero killer di L7)
 
 - [ ] 🤖 **Obiettivo:** tenere la catena append-only dei risultati dentro un budget dichiarato,
